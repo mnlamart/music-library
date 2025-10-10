@@ -228,7 +228,7 @@ if (!portAvailable && !IS_DEV) {
 	process.exit(1)
 }
 
-const server = app.listen(portToUse, async () => {
+const server = app.listen(portToUse, '0.0.0.0', async () => {
 	if (!portAvailable) {
 		console.warn(
 			styleText(
