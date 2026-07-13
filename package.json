@@ -131,7 +131,7 @@
     "execa": "^8.0.1",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
-    "get-port": "^7.1.0",
+    "get-port": "^7.2.0",
     "glob": "^11.0.2",
     "googleapis": "^161.0.0",
     "input-otp": "^1.4.2",
