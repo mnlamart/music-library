@@ -194,7 +194,7 @@
     "remix-flat-routes": "^0.8.5",
     "tw-animate-css": "^1.2.9",
     "typescript": "^7.0.2",
-    "vite": "^8.1.4",
+    "vite": "^8.2.1",
     "vite-plugin-icons-spritesheet": "^3.0.1",
     "vitest": "^4.1.10"
   },
