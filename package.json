@@ -138,7 +138,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router": "^8.2.0",
+    "react-router": "^8.3.1",
     "remix-auth": "^4.2.0",
     "remix-utils": "^10.0.0",
     "serwist": "^9.5.11",
