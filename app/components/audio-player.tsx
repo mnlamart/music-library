@@ -1611,6 +1611,12 @@ function QueueSectionHeading({ children }: { children: ReactNode }) {
   );
 }
 
+function measureScrollMargin(scrollElement: HTMLElement, listElement: HTMLElement): number {
+  const scrollRect = scrollElement.getBoundingClientRect();
+  const listRect = listElement.getBoundingClientRect();
+  return listRect.top - scrollRect.top + scrollElement.scrollTop;
+}
+
 function VirtualQueueTrackList({
   tracks,
   onRemoveTrack,
@@ -1624,24 +1630,29 @@ function VirtualQueueTrackList({
   parentRef: React.RefObject<HTMLDivElement | null>;
   hydrateTracksForDisplay: (ids: string[]) => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
   const [scrollReadyEpoch, setScrollReadyEpoch] = useState(0);
+  const [scrollMargin, setScrollMargin] = useState(0);
 
   useLayoutEffect(() => {
     const scrollElement = parentRef.current;
-    if (!scrollElement) return;
+    const listElement = listRef.current;
+    if (!scrollElement || !listElement) return;
 
     let hasMeasured = scrollElement.clientHeight > 0;
-    const markMeasured = () => {
+    const syncMetrics = () => {
+      setScrollMargin(measureScrollMargin(scrollElement, listElement));
       if (hasMeasured) return;
       if ((parentRef.current?.clientHeight ?? 0) <= 0) return;
       hasMeasured = true;
       setScrollReadyEpoch((epoch) => epoch + 1);
     };
 
-    markMeasured();
-    const observer = new ResizeObserver(markMeasured);
+    syncMetrics();
+    const observer = new ResizeObserver(syncMetrics);
     observer.observe(scrollElement);
-    const frame = requestAnimationFrame(markMeasured);
+    observer.observe(listElement);
+    const frame = requestAnimationFrame(syncMetrics);
 
     return () => {
       cancelAnimationFrame(frame);
@@ -1654,6 +1665,7 @@ function VirtualQueueTrackList({
     getScrollElement: () => parentRef.current,
     estimateSize: () => 60,
     overscan: 10,
+    scrollMargin,
     rangeExtractor: defaultRangeExtractor,
   });
   void scrollReadyEpoch;
@@ -1685,7 +1697,7 @@ function VirtualQueueTrackList({
 
   if (virtualItems.length === 0 && tracks.length > 0) {
     return (
-      <>
+      <div ref={listRef}>
         {tracks.slice(0, 30).map((track, index) => (
           <QueueTrackItem
             key={`${track.id}-${index}`}
@@ -1695,12 +1707,13 @@ function VirtualQueueTrackList({
             onPlay={onPlayTrack ? () => onPlayTrack(index) : undefined}
           />
         ))}
-      </>
+      </div>
     );
   }
 
   return (
     <div
+      ref={listRef}
       style={{
         height: `${virtualizer.getTotalSize()}px`,
         width: "100%",
@@ -1720,7 +1733,7 @@ function VirtualQueueTrackList({
               left: 0,
               width: "100%",
               height: `${virtualItem.size}px`,
-              transform: `translateY(${virtualItem.start}px)`,
+              transform: `translateY(${virtualItem.start - scrollMargin}px)`,
             }}
           >
             <QueueTrackItem
@@ -1757,8 +1770,7 @@ function QueueSheet({
     playQueueTrack,
     hydrateTracksForDisplay,
   } = useAudioPlayer();
-  const upNextScrollRef = useRef<HTMLDivElement>(null);
-  const spineScrollRef = useRef<HTMLDivElement>(null);
+  const queueScrollRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
 
   const queueSheetTrackIds = useMemo(() => {
@@ -1836,7 +1848,7 @@ function QueueSheet({
             Upcoming tracks grouped by now playing, up next, and library or playlist source
           </SheetDescription>
         </SheetHeader>
-        <div className="flex-1 mt-6 min-h-0 flex flex-col gap-4 overflow-y-auto">
+        <div className="flex-1 mt-6 min-h-0 flex flex-col gap-4">
           {isEmpty ? (
             <div className="text-center py-12">
               <Icon name="file-text" className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
@@ -1858,74 +1870,72 @@ function QueueSheet({
                 </section>
               ) : null}
 
-              {upNext.length > 0 ? (
-                <section
-                  className={
-                    upNext.length >= UP_NEXT_VIRTUAL_THRESHOLD
-                      ? "flex-1 min-h-0 flex flex-col"
-                      : "flex-shrink-0"
-                  }
+              {upNext.length > 0 || spine.length > 0 || spineTotal > 0 ? (
+                <div
+                  ref={queueScrollRef}
+                  data-testid="queue-sheet-scroll"
+                  className="flex-1 min-h-0 overflow-y-auto"
                 >
-                  <QueueSectionHeading>Up Next</QueueSectionHeading>
-                  {upNext.length >= UP_NEXT_VIRTUAL_THRESHOLD ? (
-                    <div ref={upNextScrollRef} className="flex-1 w-full min-h-0 overflow-y-auto">
-                      {isOpen ? (
-                        <VirtualQueueTrackList
-                          tracks={upNext}
-                          onRemoveTrack={removeUpNextTrack}
-                          onPlayTrack={playUpNextTrack}
-                          parentRef={upNextScrollRef}
-                          hydrateTracksForDisplay={hydrateTracksForDisplay}
-                        />
-                      ) : null}
-                    </div>
-                  ) : (
-                    upNext.map((track, index) => (
-                      <QueueTrackItem
-                        key={`${track.id}-${index}`}
-                        track={track}
-                        isCurrentlyPlaying={false}
-                        onRemove={() => removeUpNextTrack(index)}
-                        onPlay={() => playUpNextTrack(index)}
-                      />
-                    ))
-                  )}
-                </section>
-              ) : null}
-
-              {spine.length > 0 || spineTotal > 0 ? (
-                <section className="flex-1 min-h-0 flex flex-col">
-                  <QueueSectionHeading>{spineHeading}</QueueSectionHeading>
-                  {spine.length > 0 ? (
-                    spine.length >= SPINE_VIRTUAL_THRESHOLD ? (
-                      <div ref={spineScrollRef} className="flex-1 w-full min-h-0 overflow-y-auto">
-                        {isOpen ? (
+                  {upNext.length > 0 ? (
+                    <section>
+                      <QueueSectionHeading>Up Next</QueueSectionHeading>
+                      {upNext.length >= UP_NEXT_VIRTUAL_THRESHOLD ? (
+                        isOpen ? (
                           <VirtualQueueTrackList
-                            tracks={spine}
-                            onRemoveTrack={removeSpineTrack}
-                            onPlayTrack={playSpineTrack}
-                            parentRef={spineScrollRef}
+                            tracks={upNext}
+                            onRemoveTrack={removeUpNextTrack}
+                            onPlayTrack={playUpNextTrack}
+                            parentRef={queueScrollRef}
                             hydrateTracksForDisplay={hydrateTracksForDisplay}
                           />
-                        ) : null}
-                      </div>
-                    ) : (
-                      spine.map((track, index) => (
-                        <QueueTrackItem
-                          key={`${track.id}-${index}`}
-                          track={track}
-                          isCurrentlyPlaying={false}
-                          onRemove={() => removeSpineTrack(index)}
-                          onPlay={() => playSpineTrack(index)}
-                        />
-                      ))
-                    )
-                  ) : (
-                    <p className="px-4 py-3 text-sm text-muted-foreground">
-                      No more tracks in this queue.
-                    </p>
-                  )}
-                </section>
+                        ) : null
+                      ) : (
+                        upNext.map((track, index) => (
+                          <QueueTrackItem
+                            key={`${track.id}-${index}`}
+                            track={track}
+                            isCurrentlyPlaying={false}
+                            onRemove={() => removeUpNextTrack(index)}
+                            onPlay={() => playUpNextTrack(index)}
+                          />
+                        ))
+                      )}
+                    </section>
+                  ) : null}
+
+                  {spine.length > 0 || spineTotal > 0 ? (
+                    <section>
+                      <QueueSectionHeading>{spineHeading}</QueueSectionHeading>
+                      {spine.length > 0 ? (
+                        spine.length >= SPINE_VIRTUAL_THRESHOLD ? (
+                          isOpen ? (
+                            <VirtualQueueTrackList
+                              tracks={spine}
+                              onRemoveTrack={removeSpineTrack}
+                              onPlayTrack={playSpineTrack}
+                              parentRef={queueScrollRef}
+                              hydrateTracksForDisplay={hydrateTracksForDisplay}
+                            />
+                          ) : null
+                        ) : (
+                          spine.map((track, index) => (
+                            <QueueTrackItem
+                              key={`${track.id}-${index}`}
+                              track={track}
+                              isCurrentlyPlaying={false}
+                              onRemove={() => removeSpineTrack(index)}
+                              onPlay={() => playSpineTrack(index)}
+                            />
+                          ))
+                        )
+                      ) : (
+                        <p className="px-4 py-3 text-sm text-muted-foreground">
+                          No more tracks in this queue.
+                        </p>
+                      )}
+                    </section>
+                  ) : null}
+                </div>
               ) : null}
             </>
           )}

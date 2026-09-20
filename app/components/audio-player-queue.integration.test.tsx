@@ -922,6 +922,106 @@ describe("queue sheet integration", () => {
     expect(upNextTitlesInSheet(sheet).slice(0, 3)).toEqual(["UpNext 1", "UpNext 2", "UpNext 3"]);
   });
 
+  test("uses a single scroll region wrapping Up Next and spine", async () => {
+    const user = userEvent.setup();
+    mockSpineAndHydration(vi.mocked(fetch));
+
+    function Controls() {
+      const { playTrack, addToUpNext } = useAudioPlayer();
+      return (
+        <>
+          <button type="button" onClick={() => playTrack(trackA, { type: "library" }, 0)}>
+            Start library playback
+          </button>
+          <button type="button" onClick={() => addToUpNext(trackD)}>
+            Add Delta to up next
+          </button>
+        </>
+      );
+    }
+
+    renderQueueApp(<Controls />);
+    await startWarmLibraryPlayback(user);
+    await user.click(screen.getByRole("button", { name: "Add Delta to up next" }));
+
+    const sheet = await openQueueSheet(user);
+    const scroll = within(sheet).getByTestId("queue-sheet-scroll");
+    const upNextSection = within(sheet).getByText("Up Next").closest("section");
+    const spineSection = within(sheet).getByText("From Library").closest("section");
+    const nowPlayingSection = within(sheet).getByText("Now playing").closest("section");
+
+    expect(upNextSection).toBeTruthy();
+    expect(spineSection).toBeTruthy();
+    expect(nowPlayingSection).toBeTruthy();
+    expect(scroll.contains(upNextSection!)).toBe(true);
+    expect(scroll.contains(spineSection!)).toBe(true);
+    expect(scroll.contains(nowPlayingSection!)).toBe(false);
+    expect(upNextSection!.querySelector("[class*='overflow-y-auto']")).toBeNull();
+    expect(spineSection!.querySelector("[class*='overflow-y-auto']")).toBeNull();
+    expect(sheet.querySelectorAll("[data-testid='queue-sheet-scroll']")).toHaveLength(1);
+  });
+
+  test("keeps a single scroll region when Up Next and spine are both virtualized", async () => {
+    const user = userEvent.setup();
+    const largeSpine = mockLargeLibrarySpine(vi.mocked(fetch), 25);
+    const bulkTracks = buildPlayableTracks(25, "UpNext");
+
+    function Controls() {
+      const { playTrack, playNextTrack } = useAudioPlayer();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              playTrack(
+                {
+                  ...trackA,
+                  id: largeSpine[0]!.id,
+                  title: largeSpine[0]!.title,
+                },
+                { type: "library" },
+                0,
+              )
+            }
+          >
+            Start large library playback
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              for (const track of [...bulkTracks].reverse()) {
+                playNextTrack(track);
+              }
+            }}
+          >
+            Stack bulk up next
+          </button>
+        </>
+      );
+    }
+
+    renderQueueApp(<Controls />);
+    await user.click(screen.getByRole("button", { name: "Start large library playback" }));
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("player-desktop-bar")).getByText("Library Track 1"),
+      ).toBeTruthy();
+    });
+    await user.click(screen.getByRole("button", { name: "Stack bulk up next" }));
+
+    const sheet = await openQueueSheet(user);
+    const scroll = within(sheet).getByTestId("queue-sheet-scroll");
+    const upNextSection = within(sheet).getByText("Up Next").closest("section");
+    const spineSection = within(sheet).getByText("From Library").closest("section");
+
+    expect(scroll.contains(upNextSection!)).toBe(true);
+    expect(scroll.contains(spineSection!)).toBe(true);
+    expect(upNextSection!.querySelector("[class*='overflow-y-auto']")).toBeNull();
+    expect(spineSection!.querySelector("[class*='overflow-y-auto']")).toBeNull();
+    expect(upNextTitlesInSheet(sheet).length).toBeGreaterThan(20);
+    expect(spineTitlesInSheet(sheet).length).toBeGreaterThan(0);
+  });
+
   test("shuffle toggle keeps upcoming spine tracks visible in the queue sheet", async () => {
     const user = userEvent.setup();
     mockSpineAndHydration(vi.mocked(fetch));
