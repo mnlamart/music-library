@@ -210,6 +210,9 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // at most once.
   const offlineRestoreDoneRef = useRef(false);
   const onlineRestoreDoneRef = useRef(false);
+  // Set when the user starts or edits a queue before (or instead of) restore.
+  // In-flight restore must not overwrite that session.
+  const userMutatedQueueRef = useRef(false);
   const lastUserIdRef = useRef(userId);
   if (lastUserIdRef.current !== userId) {
     lastUserIdRef.current = userId;
@@ -217,10 +220,17 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     if (userId && userId !== onlineRestoredForUserIdRef.current) {
       onlineRestoreDoneRef.current = false;
       offlineRestoreDoneRef.current = false;
+      userMutatedQueueRef.current = false;
     }
   }
 
+  const [persistEpoch, setPersistEpoch] = useState(0);
+
   const isOnline = useOnlineStatus();
+
+  const noteUserQueueMutation = useCallback(() => {
+    userMutatedQueueRef.current = true;
+  }, []);
 
   const navigationState = useMemo<QueueNavigationState>(
     () => ({
@@ -457,6 +467,8 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     async (track: Track, context: PlaylistContext, index?: number) => {
       if (!isPlayableTrack(track)) return;
 
+      noteUserQueueMutation();
+
       if (
         playContext &&
         (playContext.type !== context.type ||
@@ -470,11 +482,12 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
       await startSpinePlayback(track, context, index);
     },
-    [playContext, resetQueueState, startSpinePlayback],
+    [noteUserQueueMutation, playContext, resetQueueState, startSpinePlayback],
   );
 
   const playPlaylist = useCallback(
     (tracks: Track[], context: PlaylistContext, startIndex: number = 0) => {
+      noteUserQueueMutation();
       setIsLoadingNext(true);
       try {
         const playableTracks = tracks.filter(isPlayableTrack);
@@ -524,10 +537,18 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         setIsLoadingNext(false);
       }
     },
-    [beginPlayback, buildShuffledOrder, hydrateAround, playContext, resetQueueState],
+    [
+      beginPlayback,
+      buildShuffledOrder,
+      hydrateAround,
+      noteUserQueueMutation,
+      playContext,
+      resetQueueState,
+    ],
   );
 
   const playLibrary = useCallback(async () => {
+    noteUserQueueMutation();
     setIsLoadingNext(true);
     try {
       if (playContext?.type !== "library") {
@@ -565,12 +586,14 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     buildShuffledOrder,
     hydrateAround,
     loadSpineForContext,
+    noteUserQueueMutation,
     playContext?.type,
     resetQueueState,
   ]);
 
   const playUserPlaylist = useCallback(
     async (playlistId: string) => {
+      noteUserQueueMutation();
       setIsLoadingNext(true);
       try {
         if (playContext?.type !== "playlist" || playContext.playlistId !== playlistId) {
@@ -612,6 +635,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       buildShuffledOrder,
       hydrateAround,
       loadSpineForContext,
+      noteUserQueueMutation,
       playContext?.playlistId,
       playContext?.type,
       resetQueueState,
@@ -621,6 +645,8 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   const addTrackToPlaylist = useCallback(
     (track: Track, position: "next" | "upNext" | "end" = "end") => {
       if (!isPlayableTrack(track)) return;
+
+      noteUserQueueMutation();
 
       const queueTrack = queueTrackFromFullTrack(track);
       rememberTrack(track);
@@ -646,7 +672,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       setSpineOrder((prev) => [...prev, prev.length]);
       setSpineTotal((total) => total + 1);
     },
-    [rememberTrack],
+    [noteUserQueueMutation, rememberTrack],
   );
 
   const openPlayerWithoutAutoplay = useCallback(() => {
@@ -753,6 +779,8 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     (track: Track) => {
       if (!isPlayableTrack(track)) return;
 
+      noteUserQueueMutation();
+
       const activeQueueSession =
         isPlayerVisible &&
         (currentTrack !== null ||
@@ -774,6 +802,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       currentTrack,
       isPlayerVisible,
       navigationState,
+      noteUserQueueMutation,
       rememberTrack,
       spinePosition,
       upNext.length,
@@ -852,6 +881,8 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       const queueTrack = getTrackAtTarget(navigationState, target);
       if (!queueTrack) return;
 
+      noteUserQueueMutation();
+
       const nextState = jumpToTarget(navigationState, target);
       setUpNext(nextState.upNext);
 
@@ -872,7 +903,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       setSpinePosition(nextState.spinePosition);
       void playResolvedTrack(queueTrack);
     },
-    [navigationState, playResolvedTrack, upNextPlayNextCount],
+    [navigationState, noteUserQueueMutation, playResolvedTrack, upNextPlayNextCount],
   );
 
   const startQueuePlayback = useCallback(() => {
@@ -1169,7 +1200,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [userId, playContext, currentTrack?.id, upNext, shuffleSeed, loopMode]);
+  }, [userId, playContext, currentTrack?.id, upNext, shuffleSeed, loopMode, persistEpoch]);
 
   // Flush on page unload so the latest state survives a tab close / navigation.
   useEffect(() => {
@@ -1202,12 +1233,13 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       try {
         const saved = await fetchPlayerState();
         if (epoch !== restoreEpochRef.current) return;
-        if (saved) {
+        if (saved && !userMutatedQueueRef.current) {
           await restoreQueueFromServer(saved);
         }
         if (epoch !== restoreEpochRef.current) return;
         onlineRestoreDoneRef.current = true;
         onlineRestoredForUserIdRef.current = userId;
+        setPersistEpoch((value) => value + 1);
       } catch (error) {
         if (epoch === restoreEpochRef.current) {
           console.error("Failed to restore player state:", error);

@@ -791,6 +791,63 @@ test("does not persist the previous user's queue after a user switch before rest
   expect(persistPutCalls(fetchMock)).toHaveLength(0);
 });
 
+test("does not replace a user-started queue when restore completes late", async () => {
+  const user = userEvent.setup();
+  let resolveRestore: ((value: Response) => void) | undefined;
+  const restorePromise = new Promise<Response>((resolve) => {
+    resolveRestore = resolve;
+  });
+
+  const fetchMock = vi.mocked(fetch);
+  fetchMock.mockImplementation((input) => {
+    const url = String(input);
+    if (url === PLAYER_STATE_ROUTE) {
+      return restorePromise;
+    }
+    if (url.includes("/api/tracks/playback")) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ tracks: [playableTrack] }),
+      } as Response);
+    }
+    if (url.includes("/api/queue-spine")) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ tracks: [spineTrack], total: 1 }),
+      } as Response);
+    }
+    return Promise.resolve({ status: 200, ok: true, json: async () => ({}) } as Response);
+  });
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Play library track" }));
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  resolveRestore?.({
+    status: 200,
+    ok: true,
+    json: async () => ({
+      playContext: { type: "library" },
+      currentTrackId: "track-other",
+      upNextIds: ["track-2"],
+      shuffleSeed: null,
+      loopMode: "off",
+    }),
+  } as Response);
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+});
+
 test("offline partial restore does not persist truncated Up Next on pagehide", async () => {
   const fetchMock = vi.mocked(fetch);
   window.localStorage.clear();
