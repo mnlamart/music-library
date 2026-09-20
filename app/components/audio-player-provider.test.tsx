@@ -13,6 +13,7 @@ import { prefetchPlaybackAudioUrl } from "#app/features/offline-storage/resolve-
 import { writeCachedPlayerState } from "#app/features/player-state/player-state-cache.client.ts";
 import { PLAYER_STATE_ROUTE } from "#app/features/player-state/player-state.ts";
 import { type FullTrack } from "#app/types/frontend/shared";
+import { consoleError } from "#tests/setup/setup-test-env.ts";
 import { AudioPlayerProvider, useAudioPlayer } from "./audio-player-provider";
 
 vi.mock("./audio-player", () => ({
@@ -847,6 +848,132 @@ test("does not replace a user-started queue when restore completes late", async 
       upNextIds: ["track-2"],
       shuffleSeed: null,
       loopMode: "off",
+    }),
+  } as Response);
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+});
+
+test("persists a user-started queue on pagehide after a failed online restore", async () => {
+  consoleError.mockImplementation(() => {});
+  const user = userEvent.setup();
+  const fetchMock = vi.mocked(fetch);
+  fetchMock.mockImplementation((input) => {
+    const url = String(input);
+    if (url === PLAYER_STATE_ROUTE) {
+      return Promise.resolve({
+        status: 500,
+        ok: false,
+        json: async () => ({}),
+      } as Response);
+    }
+    if (url.includes("/api/tracks/playback")) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ tracks: [playableTrack] }),
+      } as Response);
+    }
+    if (url.includes("/api/queue-spine")) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ tracks: [spineTrack], total: 1 }),
+      } as Response);
+    }
+    return Promise.resolve({ status: 200, ok: true, json: async () => ({}) } as Response);
+  });
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Play library track" }));
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  window.dispatchEvent(new Event("pagehide"));
+
+  const puts = persistPutCalls(fetchMock);
+  expect(puts.length).toBeGreaterThan(0);
+  const body = JSON.parse(String((puts[0]?.[1] as RequestInit | undefined)?.body)) as {
+    currentTrackId: string | null;
+  };
+  expect(body.currentTrackId).toBe("track-1");
+});
+
+test("does not replace a user-started queue when restore body is still loading", async () => {
+  const user = userEvent.setup();
+  let resolvePlayback: ((value: Response) => void) | undefined;
+  const playbackPromise = new Promise<Response>((resolve) => {
+    resolvePlayback = resolve;
+  });
+  let restorePlaybackStarted = false;
+
+  const fetchMock = vi.mocked(fetch);
+  fetchMock.mockImplementation((input) => {
+    const url = String(input);
+    if (url === PLAYER_STATE_ROUTE) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({
+          playContext: { type: "library" },
+          currentTrackId: "track-other",
+          upNextIds: ["track-2"],
+          shuffleSeed: null,
+          loopMode: "off",
+        }),
+      } as Response);
+    }
+    if (url.includes("/api/tracks/playback")) {
+      if (!restorePlaybackStarted) {
+        restorePlaybackStarted = true;
+        return playbackPromise;
+      }
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ tracks: [playableTrack] }),
+      } as Response);
+    }
+    if (url.includes("/api/queue-spine")) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ tracks: [spineTrack], total: 1 }),
+      } as Response);
+    }
+    return Promise.resolve({ status: 200, ok: true, json: async () => ({}) } as Response);
+  });
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(restorePlaybackStarted).toBe(true);
+  });
+
+  await user.click(screen.getByRole("button", { name: "Play library track" }));
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  resolvePlayback?.({
+    status: 200,
+    ok: true,
+    json: async () => ({
+      tracks: [
+        { ...playableTrack, id: "track-other", title: "Other Song" },
+        { ...playableTrack, id: "track-2", title: "Up Next Song" },
+      ],
     }),
   } as Response);
 
