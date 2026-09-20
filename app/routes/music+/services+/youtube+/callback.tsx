@@ -69,8 +69,8 @@ export async function loader({ request, url }: LoaderFunctionArgs) {
 
     // Success - redirect to YouTube service page
     return redirect("/music/services/youtube?connected=true");
-  } catch (error) {
-    console.error("YouTube OAuth callback error:", error);
+  } catch (callbackError) {
+    console.error("YouTube OAuth callback error:", callbackError);
     return redirect("/music/services/youtube/auth?error=callback_failed");
   }
 }

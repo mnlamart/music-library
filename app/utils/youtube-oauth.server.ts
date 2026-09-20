@@ -87,7 +87,7 @@ export class YouTubeOAuthService {
       return tokens;
     } catch (error) {
       console.error("Error exchanging code for tokens:", error);
-      throw new Error("Failed to exchange authorization code for tokens");
+      throw new Error("Failed to exchange authorization code for tokens", { cause: error });
     }
   }
 
@@ -115,7 +115,7 @@ export class YouTubeOAuthService {
       return credentials;
     } catch (error) {
       console.error("Error refreshing access token:", error);
-      throw new Error("Failed to refresh access token");
+      throw new Error("Failed to refresh access token", { cause: error });
     }
   }
 

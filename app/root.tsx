@@ -167,11 +167,13 @@ export const clientMiddleware: Route.ClientMiddlewareFunction[] = [offlineClient
 
 export const headers: Route.HeadersFunction = pipeHeaders;
 
+const EMPTY_ENV: Record<string, string | undefined> = {};
+
 function Document({
   children,
   nonce,
   theme = "light",
-  env = {},
+  env = EMPTY_ENV,
 }: {
   children: React.ReactNode;
   /** Real nonce on SSR; `""` on the client (matches browser nonce hiding). */
@@ -244,11 +246,11 @@ function Document({
 
 export function Layout({ children }: { children: React.ReactNode }) {
   // if there was an error running the loader, data could be missing
-  const data = useLoaderData<typeof loader | null>();
+  const loaderData = useLoaderData<typeof loader | null>();
   const nonce = useNonce();
   const theme = useOptionalTheme();
   return (
-    <Document nonce={nonce} theme={theme} env={data?.ENV}>
+    <Document nonce={nonce} theme={theme} env={loaderData?.ENV}>
       {children}
     </Document>
   );
@@ -273,7 +275,7 @@ function ShellLayout() {
     };
   }, [bottomBarHeight]);
 
-  const data = useLoaderData<typeof loader>();
+  const loaderData = useLoaderData<typeof loader>();
   const user = useOptionalUser();
 
   return (
@@ -298,12 +300,12 @@ function ShellLayout() {
             </Link>
           </div>
           <div className="flex items-center gap-4 sm:gap-6 md:gap-10">
-            <ThemeSwitch userPreference={data.requestInfo.userPrefs.theme} />
+            <ThemeSwitch userPreference={loaderData.requestInfo.userPrefs.theme} />
             {user ? (
               <Suspense fallback={null}>
                 <LazyNotificationBell
-                  notifications={data.notifications}
-                  unreadCount={data.unreadNotificationCount}
+                  notifications={loaderData.notifications}
+                  unreadCount={loaderData.unreadNotificationCount}
                 />
               </Suspense>
             ) : null}
@@ -349,9 +351,9 @@ function ShellLayout() {
 }
 
 function App() {
-  const data = useLoaderData<typeof loader>();
+  const loaderData = useLoaderData<typeof loader>();
   useServiceWorkerUpdateToast();
-  useToast(data.toast);
+  useToast(loaderData.toast);
 
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -365,7 +367,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <OpenImgContextProvider optimizerEndpoint="/resources/images" getSrc={getImgSrc}>
-        <AudioPlayerProvider userId={data.user?.id ?? null}>
+        <AudioPlayerProvider userId={loaderData.user?.id ?? null}>
           <ShellLayout />
           <Toaster />
           <AutoplayGuideDialog />
@@ -386,9 +388,9 @@ function Logo() {
 }
 
 function AppWithProviders() {
-  const data = useLoaderData<typeof loader>();
+  const loaderData = useLoaderData<typeof loader>();
   return (
-    <HoneypotProvider {...data.honeyProps}>
+    <HoneypotProvider {...loaderData.honeyProps}>
       <App />
     </HoneypotProvider>
   );

@@ -105,10 +105,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         providerName: connection.providerName,
         createdAt: connection.createdAt.toISOString(),
       })),
-      usageEvents: user.usageEvents.map((event) => ({
-        ...event,
-        createdAt: event.createdAt.toISOString(),
-      })),
+      usageEvents: user.usageEvents.map((event) =>
+        Object.assign({}, event, {
+          createdAt: event.createdAt.toISOString(),
+        }),
+      ),
     },
   };
 }
@@ -423,26 +424,40 @@ export default function AdminUserDetailRoute({ loaderData, actionData }: Route.C
   );
 }
 
+function Admin403() {
+  return (
+    <div className="flex flex-col items-center gap-2 py-12">
+      <Icon name="avatar" className="text-body-2xl" />
+      <h1 className="text-h1">403</h1>
+      <p>You must be an admin to view this page.</p>
+    </div>
+  );
+}
+
+function AdminUser404StatusHandler({
+  error,
+}: {
+  error: { data?: unknown };
+  params: Record<string, string | undefined>;
+}) {
+  const message = typeof error?.data === "string" ? error.data : "User not found";
+  return (
+    <div className="flex flex-col items-center gap-2 py-12">
+      <h1 className="text-h1">404</h1>
+      <p>{message}</p>
+      <Link to="/admin/users" className="underline">
+        Back to users
+      </Link>
+    </div>
+  );
+}
+
 export function ErrorBoundary() {
   return (
     <GeneralErrorBoundary
       statusHandlers={{
-        403: () => (
-          <div className="flex flex-col items-center gap-2 py-12">
-            <Icon name="avatar" className="text-body-2xl" />
-            <h1 className="text-h1">403</h1>
-            <p>You must be an admin to view this page.</p>
-          </div>
-        ),
-        404: ({ error }) => (
-          <div className="flex flex-col items-center gap-2 py-12">
-            <h1 className="text-h1">404</h1>
-            <p>{error?.data ?? "User not found"}</p>
-            <Link to="/admin/users" className="underline">
-              Back to users
-            </Link>
-          </div>
-        ),
+        403: Admin403,
+        404: AdminUser404StatusHandler,
       }}
     />
   );

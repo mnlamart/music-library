@@ -96,14 +96,14 @@ export default function SearchPage() {
   const [activeType, setActiveType] = useState(initialType);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => getRecentSearches());
 
-  const data = fetcher.data as SearchResponse | undefined;
+  const searchData = fetcher.data as SearchResponse | undefined;
   const isLoadMore = useRef(false);
   const [accumulated, setAccumulated] = useState<SearchResult[]>([]);
 
   // Merge fetcher results: replace on new search, append on load more
   useEffect(() => {
-    if (!data) return;
-    if (!isSearchResponse(data)) {
+    if (!searchData) return;
+    if (!isSearchResponse(searchData)) {
       if (!isLoadMore.current) {
         setAccumulated([]);
       }
@@ -111,23 +111,23 @@ export default function SearchPage() {
       return;
     }
     if (isLoadMore.current) {
-      setAccumulated((prev) => [...prev, ...data.results]);
+      setAccumulated((prev) => [...prev, ...searchData.results]);
       isLoadMore.current = false;
     } else {
-      setAccumulated(data.results);
+      setAccumulated(searchData.results);
     }
-  }, [data]);
+  }, [searchData]);
 
   const results = accumulated;
-  const hasNext = isSearchResponse(data) ? data.pagination.hasNext : false;
+  const hasNext = isSearchResponse(searchData) ? searchData.pagination.hasNext : false;
   const isLoading = fetcher.state === "loading";
   const hasError =
     fetcher.state === "idle" &&
     query.trim().length > 0 &&
-    data != null &&
-    typeof data === "object" &&
-    "error" in data &&
-    Boolean((data as { error?: unknown }).error);
+    searchData != null &&
+    typeof searchData === "object" &&
+    "error" in searchData &&
+    Boolean((searchData as { error?: unknown }).error);
 
   // Auto-focus the input on every navigation to the search page
   useEffect(() => {
@@ -204,7 +204,7 @@ export default function SearchPage() {
 
   // Handle load more
   const handleLoadMore = () => {
-    const cursor = isSearchResponse(data) ? data.pagination.nextCursor : null;
+    const cursor = isSearchResponse(searchData) ? searchData.pagination.nextCursor : null;
     if (!cursor) return;
     isLoadMore.current = true;
     const params = new URLSearchParams({

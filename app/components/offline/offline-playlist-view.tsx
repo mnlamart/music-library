@@ -10,6 +10,42 @@ type OfflinePlaylistViewProps = {
   tracks: OfflineTrackSummary[];
 };
 
+function toOfflineTrackListItemTrack(track: OfflineTrackSummary) {
+  return {
+    id: track.trackId,
+    title: track.title,
+    artist: { id: track.artistId, name: track.artistName },
+    duration: track.duration,
+    coverImage: track.coverObjectKey ? { objectKey: track.coverObjectKey } : null,
+    serviceUrl: null,
+    audioFiles: [{ id: track.trackId, format: "mp3" as const, objectKey: "" }],
+  };
+}
+
+function OfflinePlaylistTrackItem({
+  playlistId,
+  track,
+  index,
+}: {
+  playlistId: string;
+  track: OfflineTrackSummary;
+  index: number;
+}) {
+  const trackData = toOfflineTrackListItemTrack(track);
+
+  return (
+    <TrackListItem
+      track={trackData}
+      userTrack={{ createdAt: new Date(track.lastAccessedAt) }}
+      index={index}
+      playlistContext={{ type: "playlist", playlistId }}
+      showPlaylistActions={false}
+      offlineDownloadTrack={trackData}
+      offlineDownloadPlaylistId={playlistId}
+    />
+  );
+}
+
 export function OfflinePlaylistView({
   playlistId,
   title,
@@ -39,32 +75,14 @@ export function OfflinePlaylistView({
         </div>
       ) : (
         <ul className="divide-y rounded-lg border">
-          {tracks.map((track, index) => {
-            const offlineTrack = {
-              id: track.trackId,
-              title: track.title,
-              artist: { id: track.artistId, name: track.artistName },
-              duration: track.duration,
-              coverImage: track.coverObjectKey ? { objectKey: track.coverObjectKey } : null,
-              audioFiles: [{ id: track.trackId, format: "mp3", objectKey: "" }],
-            };
-
-            return (
-              <TrackListItem
-                key={track.trackId}
-                track={{
-                  ...offlineTrack,
-                  serviceUrl: null,
-                }}
-                userTrack={{ createdAt: new Date(track.lastAccessedAt) }}
-                index={index}
-                playlistContext={{ type: "playlist", playlistId }}
-                showPlaylistActions={false}
-                offlineDownloadTrack={offlineTrack}
-                offlineDownloadPlaylistId={playlistId}
-              />
-            );
-          })}
+          {tracks.map((track, index) => (
+            <OfflinePlaylistTrackItem
+              key={track.trackId}
+              playlistId={playlistId}
+              track={track}
+              index={index}
+            />
+          ))}
         </ul>
       )}
     </div>

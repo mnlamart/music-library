@@ -64,9 +64,11 @@ const createConditionalSchema = (): z.ZodObject<any> => {
 
 const schema = createConditionalSchema();
 
+type ProcessEnvSchema = z.infer<typeof schema>;
+
 declare global {
   namespace NodeJS {
-    interface ProcessEnv extends z.infer<typeof schema> {}
+    interface ProcessEnv extends ProcessEnvSchema {}
   }
 }
 

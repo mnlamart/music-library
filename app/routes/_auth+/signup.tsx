@@ -37,9 +37,9 @@ export async function action({ request }: Route.ActionArgs) {
   await checkHoneypot(formData);
 
   const submission = await parseWithZod(formData, {
-    schema: SignupSchema.superRefine(async (data, ctx) => {
+    schema: SignupSchema.superRefine(async (formValues, ctx) => {
       const existingUser = await prisma.user.findUnique({
-        where: { email: data.email },
+        where: { email: formValues.email },
         select: { id: true },
       });
       if (existingUser) {

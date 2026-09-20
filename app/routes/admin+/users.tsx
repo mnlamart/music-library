@@ -230,18 +230,16 @@ export default function AdminUsersRoute({ loaderData }: Route.ComponentProps) {
   );
 }
 
-export function ErrorBoundary() {
+function Admin403() {
   return (
-    <GeneralErrorBoundary
-      statusHandlers={{
-        403: () => (
-          <div className="flex flex-col items-center gap-2 py-12">
-            <Icon name="avatar" className="text-body-2xl" />
-            <h1 className="text-h1">403</h1>
-            <p>You must be an admin to view this page.</p>
-          </div>
-        ),
-      }}
-    />
+    <div className="flex flex-col items-center gap-2 py-12">
+      <Icon name="avatar" className="text-body-2xl" />
+      <h1 className="text-h1">403</h1>
+      <p>You must be an admin to view this page.</p>
+    </div>
   );
+}
+
+export function ErrorBoundary() {
+  return <GeneralErrorBoundary statusHandlers={{ 403: Admin403 }} />;
 }

@@ -75,6 +75,7 @@ export async function extractAudioFilesFromZip(zipBuffer: Buffer): Promise<Extra
   } catch (error) {
     throw new Error(
       `Failed to extract audio files from ZIP: ${error instanceof Error ? error.message : "Unknown error"}`,
+      { cause: error },
     );
   }
 }

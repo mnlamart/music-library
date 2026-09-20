@@ -89,9 +89,7 @@ test("shows track details when loaded", () => {
   expect(screen.getByText("Duration: 3:00")).toBeDefined();
   expect(screen.getByText("Source: YouTube")).toBeDefined();
   expect(
-    screen.getByText(
-      `Date added: ${new Date("2009-10-25T06:57:33.000Z").toLocaleDateString()}`,
-    ),
+    screen.getByText(`Date added: ${new Date("2009-10-25T06:57:33.000Z").toLocaleDateString()}`),
   ).toBeDefined();
 });
 

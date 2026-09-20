@@ -9,10 +9,7 @@ export type OfflineDownloadTrack = Pick<
   "id" | "title" | "artist" | "duration" | "coverImage" | "audioFiles"
 >;
 
-export function useOfflineTrackDownload(
-  track: OfflineDownloadTrack,
-  playlistId?: string,
-) {
+export function useOfflineTrackDownload(track: OfflineDownloadTrack, playlistId?: string) {
   const { isDownloaded, isPinned, isBusy, setIsBusy, refresh } = useOfflineTrackStatus(track.id);
   const [isWorking, setIsWorking] = useState(false);
 

@@ -246,7 +246,7 @@ export function updateFileProgress(
   }
 
   // Calculate overall progress
-  const totalProgress = current.files.reduce((sum, file) => sum + file.progress, 0);
+  const totalProgress = current.files.reduce((sum, fileEntry) => sum + fileEntry.progress, 0);
   current.overallProgress = Math.round(totalProgress / current.files.length);
 
   // Update status if all files are completed or failed

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  parsePlaylistTrackSort,
-  sortPlaylistTracks,
-} from "./playlist-track-sort.ts";
+import { parsePlaylistTrackSort, sortPlaylistTracks } from "./playlist-track-sort.ts";
 
 const tracks = [
   {
@@ -39,27 +36,15 @@ describe("parsePlaylistTrackSort", () => {
 
 describe("sortPlaylistTracks", () => {
   test("sorts by playlist position for custom", () => {
-    expect(sortPlaylistTracks(tracks, "custom").map((t) => t.id)).toEqual([
-      "pt-2",
-      "pt-1",
-      "pt-3",
-    ]);
+    expect(sortPlaylistTracks(tracks, "custom").map((t) => t.id)).toEqual(["pt-2", "pt-1", "pt-3"]);
   });
 
   test("sorts by title", () => {
-    expect(sortPlaylistTracks(tracks, "title").map((t) => t.id)).toEqual([
-      "pt-2",
-      "pt-3",
-      "pt-1",
-    ]);
+    expect(sortPlaylistTracks(tracks, "title").map((t) => t.id)).toEqual(["pt-2", "pt-3", "pt-1"]);
   });
 
   test("sorts by artist", () => {
-    expect(sortPlaylistTracks(tracks, "artist").map((t) => t.id)).toEqual([
-      "pt-2",
-      "pt-1",
-      "pt-3",
-    ]);
+    expect(sortPlaylistTracks(tracks, "artist").map((t) => t.id)).toEqual(["pt-2", "pt-1", "pt-3"]);
   });
 
   test("sorts by duration with nulls last", () => {

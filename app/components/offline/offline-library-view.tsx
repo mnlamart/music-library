@@ -7,6 +7,32 @@ type OfflineLibraryViewProps = {
   tracks: OfflineTrackSummary[];
 };
 
+function toOfflineTrackListItemTrack(track: OfflineTrackSummary) {
+  return {
+    id: track.trackId,
+    title: track.title,
+    artist: { id: track.artistId, name: track.artistName },
+    duration: track.duration,
+    coverImage: track.coverObjectKey ? { objectKey: track.coverObjectKey } : null,
+    serviceUrl: null,
+    audioFiles: [{ id: track.trackId, format: "mp3" as const, objectKey: "" }],
+  };
+}
+
+function OfflineLibraryTrackItem({ track, index }: { track: OfflineTrackSummary; index: number }) {
+  const trackData = toOfflineTrackListItemTrack(track);
+
+  return (
+    <TrackListItem
+      track={trackData}
+      userTrack={{ createdAt: new Date(track.lastAccessedAt) }}
+      index={index}
+      playlistContext={{ type: "library" }}
+      offlineDownloadTrack={trackData}
+    />
+  );
+}
+
 export function OfflineLibraryView({ tracks }: OfflineLibraryViewProps) {
   if (tracks.length === 0) {
     return (
@@ -23,30 +49,9 @@ export function OfflineLibraryView({ tracks }: OfflineLibraryViewProps) {
 
   return (
     <ul className="divide-y rounded-lg border">
-      {tracks.map((track, index) => {
-        const offlineTrack = {
-          id: track.trackId,
-          title: track.title,
-          artist: { id: track.artistId, name: track.artistName },
-          duration: track.duration,
-          coverImage: track.coverObjectKey ? { objectKey: track.coverObjectKey } : null,
-          audioFiles: [{ id: track.trackId, format: "mp3", objectKey: "" }],
-        };
-
-        return (
-          <TrackListItem
-            key={track.trackId}
-            track={{
-              ...offlineTrack,
-              serviceUrl: null,
-            }}
-            userTrack={{ createdAt: new Date(track.lastAccessedAt) }}
-            index={index}
-            playlistContext={{ type: "library" }}
-            offlineDownloadTrack={offlineTrack}
-          />
-        );
-      })}
+      {tracks.map((track, index) => (
+        <OfflineLibraryTrackItem key={track.trackId} track={track} index={index} />
+      ))}
     </ul>
   );
 }

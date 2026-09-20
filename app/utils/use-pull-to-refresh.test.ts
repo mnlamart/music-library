@@ -5,10 +5,7 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { usePullToRefresh } from "./use-pull-to-refresh.ts";
 
-function dispatchTouch(
-  type: "touchstart" | "touchmove" | "touchend",
-  clientY: number,
-) {
+function dispatchTouch(type: "touchstart" | "touchmove" | "touchend", clientY: number) {
   const touch = { clientY } as Touch;
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperty(event, "touches", {
@@ -20,9 +17,7 @@ function dispatchTouch(
 describe("usePullToRefresh", () => {
   test("does nothing when disabled", () => {
     const onRefresh = vi.fn();
-    const { result } = renderHook(() =>
-      usePullToRefresh({ enabled: false, onRefresh }),
-    );
+    const { result } = renderHook(() => usePullToRefresh({ enabled: false, onRefresh }));
 
     act(() => {
       dispatchTouch("touchstart", 10);
@@ -36,9 +31,7 @@ describe("usePullToRefresh", () => {
 
   test("calls onRefresh after a sufficient pull from the top", async () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
-    const { result } = renderHook(() =>
-      usePullToRefresh({ enabled: true, onRefresh }),
-    );
+    const { result } = renderHook(() => usePullToRefresh({ enabled: true, onRefresh }));
 
     await act(async () => {
       dispatchTouch("touchstart", 10);

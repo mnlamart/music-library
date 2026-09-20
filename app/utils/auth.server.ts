@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import bcrypt from "bcryptjs";
+import { compare, hash } from "bcryptjs";
 import { redirect } from "react-router";
 import { Authenticator } from "remix-auth";
 import { safeRedirect } from "remix-utils/safe-redirect";
@@ -279,8 +279,8 @@ export async function logout(
 }
 
 export async function getPasswordHash(password: string) {
-  const hash = await bcrypt.hash(password, 10);
-  return hash;
+  const passwordHash = await hash(password, 10);
+  return passwordHash;
 }
 
 export async function verifyUserPassword(
@@ -296,7 +296,7 @@ export async function verifyUserPassword(
     return null;
   }
 
-  const isValid = await bcrypt.compare(password, userWithPassword.password.hash);
+  const isValid = await compare(password, userWithPassword.password.hash);
 
   if (!isValid) {
     return null;
@@ -306,8 +306,8 @@ export async function verifyUserPassword(
 }
 
 export function getPasswordHashParts(password: string) {
-  const hash = crypto.createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
-  return [hash.slice(0, 5), hash.slice(5)] as const;
+  const sha1Digest = crypto.createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
+  return [sha1Digest.slice(0, 5), sha1Digest.slice(5)] as const;
 }
 
 export async function checkIsCommonPassword(password: string) {
@@ -322,7 +322,7 @@ export async function checkIsCommonPassword(password: string) {
 
     const data = await response.text();
     return data.split(/\r?\n/).some((line) => {
-      const [hashSuffix, ignoredPrevalenceCount] = line.split(":");
+      const [hashSuffix, _ignoredPrevalenceCount] = line.split(":");
       return hashSuffix === suffix;
     });
   } catch (error) {

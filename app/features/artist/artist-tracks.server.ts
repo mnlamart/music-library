@@ -76,12 +76,13 @@ export async function getArtistTracksPage(
     trackIds,
   );
 
-  const tracks = page.map((track) => ({
-    ...track,
-    isInUserLibrary: libraryTrackIds.has(track.id),
-    userTrackCreatedAt:
-      userTrackCreatedAtByTrackId.get(track.id)?.toISOString() ?? track.createdAt.toISOString(),
-  }));
+  const tracks = page.map((track) =>
+    Object.assign({}, track, {
+      isInUserLibrary: libraryTrackIds.has(track.id),
+      userTrackCreatedAt:
+        userTrackCreatedAtByTrackId.get(track.id)?.toISOString() ?? track.createdAt.toISOString(),
+    }),
+  );
 
   return {
     tracks,

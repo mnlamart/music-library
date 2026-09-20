@@ -100,7 +100,9 @@ export async function setup() {
     console.log("✅ Database schema verified - UserNotification table exists");
   } catch (error) {
     console.error("❌ Database schema verification failed:", error);
-    throw new Error("Database schema verification failed - User table does not exist");
+    throw new Error("Database schema verification failed - User table does not exist", {
+      cause: error,
+    });
   } finally {
     await prisma.$disconnect();
   }

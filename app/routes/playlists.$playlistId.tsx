@@ -631,18 +631,18 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
 
   const applyBulkQueueAction = (
     tracks: FullTrack[],
-    action: "playNext" | "addToUpNext" | "addToQueue",
+    queueAction: "playNext" | "addToUpNext" | "addToQueue",
   ) => {
     if (tracks.length === 0) return;
 
-    if (action === "playNext") {
+    if (queueAction === "playNext") {
       for (const track of [...tracks].reverse()) {
         playNextTrack(track);
       }
       return;
     }
 
-    if (action === "addToUpNext") {
+    if (queueAction === "addToUpNext") {
       for (const track of tracks) {
         addToUpNext(track);
       }
@@ -657,9 +657,9 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
   const showBulkQueueToast = (
     playableCount: number,
     skippedCount: number,
-    action: "playNext" | "addToUpNext" | "addToQueue",
+    queueAction: "playNext" | "addToUpNext" | "addToQueue",
   ) => {
-    const actionLabel = bulkQueueActionLabels[action].toLowerCase();
+    const actionLabel = bulkQueueActionLabels[queueAction].toLowerCase();
     toast({
       title: "Success",
       description:
@@ -893,15 +893,15 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
           </div>
         ) : (
           <SortableTrackList
-            tracks={displayedTracks.map((pt) => ({
-              ...pt,
-              track: {
-                ...pt.track,
-                createdAt: pt.track.createdAt.toISOString(),
-                releaseDate: pt.track.releaseDate?.toISOString() ?? null,
-                originalDate: pt.track.originalDate?.toISOString() ?? null,
-              },
-            }))}
+            tracks={displayedTracks.map((pt) =>
+              Object.assign({}, pt, {
+                track: Object.assign({}, pt.track, {
+                  createdAt: pt.track.createdAt.toISOString(),
+                  releaseDate: pt.track.releaseDate?.toISOString() ?? null,
+                  originalDate: pt.track.originalDate?.toISOString() ?? null,
+                }),
+              }),
+            )}
             playlists={playlists}
             onReorder={handleReorder}
             onRemoveTrack={handleRemoveTrack}

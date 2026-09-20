@@ -10,11 +10,7 @@ type UsePullToRefreshOptions = {
   getScrollParent?: () => HTMLElement | null;
 };
 
-export function usePullToRefresh({
-  enabled,
-  onRefresh,
-  getScrollParent,
-}: UsePullToRefreshOptions) {
+export function usePullToRefresh({ enabled, onRefresh, getScrollParent }: UsePullToRefreshOptions) {
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const startYRef = useRef<number | null>(null);
