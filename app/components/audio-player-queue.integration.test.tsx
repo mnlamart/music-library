@@ -368,6 +368,180 @@ function mockLargeLibrarySpine(fetchMock: ReturnType<typeof vi.fn>, spineCount: 
   return largeSpine;
 }
 
+const QUEUE_LAYOUT_SCROLL_PORT_HEIGHT = 400;
+const QUEUE_LAYOUT_HEADING_HEIGHT = 32;
+const QUEUE_LAYOUT_ROW_HEIGHT = 60;
+
+/**
+ * jsdom has no real layout. This stub gives queue-sheet virtualization a stable
+ * geometry model so scrollMargin / translateY gaps are observable in tests.
+ */
+function installQueueSheetLayoutStub(options: { getUpNextBlockHeight: () => number }) {
+  type ObserverRecord = {
+    callback: ResizeObserverCallback;
+    targets: Set<Element>;
+  };
+  const observers = new Set<ObserverRecord>();
+
+  class LayoutResizeObserver {
+    #record: ObserverRecord;
+
+    constructor(callback: ResizeObserverCallback) {
+      this.#record = { callback, targets: new Set() };
+      observers.add(this.#record);
+    }
+
+    observe(target: Element) {
+      // Match browser RO: observing alone does not synchronously deliver a
+      // notification (sync delivery mid-useLayoutEffect disconnects observers).
+      this.#record.targets.add(target);
+    }
+
+    unobserve(target: Element) {
+      this.#record.targets.delete(target);
+    }
+
+    disconnect() {
+      this.#record.targets.clear();
+      observers.delete(this.#record);
+    }
+  }
+
+  vi.stubGlobal("ResizeObserver", LayoutResizeObserver);
+
+  const notifyResize = (target: Element) => {
+    let notified = 0;
+    for (const observer of observers) {
+      if (observer.targets.has(target)) {
+        notified += 1;
+        observer.callback([], observer as unknown as ResizeObserver);
+      }
+    }
+    return notified;
+  };
+
+  const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+  const originalOffsetHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "offsetHeight",
+  );
+  const originalClientHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "clientHeight",
+  );
+
+  const rect = (top: number, height: number): DOMRect =>
+    ({
+      x: 0,
+      y: top,
+      top,
+      bottom: top + height,
+      left: 0,
+      right: 320,
+      width: 320,
+      height,
+      toJSON() {
+        return this;
+      },
+    }) as DOMRect;
+
+  Element.prototype.getBoundingClientRect = function getBoundingClientRectMock(this: Element) {
+    const el = this as HTMLElement;
+    if (el.dataset?.testid === "queue-sheet-scroll") {
+      return rect(0, QUEUE_LAYOUT_SCROLL_PORT_HEIGHT);
+    }
+
+    const scroll = el.closest?.('[data-testid="queue-sheet-scroll"]') as HTMLElement | null;
+    if (!scroll) {
+      return originalGetBoundingClientRect.call(this);
+    }
+
+    const upNextHeight = options.getUpNextBlockHeight();
+    const scrollTop = scroll.scrollTop;
+    const sections = Array.from(scroll.children) as HTMLElement[];
+    const upNextSection = sections[0];
+    const spineSection = sections[1];
+
+    if (el === upNextSection) {
+      return rect(-scrollTop, upNextHeight);
+    }
+
+    if (spineSection && (el === spineSection || spineSection.contains(el))) {
+      const spineTop = upNextHeight - scrollTop;
+      if (el === spineSection) {
+        const list =
+          spineSection.querySelector('[data-testid="virtual-queue-track-list"]') ??
+          spineSection.querySelector(":scope > div");
+        const listHeight =
+          list instanceof HTMLElement
+            ? Number.parseFloat(list.style.height) || QUEUE_LAYOUT_ROW_HEIGHT * 30
+            : QUEUE_LAYOUT_ROW_HEIGHT * 30;
+        return rect(spineTop, QUEUE_LAYOUT_HEADING_HEIGHT + listHeight);
+      }
+
+      if (el.tagName === "H3") {
+        return rect(spineTop, QUEUE_LAYOUT_HEADING_HEIGHT);
+      }
+
+      const list =
+        spineSection.querySelector('[data-testid="virtual-queue-track-list"]') ??
+        spineSection.querySelector(":scope > div");
+      if (el === list) {
+        return rect(
+          spineTop + QUEUE_LAYOUT_HEADING_HEIGHT,
+          Number.parseFloat(el.style.height) || 0,
+        );
+      }
+
+      // Absolutely positioned virtual rows use inline transform translateY(...).
+      const transform = el.style?.transform ?? "";
+      const translateMatch = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(transform);
+      if (translateMatch && list?.contains(el)) {
+        const translateY = Number.parseFloat(translateMatch[1]!);
+        return rect(
+          spineTop + QUEUE_LAYOUT_HEADING_HEIGHT + translateY,
+          Number.parseFloat(el.style.height) || QUEUE_LAYOUT_ROW_HEIGHT,
+        );
+      }
+    }
+
+    return originalGetBoundingClientRect.call(this);
+  };
+
+  const heightFor = (el: HTMLElement): number | null => {
+    if (el.dataset?.testid === "queue-sheet-scroll") {
+      return QUEUE_LAYOUT_SCROLL_PORT_HEIGHT;
+    }
+    return null;
+  };
+
+  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return heightFor(this) ?? originalOffsetHeight?.get?.call(this) ?? 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return heightFor(this) ?? originalClientHeight?.get?.call(this) ?? 0;
+    },
+  });
+
+  return {
+    notifyResize,
+    cleanup() {
+      Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+      if (originalOffsetHeight) {
+        Object.defineProperty(HTMLElement.prototype, "offsetHeight", originalOffsetHeight);
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+      }
+    },
+  };
+}
+
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -1018,6 +1192,110 @@ describe("queue sheet integration", () => {
     expect(spineSection!.querySelector("[class*='overflow-y-auto']")).toBeNull();
     expect(upNextTitlesInSheet(sheet).length).toBeGreaterThan(20);
     expect(spineTitlesInSheet(sheet).length).toBeGreaterThan(0);
+  });
+
+  test("keeps first virtualized spine row flush under From Library when Up Next height changes", async () => {
+    const user = userEvent.setup();
+    const largeSpine = mockLargeLibrarySpine(vi.mocked(fetch), 80);
+    const upNextTracks = buildPlayableTracks(12, "UpNext");
+
+    // Start undersized so the first scrollMargin read is too small; then grow Up Next
+    // without resizing the scrollport or spine list (the video-gap regression).
+    let upNextBlockHeight = QUEUE_LAYOUT_HEADING_HEIGHT;
+    const layout = installQueueSheetLayoutStub({
+      getUpNextBlockHeight: () => upNextBlockHeight,
+    });
+
+    function Controls() {
+      const { playTrack, playNextTrack } = useAudioPlayer();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              playTrack(
+                {
+                  ...trackA,
+                  id: largeSpine[0]!.id,
+                  title: largeSpine[0]!.title,
+                },
+                { type: "library" },
+                0,
+              )
+            }
+          >
+            Start large library playback
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              for (const track of [...upNextTracks].reverse()) {
+                playNextTrack(track);
+              }
+            }}
+          >
+            Stack up next
+          </button>
+        </>
+      );
+    }
+
+    try {
+      renderQueueApp(<Controls />);
+      await user.click(screen.getByRole("button", { name: "Start large library playback" }));
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId("player-desktop-bar")).getByText("Library Track 1"),
+        ).toBeTruthy();
+      });
+      await user.click(screen.getByRole("button", { name: "Stack up next" }));
+
+      const sheet = await openQueueSheet(user);
+      const scroll = within(sheet).getByTestId("queue-sheet-scroll");
+      const upNextSection = within(sheet).getByText("Up Next").closest("section");
+      const spineHeading = within(sheet).getByText("From Library");
+      const spineSection = spineHeading.closest("section");
+
+      expect(upNextSection).toBeTruthy();
+      expect(spineSection).toBeTruthy();
+      expect(upNextTitlesInSheet(sheet)).toHaveLength(12);
+
+      await waitFor(() => {
+        const list = within(spineSection!).getByTestId("virtual-queue-track-list");
+        expect(Number.parseFloat(list.style.height)).toBeGreaterThan(QUEUE_LAYOUT_ROW_HEIGHT * 20);
+      });
+
+      // Initial measure used the undersized Up Next block; grow it and notify
+      // only the Up Next section (scrollport + list sizes unchanged).
+      upNextBlockHeight =
+        QUEUE_LAYOUT_HEADING_HEIGHT + upNextTracks.length * QUEUE_LAYOUT_ROW_HEIGHT;
+      const notified = layout.notifyResize(upNextSection!);
+      expect(notified).toBeGreaterThan(0);
+
+      // Bring the spine heading to the top of the shared scroller — where the
+      // empty-band bug shows between "From Library" and the first painted row.
+      scroll.scrollTop = upNextBlockHeight;
+      scroll.dispatchEvent(new Event("scroll"));
+
+      await waitFor(() => {
+        const list = within(spineSection!).getByTestId("virtual-queue-track-list");
+        const paintedRows = Array.from(list.querySelectorAll(":scope > div")).filter((row) => {
+          const transform = (row as HTMLElement).style.transform ?? "";
+          return /translateY\(-?\d/.test(transform);
+        }) as HTMLElement[];
+        expect(paintedRows.length).toBeGreaterThan(0);
+
+        const headingRect = spineHeading.getBoundingClientRect();
+        const firstPaintedTop = Math.min(
+          ...paintedRows.map((row) => row.getBoundingClientRect().top),
+        );
+        const gap = firstPaintedTop - headingRect.bottom;
+        expect(gap).toBeGreaterThanOrEqual(-2);
+        expect(gap).toBeLessThan(24);
+      });
+    } finally {
+      layout.cleanup();
+    }
   });
 
   test("shuffle toggle keeps upcoming spine tracks visible in the queue sheet", async () => {

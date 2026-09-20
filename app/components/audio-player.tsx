@@ -1620,12 +1620,14 @@ function VirtualQueueTrackList({
   onRemoveTrack,
   onPlayTrack,
   parentRef,
+  scrollElement,
   hydrateTracksForDisplay,
 }: {
   tracks: Track[];
   onRemoveTrack: (index: number) => void;
   onPlayTrack?: (index: number) => void;
   parentRef: React.RefObject<HTMLDivElement | null>;
+  scrollElement: HTMLElement | null;
   hydrateTracksForDisplay: (ids: string[]) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -1633,7 +1635,6 @@ function VirtualQueueTrackList({
   const [scrollMargin, setScrollMargin] = useState(0);
 
   useLayoutEffect(() => {
-    const scrollElement = parentRef.current;
     const listElement = listRef.current;
     if (!scrollElement || !listElement) return;
 
@@ -1641,26 +1642,48 @@ function VirtualQueueTrackList({
     const syncMetrics = () => {
       setScrollMargin(measureScrollMargin(scrollElement, listElement));
       if (hasMeasured) return;
-      if ((parentRef.current?.clientHeight ?? 0) <= 0) return;
+      if (scrollElement.clientHeight <= 0) return;
       hasMeasured = true;
       setScrollReadyEpoch((epoch) => epoch + 1);
     };
 
-    syncMetrics();
     const observer = new ResizeObserver(syncMetrics);
     observer.observe(scrollElement);
     observer.observe(listElement);
+
+    // Content above the list (Up Next section, spine heading, etc.) shifts the
+    // list's offset inside the shared scroller without resizing the list or
+    // scrollport. Observe preceding siblings up to the scroll parent so
+    // scrollMargin stays accurate when that chrome changes size.
+    const observedAbove = new Set<Element>();
+    const observeContentAbove = () => {
+      let current: HTMLElement | null = listElement;
+      while (current && current !== scrollElement) {
+        const parent: HTMLElement | null = current.parentElement;
+        if (!parent) break;
+        for (const sibling of parent.children) {
+          if (sibling === current) break;
+          if (observedAbove.has(sibling)) continue;
+          observedAbove.add(sibling);
+          observer.observe(sibling);
+        }
+        current = parent;
+      }
+    };
+    observeContentAbove();
+
+    syncMetrics();
     const frame = requestAnimationFrame(syncMetrics);
 
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [parentRef, tracks.length]);
+  }, [scrollElement, tracks.length]);
 
   const virtualizer = useVirtualizer({
     count: tracks.length,
-    getScrollElement: () => parentRef.current,
+    getScrollElement: () => parentRef.current ?? scrollElement,
     estimateSize: () => 60,
     overscan: 10,
     scrollMargin,
@@ -1695,7 +1718,7 @@ function VirtualQueueTrackList({
 
   if (virtualItems.length === 0 && tracks.length > 0) {
     return (
-      <div ref={listRef}>
+      <div ref={listRef} data-testid="virtual-queue-track-list">
         {tracks.slice(0, 30).map((track, index) => (
           <QueueTrackItem
             key={`${track.id}-${index}`}
@@ -1712,6 +1735,7 @@ function VirtualQueueTrackList({
   return (
     <div
       ref={listRef}
+      data-testid="virtual-queue-track-list"
       style={{
         height: `${virtualizer.getTotalSize()}px`,
         width: "100%",
@@ -1768,7 +1792,12 @@ function QueueSheet({
     playQueueTrack,
     hydrateTracksForDisplay,
   } = useAudioPlayer();
-  const queueScrollRef = useRef<HTMLDivElement>(null);
+  const queueScrollRef = useRef<HTMLDivElement | null>(null);
+  const [queueScrollElement, setQueueScrollElement] = useState<HTMLDivElement | null>(null);
+  const bindQueueScrollRef = useCallback((node: HTMLDivElement | null) => {
+    queueScrollRef.current = node;
+    setQueueScrollElement(node);
+  }, []);
   const [isOpen, setIsOpen] = useState(false);
 
   const currentTrackId = currentTrack?.id;
@@ -1872,7 +1901,7 @@ function QueueSheet({
 
               {upNext.length > 0 || spine.length > 0 || spineTotal > 0 ? (
                 <div
-                  ref={queueScrollRef}
+                  ref={bindQueueScrollRef}
                   data-testid="queue-sheet-scroll"
                   className="flex-1 min-h-0 overflow-y-auto"
                 >
@@ -1886,6 +1915,7 @@ function QueueSheet({
                             onRemoveTrack={removeUpNextTrack}
                             onPlayTrack={playUpNextTrack}
                             parentRef={queueScrollRef}
+                            scrollElement={queueScrollElement}
                             hydrateTracksForDisplay={hydrateTracksForDisplay}
                           />
                         ) : null
@@ -1914,6 +1944,7 @@ function QueueSheet({
                               onRemoveTrack={removeSpineTrack}
                               onPlayTrack={playSpineTrack}
                               parentRef={queueScrollRef}
+                              scrollElement={queueScrollElement}
                               hydrateTracksForDisplay={hydrateTracksForDisplay}
                             />
                           ) : null
