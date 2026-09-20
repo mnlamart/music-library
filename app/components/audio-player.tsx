@@ -77,6 +77,23 @@ function isDurationKnown(duration: number): boolean {
   return duration > 0 && isFinite(duration) && !isNaN(duration);
 }
 
+/**
+ * Generates a UUID v4 used to correlate a play's `play_started` and
+ * `play_completed` usage events. Falls back to a Math.random-based UUID for
+ * environments without Web Crypto `randomUUID` (older WebViews, non-secure
+ * contexts).
+ */
+function generatePlayId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 function getPlaybackProgressPercent(currentTime: number, duration: number) {
   if (duration <= 0 || !isFinite(duration)) return 0;
   return Math.min(100, Math.max(0, (currentTime / duration) * 100));
@@ -428,7 +445,11 @@ function PlayerMiniBar({
             className={`h-5 w-5 ${isPlaying ? "" : "ml-0.5"}`}
           />
         </Button>
-        <QueueSheet triggerClassName="h-11 w-11 shrink-0 p-0" />
+        <QueueSheet
+          triggerClassName="h-11 w-11 shrink-0 p-0"
+          isPlaying={isPlaying}
+          onTogglePlayPause={onTogglePlayPause}
+        />
         <Button
           variant="ghost"
           size="sm"
@@ -553,7 +574,11 @@ function PlayerNowPlayingSheet({
               size="large"
             />
             <div className="flex-1 flex justify-end">
-              <QueueSheet triggerClassName="h-11 w-11 shrink-0 p-0" />
+              <QueueSheet
+                triggerClassName="h-11 w-11 shrink-0 p-0"
+                isPlaying={isPlaying}
+                onTogglePlayPause={onTogglePlayPause}
+              />
             </div>
           </div>
           <div className="flex items-center justify-center gap-1">
@@ -772,7 +797,7 @@ function PlayerDesktopBar({
         onClear={onClearSleepTimer}
       />
       <div className="flex shrink-0 items-center gap-1">
-        <QueueSheet />
+        <QueueSheet isPlaying={isPlaying} onTogglePlayPause={onTogglePlayPause} />
         <PlayerLoopShuffleDownload
           loopMode={loopMode}
           isShuffleEnabled={isShuffleEnabled}
@@ -848,6 +873,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
   const keepPlayingRef = useRef(false);
   const playStartedForTrackRef = useRef<string | null>(null);
   const playCompletedForTrackRef = useRef<string | null>(null);
+  const playIdRef = useRef<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isNowPlayingOpen, setIsNowPlayingOpen] = useState(false);
   const isOnline = useOnlineStatus();
@@ -859,6 +885,28 @@ export function AudioPlayer(props: AudioPlayerProps) {
   useEffect(() => {
     return () => {
       clearBlobUrlCache();
+    };
+  }, []);
+
+  // Clear the media element's "user gesture lock" on the first interaction.
+  // Chromium blocks audible autoplay unless the element's lock is cleared by
+  // calling play()/load() within a user gesture (chromium docs/media/autoplay.md).
+  // Without this, the first autoplay from a track tap (not the play button) is
+  // rejected because the eventual play() runs in an effect, outside the gesture.
+  useEffect(() => {
+    let unlocked = false;
+    const unlock = () => {
+      if (unlocked) return;
+      unlocked = true;
+      audioRef.current?.load();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
     };
   }, []);
 
@@ -946,7 +994,16 @@ export function AudioPlayer(props: AudioPlayerProps) {
       playbackToken !== previousPlaybackTokenRef.current
     ) {
       previousPlaybackTokenRef.current = playbackToken;
-      setIsPlaying(false);
+      const shouldAutoPlay = wantsAutoPlayRef?.current || !isManualPlayRef.current;
+      if (wantsAutoPlayRef) {
+        wantsAutoPlayRef.current = false;
+      }
+      // Only clear the "playing" flag when NOT auto-advancing. Keeping it set
+      // through gapless transitions keeps navigator.mediaSession in "playing",
+      // so background audio isn't dropped on lock screens.
+      if (!shouldAutoPlay) {
+        setIsPlaying(false);
+      }
       setCurrentTime(0);
       if (track.id !== previousTrackIdRef.current) {
         previousTrackIdRef.current = track.id;
@@ -959,10 +1016,6 @@ export function AudioPlayer(props: AudioPlayerProps) {
         setDuration(audioRef.current.duration);
       }
       audioRef.current.volume = isMuted ? 0 : volume;
-      const shouldAutoPlay = wantsAutoPlayRef?.current || !isManualPlayRef.current;
-      if (wantsAutoPlayRef) {
-        wantsAutoPlayRef.current = false;
-      }
       if (shouldAutoPlay) {
         keepPlayingRef.current = true;
         audioRef.current.currentTime = 0;
@@ -975,7 +1028,8 @@ export function AudioPlayer(props: AudioPlayerProps) {
               if (track && playStartedForTrackRef.current !== track.id) {
                 playStartedForTrackRef.current = track.id;
                 playCompletedForTrackRef.current = null;
-                reportPlayEvent("play_started", track.id);
+                playIdRef.current = generatePlayId();
+                reportPlayEvent("play_started", track.id, playIdRef.current);
               }
             })
             .catch(() => {
@@ -1018,7 +1072,8 @@ export function AudioPlayer(props: AudioPlayerProps) {
         if (track && playStartedForTrackRef.current !== track.id) {
           playStartedForTrackRef.current = track.id;
           playCompletedForTrackRef.current = null;
-          reportPlayEvent("play_started", track.id);
+          playIdRef.current = generatePlayId();
+          reportPlayEvent("play_started", track.id, playIdRef.current);
         }
       }
     } catch (_error) {
@@ -1223,7 +1278,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
         audio.currentTime / audio.duration >= 0.5
       ) {
         playCompletedForTrackRef.current = trackId;
-        reportPlayEvent("play_completed", trackId);
+        reportPlayEvent("play_completed", trackId, playIdRef.current);
       }
     };
     const handlePlay = () => {
@@ -1252,15 +1307,25 @@ export function AudioPlayer(props: AudioPlayerProps) {
       }
     };
     const handleEnded = () => {
-      setIsPlaying(false);
-      keepPlayingRef.current = false;
       if (trackId && playCompletedForTrackRef.current !== trackId) {
         playCompletedForTrackRef.current = trackId;
-        reportPlayEvent("play_completed", trackId);
+        reportPlayEvent("play_completed", trackId, playIdRef.current);
       }
       // Only auto-advance if not looping one track
-      if (loopMode !== "one") {
+      if (loopMode === "one") {
+        // Single-track loop: the `loop` attribute restarts it automatically.
+        return;
+      }
+      if (hasNext) {
+        // Auto-advance: keep the "playing" state (and Media Session) continuous
+        // through the transition so background audio isn't dropped on lock
+        // screens.
+        keepPlayingRef.current = true;
         onNext();
+      } else {
+        // End of queue: actually stop.
+        setIsPlaying(false);
+        keepPlayingRef.current = false;
       }
     };
     const handleError = () => {
@@ -1314,7 +1379,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
     };
-  }, [onNext, loopMode, trackId, audioSrc]);
+  }, [onNext, loopMode, trackId, audioSrc, hasNext]);
 
   const handleDownload = async () => {
     if (!track) return;
@@ -1377,17 +1442,26 @@ export function AudioPlayer(props: AudioPlayerProps) {
     // The seeked event will fire when seeking completes
   };
 
+  // Always mounted so the element's user-gesture lock can be unlocked on the
+  // first interaction, before any track is loaded.
+  const audioElement = (
+    <audio ref={audioRef} src={audioSrc} loop={loopMode === "one"} preload="metadata" />
+  );
+
   if (!isVisible) {
-    return null;
+    return audioElement;
   }
 
   if (!track) {
     return (
-      <QueueOnlyPlayerBar
-        onClose={onClose}
-        onStartPlayback={onStartQueuePlayback}
-        hasQueuedPlayback={hasQueuedPlayback}
-      />
+      <>
+        {audioElement}
+        <QueueOnlyPlayerBar
+          onClose={onClose}
+          onStartPlayback={onStartQueuePlayback}
+          hasQueuedPlayback={hasQueuedPlayback}
+        />
+      </>
     );
   }
 
@@ -1439,7 +1513,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
         <PlayerDesktopBar {...chromeProps} />
       </div>
 
-      <audio ref={audioRef} src={audioSrc} loop={loopMode === "one"} preload="metadata" />
+      {audioElement}
     </div>
   );
 }
@@ -1538,11 +1612,13 @@ function QueueSectionHeading({ children }: { children: ReactNode }) {
 function VirtualQueueTrackList({
   tracks,
   onRemoveTrack,
+  onPlayTrack,
   parentRef,
   hydrateTracksForDisplay,
 }: {
   tracks: Track[];
   onRemoveTrack: (index: number) => void;
+  onPlayTrack?: (index: number) => void;
   parentRef: React.RefObject<HTMLDivElement | null>;
   hydrateTracksForDisplay: (ids: string[]) => void;
 }) {
@@ -1614,6 +1690,7 @@ function VirtualQueueTrackList({
             track={track}
             isCurrentlyPlaying={false}
             onRemove={() => onRemoveTrack(index)}
+            onPlay={onPlayTrack ? () => onPlayTrack(index) : undefined}
           />
         ))}
       </>
@@ -1648,6 +1725,7 @@ function VirtualQueueTrackList({
               track={track}
               isCurrentlyPlaying={false}
               onRemove={() => onRemoveTrack(virtualItem.index)}
+              onPlay={onPlayTrack ? () => onPlayTrack(virtualItem.index) : undefined}
             />
           </div>
         );
@@ -1656,7 +1734,15 @@ function VirtualQueueTrackList({
   );
 }
 
-function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: string }) {
+function QueueSheet({
+  triggerClassName = "h-8 w-8 p-0",
+  isPlaying,
+  onTogglePlayPause,
+}: {
+  triggerClassName?: string;
+  isPlaying?: boolean;
+  onTogglePlayPause?: () => void;
+}) {
   const {
     upNext,
     spine,
@@ -1666,6 +1752,7 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
     playContext,
     removeTrackFromPlaylist,
     removeCurrentFromQueue,
+    playQueueTrack,
     hydrateTracksForDisplay,
   } = useAudioPlayer();
   const upNextScrollRef = useRef<HTMLDivElement>(null);
@@ -1711,6 +1798,20 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
     [removeTrackFromPlaylist, spinePosition],
   );
 
+  const playUpNextTrack = useCallback(
+    (index: number) => {
+      playQueueTrack({ zone: "upNext", index });
+    },
+    [playQueueTrack],
+  );
+
+  const playSpineTrack = useCallback(
+    (displayIndex: number) => {
+      playQueueTrack({ zone: "spine", index: spinePosition + 1 + displayIndex });
+    },
+    [playQueueTrack, spinePosition],
+  );
+
   const removeCurrentTrack = useCallback(() => {
     removeCurrentFromQueue();
   }, [removeCurrentFromQueue]);
@@ -1750,7 +1851,9 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
                   <QueueTrackItem
                     track={currentTrack}
                     isCurrentlyPlaying
+                    isPlaying={isPlaying}
                     onRemove={removeCurrentTrack}
+                    onTogglePlayPause={onTogglePlayPause}
                   />
                 </section>
               ) : null}
@@ -1770,6 +1873,7 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
                         <VirtualQueueTrackList
                           tracks={upNext}
                           onRemoveTrack={removeUpNextTrack}
+                          onPlayTrack={playUpNextTrack}
                           parentRef={upNextScrollRef}
                           hydrateTracksForDisplay={hydrateTracksForDisplay}
                         />
@@ -1782,6 +1886,7 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
                         track={track}
                         isCurrentlyPlaying={false}
                         onRemove={() => removeUpNextTrack(index)}
+                        onPlay={() => playUpNextTrack(index)}
                       />
                     ))
                   )}
@@ -1798,6 +1903,7 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
                           <VirtualQueueTrackList
                             tracks={spine}
                             onRemoveTrack={removeSpineTrack}
+                            onPlayTrack={playSpineTrack}
                             parentRef={spineScrollRef}
                             hydrateTracksForDisplay={hydrateTracksForDisplay}
                           />
@@ -1810,6 +1916,7 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
                           track={track}
                           isCurrentlyPlaying={false}
                           onRemove={() => removeSpineTrack(index)}
+                          onPlay={() => playSpineTrack(index)}
                         />
                       ))
                     )
@@ -1887,12 +1994,36 @@ function QueueTrackItem({
   track,
   isCurrentlyPlaying,
   onRemove,
+  onPlay,
+  isPlaying,
+  onTogglePlayPause,
 }: {
   track: Track;
   isCurrentlyPlaying: boolean;
   onRemove: () => void;
+  onPlay?: () => void;
+  isPlaying?: boolean;
+  onTogglePlayPause?: () => void;
 }) {
   const coverImage = "coverImage" in track ? track.coverImage : null;
+
+  const thumbnail = (
+    <div className="flex-shrink-0 relative">
+      <TrackThumbnail coverImage={coverImage} alt={track.title} size="md" />
+      {isCurrentlyPlaying && (
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+          <Icon name="play" className="h-2 w-2 text-primary-foreground" />
+        </div>
+      )}
+    </div>
+  );
+
+  const info = (
+    <div className="flex-1 min-w-0">
+      <div className="font-medium text-sm truncate">{track.title}</div>
+      <div className="text-xs text-muted-foreground truncate">{track.artist.name}</div>
+    </div>
+  );
 
   return (
     <div
@@ -1900,19 +2031,32 @@ function QueueTrackItem({
         isCurrentlyPlaying ? "bg-primary/10 border-l-4 border-primary" : ""
       }`}
     >
-      <div className="flex-shrink-0 relative">
-        <TrackThumbnail coverImage={coverImage} alt={track.title} size="md" />
-        {isCurrentlyPlaying && (
-          <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
-            <Icon name="play" className="h-2 w-2 text-primary-foreground" />
-          </div>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm truncate">{track.title}</div>
-        <div className="text-xs text-muted-foreground truncate">{track.artist.name}</div>
-      </div>
+      {onTogglePlayPause ? (
+        <button
+          type="button"
+          onClick={onTogglePlayPause}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer"
+          aria-label={isPlaying ? `Pause ${track.title}` : `Play ${track.title}`}
+        >
+          {thumbnail}
+          {info}
+        </button>
+      ) : onPlay ? (
+        <button
+          type="button"
+          onClick={onPlay}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer"
+          aria-label={`Play ${track.title}`}
+        >
+          {thumbnail}
+          {info}
+        </button>
+      ) : (
+        <>
+          {thumbnail}
+          {info}
+        </>
+      )}
 
       <div className="flex-shrink-0">
         <Button

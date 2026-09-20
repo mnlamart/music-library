@@ -27,6 +27,8 @@ vi.mock("#app/components/ui/use-toast.ts", () => ({
 
 vi.mock("#app/features/offline-storage/resolve-playback-url.client.ts", () => ({
   resolveTrackPlaybackSource: vi.fn().mockResolvedValue("https://cdn.example/track.mp3"),
+  resolvePlaybackAudioUrl: vi.fn().mockResolvedValue(null),
+  prefetchPlaybackAudioUrl: vi.fn(),
   revokePlaybackAudioUrl: vi.fn(),
   clearBlobUrlCache: vi.fn(),
 }));
@@ -773,6 +775,112 @@ describe("queue sheet integration", () => {
     );
 
     expect(spineTitlesInSheet(sheet)).toEqual(["Spine-Charlie-Upcoming"]);
+  });
+
+  test("clicking a spine row jumps playback and drops the skipped tracks", async () => {
+    const user = userEvent.setup();
+    mockSpineAndHydration(vi.mocked(fetch));
+
+    renderQueueApp(<WarmPlaybackControls />);
+    await startWarmLibraryPlayback(user);
+
+    const sheet = await openQueueSheet(user);
+    expect(nowPlayingTitleInSheet(sheet)).toBe("Spine-Alpha-Now");
+    expect(spineTitlesInSheet(sheet)).toEqual(["Spine-Bravo-Upcoming", "Spine-Charlie-Upcoming"]);
+
+    // Jump straight to Charlie, skipping Bravo — Bravo is discarded.
+    await user.click(within(sheet).getByRole("button", { name: "Play Spine-Charlie-Upcoming" }));
+
+    await waitFor(() => {
+      expect(nowPlayingTitleInSheet(sheet)).toBe("Spine-Charlie-Upcoming");
+    });
+    // Charlie was the last upcoming spine track — nothing remains.
+    expect(within(sheet).getByText("No more tracks in this queue.")).toBeTruthy();
+  });
+
+  test("clicking an up next row plays it and drops it and everything before it", async () => {
+    const user = userEvent.setup();
+    mockSpineAndHydration(vi.mocked(fetch));
+
+    renderQueueApp(<WarmPlaybackControls />);
+    await startWarmLibraryPlayback(user);
+
+    // Build Up Next = [Echo (play-next), Delta].
+    await user.click(screen.getByRole("button", { name: "Add Delta to up next" }));
+    await user.click(screen.getByRole("button", { name: "Play next Echo" }));
+    await expectUpNextIds(["track-e", "track-d"]);
+
+    const sheet = await openQueueSheet(user);
+    expect(upNextTitlesInSheet(sheet)).toEqual(["Inject-Echo-88", "Inject-Delta-99"]);
+
+    // Jump to the second Up Next row (Delta) — Echo and Delta are both dropped.
+    await user.click(within(sheet).getByRole("button", { name: "Play Inject-Delta-99" }));
+
+    await waitFor(() => {
+      expect(nowPlayingTitleInSheet(sheet)).toBe("Inject-Delta-99");
+    });
+    await expectUpNextIds([]);
+  });
+
+  test("clicking the now playing row toggles pause/resume without rebuilding the queue", async () => {
+    const user = userEvent.setup();
+    mockSpineAndHydration(vi.mocked(fetch));
+
+    // jsdom leaves the media element's play/pause unimplemented (and
+    // `restoreMocks: true` clears `beforeAll` spies before each test), so mock
+    // them per-test and fire the matching events a real browser would.
+    vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(
+      function (this: HTMLMediaElement) {
+        Object.defineProperty(this, "paused", { configurable: true, value: false });
+        this.dispatchEvent(new Event("play"));
+        return Promise.resolve();
+      },
+    );
+    vi.spyOn(window.HTMLMediaElement.prototype, "pause").mockImplementation(
+      function (this: HTMLMediaElement) {
+        Object.defineProperty(this, "paused", { configurable: true, value: true });
+        this.dispatchEvent(new Event("pause"));
+      },
+    );
+
+    renderQueueApp(<WarmPlaybackControls />);
+    await startWarmLibraryPlayback(user);
+
+    // Autoplay settles into a "playing" state before we toggle.
+    const desktopBar = screen.getByTestId("player-desktop-bar");
+    await waitFor(() => {
+      expect(within(desktopBar).getByLabelText("Pause")).toBeTruthy();
+    });
+
+    const sheet = await openQueueSheet(user);
+    expect(nowPlayingTitleInSheet(sheet)).toBe("Spine-Alpha-Now");
+
+    const nowPlayingSection = within(sheet).getByText("Now playing").closest("section");
+    if (!nowPlayingSection) throw new Error("Expected Now playing section");
+
+    // Playing → click pauses.
+    await user.click(
+      within(nowPlayingSection).getByRole("button", { name: "Pause Spine-Alpha-Now" }),
+    );
+    await waitFor(() => {
+      expect(
+        within(nowPlayingSection).getByRole("button", { name: "Play Spine-Alpha-Now" }),
+      ).toBeTruthy();
+    });
+
+    // No rebuild/reorder — now playing and spine are unchanged.
+    expect(nowPlayingTitleInSheet(sheet)).toBe("Spine-Alpha-Now");
+    expect(spineTitlesInSheet(sheet)).toEqual(["Spine-Bravo-Upcoming", "Spine-Charlie-Upcoming"]);
+
+    // Paused → click resumes.
+    await user.click(
+      within(nowPlayingSection).getByRole("button", { name: "Play Spine-Alpha-Now" }),
+    );
+    await waitFor(() => {
+      expect(
+        within(nowPlayingSection).getByRole("button", { name: "Pause Spine-Alpha-Now" }),
+      ).toBeTruthy();
+    });
   });
 
   test("shows up next tracks when more than the virtual list threshold", async () => {

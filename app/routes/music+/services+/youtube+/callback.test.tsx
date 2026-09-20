@@ -73,4 +73,32 @@ describe("YouTube OAuth callback", () => {
     // …and user B must have their own connection, not appear disconnected.
     expect(connB?.tokens).toContain("token-B");
   });
+
+  test("does not steal a YouTube channel already connected to another user", async () => {
+    const userA = await prisma.user.create({ data: createUser() });
+    const userB = await prisma.user.create({ data: createUser() });
+
+    vi.mocked(requireUserId).mockResolvedValueOnce(userA.id);
+    mockGetTokens.mockResolvedValueOnce({ access_token: "token-A" });
+    mockGetYouTubeUserInfo.mockResolvedValueOnce({ id: "channel-shared", email: "", name: "A" });
+
+    await loader(makeArgs() as never);
+
+    vi.mocked(requireUserId).mockResolvedValueOnce(userB.id);
+    mockGetTokens.mockResolvedValueOnce({ access_token: "token-B" });
+    mockGetYouTubeUserInfo.mockResolvedValueOnce({ id: "channel-shared", email: "", name: "B" });
+
+    const response = await loader(makeArgs() as never);
+    expect((response as Response).headers.get("Location")).toContain("already_connected");
+
+    const connA = await prisma.connection.findFirst({
+      where: { providerName: "youtube", userId: userA.id },
+    });
+    const connB = await prisma.connection.findFirst({
+      where: { providerName: "youtube", userId: userB.id },
+    });
+
+    expect(connA?.tokens).toContain("token-A");
+    expect(connB).toBeNull();
+  });
 });

@@ -34,6 +34,20 @@ export async function loader({ request, url }: LoaderFunctionArgs) {
     // disconnected). Using the channel id keeps each connection distinct.
     const userInfo = await createYouTubeService().getYouTubeUserInfo(tokens.access_token);
 
+    const existing = await prisma.connection.findUnique({
+      where: {
+        providerName_providerId: {
+          providerName: YOUTUBE_SERVICE.NAME,
+          providerId: userInfo.id,
+        },
+      },
+      select: { userId: true },
+    });
+
+    if (existing && existing.userId !== userId) {
+      return redirect("/music/services/youtube/auth?error=already_connected");
+    }
+
     // Store tokens for the user
     await prisma.connection.upsert({
       where: {
@@ -43,7 +57,6 @@ export async function loader({ request, url }: LoaderFunctionArgs) {
         },
       },
       update: {
-        userId,
         tokens: JSON.stringify(tokens),
       },
       create: {
