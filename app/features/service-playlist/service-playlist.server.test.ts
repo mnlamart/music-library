@@ -93,7 +93,7 @@ describe("ServicePlaylistService - Sync Logic", () => {
     vi.clearAllMocks();
     vi.mocked(resolveServiceAccessToken).mockResolvedValue({ access_token: "token123" });
     // Default: absent videos are gone on YouTube (playlist removals → delete SPT)
-    mockCheckVideosExist.mockImplementation(async (ids: string[]) => new Set<string>());
+    mockCheckVideosExist.mockImplementation(async (_ids: string[]) => new Set<string>());
   });
 
   describe("syncServicePlaylist - removed tracks cleanup", () => {

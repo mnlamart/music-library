@@ -866,15 +866,15 @@ export function AudioPlayer(props: AudioPlayerProps) {
   const [audioSrc, setAudioSrc] = useState<string | undefined>(undefined);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
 
+  const trackId = track?.id;
+
   useEffect(() => {
-    if (!audioFile || !track) {
+    if (!audioFile || !trackId) {
       loadedTrackIdRef.current = null;
       setAudioSrc(undefined);
       setPlaybackError(null);
       return;
     }
-
-    const trackId = track.id;
     loadedTrackIdRef.current = null;
     setAudioSrc(undefined);
     setPlaybackError(null);
@@ -905,7 +905,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       cancelled = true;
       revokePlaybackAudioUrl(trackId);
     };
-  }, [audioFile, track?.id]);
+  }, [audioFile, trackId]);
 
   // When going offline while a track is playing, proactively swap to the
   // cached blob URL so playback continues seamlessly.  Falls back to
@@ -916,7 +916,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
     prevOnlineRef.current = isOnline;
 
     const audio = audioRef.current;
-    if (!wasOnline || isOnline || !track || !audio || !audioSrc) return;
+    if (!wasOnline || isOnline || !trackId || !audio || !audioSrc) return;
 
     // Already on a local blob — no network dependency, do not interrupt.
     if (audioSrc.startsWith("blob:")) return;
@@ -925,7 +925,6 @@ export function AudioPlayer(props: AudioPlayerProps) {
     if (!shouldResume) return;
 
     const savedTime = audio.currentTime;
-    const trackId = track.id;
 
     resolvePlaybackAudioUrl(trackId).then((offlineUrl) => {
       if (!offlineUrl || !audioRef.current || loadedTrackIdRef.current !== trackId) {
@@ -936,7 +935,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       setAudioSrc(offlineUrl);
       setPlaybackError(null);
     });
-  }, [isOnline, track, audioSrc]);
+  }, [isOnline, trackId, audioSrc]);
 
   useEffect(() => {
     if (
@@ -994,7 +993,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       }
       isManualPlayRef.current = false;
     }
-  }, [track?.id, audioSrc, playbackToken, volume, isMuted]);
+  }, [trackId, track, audioSrc, playbackToken, volume, isMuted, wantsAutoPlayRef]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -1022,7 +1021,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
           reportPlayEvent("play_started", track.id);
         }
       }
-    } catch (error) {
+    } catch (_error) {
       setIsPlaying(!audioRef.current.paused);
       keepPlayingRef.current = !audioRef.current.paused;
       setPlaybackError("Unable to play this track. Try again or check your connection.");
@@ -1218,13 +1217,13 @@ export function AudioPlayer(props: AudioPlayerProps) {
         updateMediaSessionPositionState(audio);
       }
       if (
-        track &&
-        playCompletedForTrackRef.current !== track.id &&
+        trackId &&
+        playCompletedForTrackRef.current !== trackId &&
         audio.duration > 0 &&
         audio.currentTime / audio.duration >= 0.5
       ) {
-        playCompletedForTrackRef.current = track.id;
-        reportPlayEvent("play_completed", track.id);
+        playCompletedForTrackRef.current = trackId;
+        reportPlayEvent("play_completed", trackId);
       }
     };
     const handlePlay = () => {
@@ -1237,11 +1236,11 @@ export function AudioPlayer(props: AudioPlayerProps) {
       // This listener is kept for potential future use (e.g., showing loading indicator)
     };
     const handleSeeked = () => {
-      const audio = audioRef.current;
-      if (!audio) return;
+      const audioElement = audioRef.current;
+      if (!audioElement) return;
       // Sync time after seeking completes - this is the authoritative event
-      setCurrentTime(audio.currentTime);
-      updateMediaSessionPositionState(audio);
+      setCurrentTime(audioElement.currentTime);
+      updateMediaSessionPositionState(audioElement);
     };
     const handleLoadedMetadata = () => {
       if (audioRef.current) {
@@ -1255,9 +1254,9 @@ export function AudioPlayer(props: AudioPlayerProps) {
     const handleEnded = () => {
       setIsPlaying(false);
       keepPlayingRef.current = false;
-      if (track && playCompletedForTrackRef.current !== track.id) {
-        playCompletedForTrackRef.current = track.id;
-        reportPlayEvent("play_completed", track.id);
+      if (trackId && playCompletedForTrackRef.current !== trackId) {
+        playCompletedForTrackRef.current = trackId;
+        reportPlayEvent("play_completed", trackId);
       }
       // Only auto-advance if not looping one track
       if (loopMode !== "one") {
@@ -1265,20 +1264,19 @@ export function AudioPlayer(props: AudioPlayerProps) {
       }
     };
     const handleError = () => {
-      const audio = audioRef.current;
-      if (!audio?.error) return;
+      const audioElement = audioRef.current;
+      if (!audioElement?.error) return;
 
-      const errorCode = audio.error.code;
-      console.error(`Audio load error: ${audio.error.message} (code: ${errorCode})`);
+      const errorCode = audioElement.error.code;
+      console.error(`Audio load error: ${audioElement.error.message} (code: ${errorCode})`);
 
       // For network errors while a track is loaded, try to recover from
       // the offline cache before giving up.
       // MEDIA_ERR_NETWORK === 2 — numeric constant instead of MediaError.MEDIA_ERR_NETWORK
       // because jsdom does not expose the MediaError constructor.
-      if (errorCode === 2 && track) {
-        const savedTime = audio.currentTime;
-        const shouldResume = keepPlayingRef.current || !audio.paused;
-        const trackId = track.id;
+      if (errorCode === 2 && trackId) {
+        const savedTime = audioElement.currentTime;
+        const shouldResume = keepPlayingRef.current || !audioElement.paused;
 
         resolvePlaybackAudioUrl(trackId).then((offlineUrl) => {
           if (offlineUrl && audioRef.current && loadedTrackIdRef.current === trackId) {
@@ -1316,7 +1314,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
     };
-  }, [onNext, loopMode, track, audioSrc]);
+  }, [onNext, loopMode, trackId, audioSrc]);
 
   const handleDownload = async () => {
     if (!track) return;
@@ -1590,9 +1588,9 @@ function VirtualQueueTrackList({
     }
     return tracks
       .slice(0, 30)
-      .map((_, index) => index)
+      .map((track) => track.id)
       .join(",");
-  }, [virtualItems, tracks.length]);
+  }, [virtualItems, tracks]);
 
   useEffect(() => {
     const indices =
@@ -1612,7 +1610,7 @@ function VirtualQueueTrackList({
       <>
         {tracks.slice(0, 30).map((track, index) => (
           <QueueTrackItem
-            key={`${track.id}-${index}`}
+            key={track.id}
             track={track}
             isCurrentlyPlaying={false}
             onRemove={() => onRemoveTrack(index)}
@@ -1674,15 +1672,17 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
   const spineScrollRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
 
+  const currentTrackId = currentTrack?.id;
+
   const queueSheetTrackIds = useMemo(() => {
     const ids: string[] = [];
-    if (currentTrack) ids.push(currentTrack.id);
+    if (currentTrackId) ids.push(currentTrackId);
     ids.push(...upNext.map((track) => track.id));
     if (spine.length < SPINE_VIRTUAL_THRESHOLD) {
       ids.push(...spine.map((track) => track.id));
     }
     return ids.join(",");
-  }, [currentTrack?.id, upNext, spine]);
+  }, [currentTrackId, upNext, spine]);
 
   useEffect(() => {
     if (!isOpen || queueSheetTrackIds.length === 0) return;
@@ -1778,7 +1778,7 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
                   ) : (
                     upNext.map((track, index) => (
                       <QueueTrackItem
-                        key={`${track.id}-${index}`}
+                        key={track.id}
                         track={track}
                         isCurrentlyPlaying={false}
                         onRemove={() => removeUpNextTrack(index)}
@@ -1806,7 +1806,7 @@ function QueueSheet({ triggerClassName = "h-8 w-8 p-0" }: { triggerClassName?: s
                     ) : (
                       spine.map((track, index) => (
                         <QueueTrackItem
-                          key={`${track.id}-${index}`}
+                          key={track.id}
                           track={track}
                           isCurrentlyPlaying={false}
                           onRemove={() => removeSpineTrack(index)}

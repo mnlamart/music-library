@@ -24,6 +24,9 @@ interface SearchResultsProps {
   playlists?: SearchPlaylist[];
 }
 
+const EMPTY_RESULTS: SearchResult[] = [];
+const EMPTY_PLAYLISTS: SearchPlaylist[] = [];
+
 /** Per-entity configuration — single source of truth for links, icons, subtitles */
 const ENTITY_CONFIG: Record<
   Exclude<SearchResult["type"], "track">,
@@ -84,12 +87,12 @@ function EntityResultRow({ result }: { result: Exclude<SearchResult, TrackSearch
 }
 
 export function SearchResults({
-  results = [],
+  results = EMPTY_RESULTS,
   query,
   onLoadMore,
   hasNext = false,
   isLoading = false,
-  playlists = [],
+  playlists = EMPTY_PLAYLISTS,
 }: SearchResultsProps) {
   if (results.length === 0 && !isLoading && query.trim()) {
     return (

@@ -306,7 +306,6 @@ export function AudioPlayerProvider({ children }: AudioPlayerProviderProps) {
 
   const startSpinePlayback = useCallback(
     async (track: Track, context: PlaylistContext, explicitIndex?: number) => {
-      const queueTrack = queueTrackFromFullTrack(track);
       rememberTrack(track);
 
       beginPlayback();
@@ -423,7 +422,9 @@ export function AudioPlayerProvider({ children }: AudioPlayerProviderProps) {
         }
         setCacheVersion((version) => version + 1);
 
-        const spinePosition = order.findIndex((index) => loadedSpine[index]?.id === startTrack.id);
+        const startSpinePosition = order.findIndex(
+          (index) => loadedSpine[index]?.id === startTrack.id,
+        );
 
         setUpNext([]);
         setUpNextPlayNextCount(0);
@@ -431,7 +432,7 @@ export function AudioPlayerProvider({ children }: AudioPlayerProviderProps) {
         setSpine(loadedSpine);
         setSpineTotal(loadedSpine.length);
         setSpineOrder(order);
-        setSpinePosition(spinePosition >= 0 ? spinePosition : 0);
+        setSpinePosition(startSpinePosition >= 0 ? startSpinePosition : 0);
         setPlayContext(context);
         setIsPlayerVisible(true);
         beginPlayback();
@@ -845,14 +846,16 @@ export function AudioPlayerProvider({ children }: AudioPlayerProviderProps) {
   const hasNext = hasNextTrack(navigationState);
   const hasPrevious = hasPreviousTrack(navigationState);
 
+  const currentTrackId = currentTrack?.id;
+
   useEffect(() => {
-    if (!isPlayerVisible || !currentTrack || isOfflineEnvironment()) return;
+    if (!isPlayerVisible || !currentTrackId || isOfflineEnvironment()) return;
 
     const storage = getOfflineStorage();
 
     void (async () => {
-      await hydrateAround(currentTrack.id);
-      const ids = collectHydrationIds(navigationState, currentTrack.id);
+      await hydrateAround(currentTrackId);
+      const ids = collectHydrationIds(navigationState, currentTrackId);
 
       for (const id of ids) {
         const queueTrack = playbackCacheRef.current.get(id);
@@ -864,46 +867,83 @@ export function AudioPlayerProvider({ children }: AudioPlayerProviderProps) {
         }
       }
     })();
-  }, [currentTrack?.id, hydrateAround, isPlayerVisible, navigationState]);
+  }, [currentTrackId, hydrateAround, isPlayerVisible, navigationState]);
+
+  const contextValue = useMemo(
+    () => ({
+      currentTrack,
+      isPlayerVisible,
+      playlist,
+      upNext: upNextView,
+      spine: spineView,
+      spineTotal,
+      spinePosition,
+      currentIndex,
+      playContext,
+      loopMode,
+      isShuffleEnabled,
+      playTrack,
+      playPlaylist,
+      playLibrary,
+      playUserPlaylist,
+      playNext,
+      playPrevious,
+      toggleLoop,
+      toggleShuffle,
+      closePlayer,
+      startQueuePlayback,
+      hasQueuedPlayback,
+      hasNext,
+      hasPrevious,
+      isLoadingNext,
+      addTrackToPlaylist,
+      removeTrackFromPlaylist,
+      removeCurrentFromQueue,
+      playNextTrack,
+      addToUpNext,
+      addToQueue,
+      hydrateTracksForDisplay,
+      addToCurrentPlaylist,
+    }),
+    [
+      currentTrack,
+      isPlayerVisible,
+      playlist,
+      upNextView,
+      spineView,
+      spineTotal,
+      spinePosition,
+      currentIndex,
+      playContext,
+      loopMode,
+      isShuffleEnabled,
+      playTrack,
+      playPlaylist,
+      playLibrary,
+      playUserPlaylist,
+      playNext,
+      playPrevious,
+      toggleLoop,
+      toggleShuffle,
+      closePlayer,
+      startQueuePlayback,
+      hasQueuedPlayback,
+      hasNext,
+      hasPrevious,
+      isLoadingNext,
+      addTrackToPlaylist,
+      removeTrackFromPlaylist,
+      removeCurrentFromQueue,
+      playNextTrack,
+      addToUpNext,
+      addToQueue,
+      hydrateTracksForDisplay,
+      addToCurrentPlaylist,
+    ],
+  );
 
   return (
-    <AudioPlayerContext.Provider
-      value={{
-        currentTrack,
-        isPlayerVisible,
-        playlist,
-        upNext: upNextView,
-        spine: spineView,
-        spineTotal,
-        spinePosition,
-        currentIndex,
-        playContext,
-        loopMode,
-        isShuffleEnabled,
-        playTrack,
-        playPlaylist,
-        playLibrary,
-        playUserPlaylist,
-        playNext,
-        playPrevious,
-        toggleLoop,
-        toggleShuffle,
-        closePlayer,
-        startQueuePlayback,
-        hasQueuedPlayback,
-        hasNext,
-        hasPrevious,
-        isLoadingNext,
-        addTrackToPlaylist,
-        removeTrackFromPlaylist,
-        removeCurrentFromQueue,
-        playNextTrack,
-        addToUpNext,
-        addToQueue,
-        hydrateTracksForDisplay,
-        addToCurrentPlaylist,
-      }}
-    >
+    <AudioPlayerContext.Provider value={contextValue}>
       {children}
       <InstallAppBanner playerVisible={isPlayerVisible} />
       <AudioPlayer

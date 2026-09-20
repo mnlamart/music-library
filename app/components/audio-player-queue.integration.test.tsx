@@ -158,7 +158,7 @@ function IdleQueueControls() {
 
 function libraryTrackListItem(
   track: FullTrack,
-  index: number,
+  _index: number,
 ): ComponentProps<typeof TrackListItem>["track"] {
   return {
     id: track.id,
@@ -351,11 +351,10 @@ function mockLargeLibrarySpine(fetchMock: ReturnType<typeof vi.fn>, spineCount: 
       const ids = new URL(url, "http://test").searchParams.get("ids")?.split(",") ?? [];
       const tracks = ids.map((id) => {
         const index = Number.parseInt(id.replace("track-", ""), 10);
-        return {
-          ...trackA,
+        return Object.assign({}, trackA, {
           id,
           title: `Library Track ${index + 1}`,
-        };
+        });
       });
       return Promise.resolve({
         ok: true,
@@ -499,12 +498,11 @@ describe("queue sheet integration", () => {
         const ids = new URL(url, "http://test").searchParams.get("ids")?.split(",") ?? [];
         const tracks = ids.map((id) => {
           const index = Number.parseInt(id.replace("track-", ""), 10);
-          return {
-            ...trackA,
+          return Object.assign({}, trackA, {
             id,
             title: `Library Track ${index + 1}`,
             coverImage: { objectKey: `covers/${id}.jpg` },
-          };
+          });
         });
         return Promise.resolve({
           ok: true,

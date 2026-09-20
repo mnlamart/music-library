@@ -77,9 +77,11 @@ export class YouTubeService {
     } catch (error) {
       console.error("Error fetching YouTube user info:", error);
       if (error instanceof Error) {
-        throw new Error(`Failed to fetch YouTube user information: ${error.message}`);
+        throw new Error(`Failed to fetch YouTube user information: ${error.message}`, {
+          cause: error,
+        });
       }
-      throw new Error("Failed to fetch YouTube user information");
+      throw new Error("Failed to fetch YouTube user information", { cause: error });
     }
   }
 

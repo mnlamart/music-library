@@ -28,10 +28,10 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   await checkHoneypot(formData);
   const submission = await parseWithZod(formData, {
-    schema: ForgotPasswordSchema.superRefine(async (data, ctx) => {
+    schema: ForgotPasswordSchema.superRefine(async (formValues, ctx) => {
       const user = await prisma.user.findFirst({
         where: {
-          OR: [{ email: data.usernameOrEmail }, { username: data.usernameOrEmail }],
+          OR: [{ email: formValues.usernameOrEmail }, { username: formValues.usernameOrEmail }],
         },
         select: { id: true },
       });

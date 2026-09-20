@@ -49,9 +49,9 @@ export async function action({ request }: Route.ActionArgs) {
   const userId = await requireUserId(request);
   const formData = await request.formData();
   const submission = await parseWithZod(formData, {
-    schema: ChangeEmailSchema.superRefine(async (data, ctx) => {
+    schema: ChangeEmailSchema.superRefine(async (formValues, ctx) => {
       const existingUser = await prisma.user.findUnique({
-        where: { email: data.email },
+        where: { email: formValues.email },
       });
       if (existingUser) {
         ctx.addIssue({

@@ -7,14 +7,18 @@ export type StatusHandler = (info: {
   params: Record<string, string | undefined>;
 }) => ReactElement | null;
 
+const defaultStatusHandler: StatusHandler = ({ error }) => (
+  <p>
+    {error.status} {error.data}
+  </p>
+);
+
+const unexpectedErrorHandler = (error: unknown) => <p>{getErrorMessage(error)}</p>;
+
 export function GeneralErrorBoundary({
-  defaultStatusHandler = ({ error }) => (
-    <p>
-      {error.status} {error.data}
-    </p>
-  ),
+  defaultStatusHandler: defaultStatusHandlerProp = defaultStatusHandler,
   statusHandlers,
-  unexpectedErrorHandler = (error) => <p>{getErrorMessage(error)}</p>,
+  unexpectedErrorHandler: unexpectedErrorHandlerProp = unexpectedErrorHandler,
 }: {
   defaultStatusHandler?: StatusHandler;
   statusHandlers?: Record<number, StatusHandler>;
@@ -40,11 +44,11 @@ export function GeneralErrorBoundary({
   return (
     <div className="text-h2 container flex items-center justify-center p-20">
       {isResponse
-        ? (statusHandlers?.[error.status] ?? defaultStatusHandler)({
+        ? (statusHandlers?.[error.status] ?? defaultStatusHandlerProp)({
             error,
             params,
           })
-        : unexpectedErrorHandler(error)}
+        : unexpectedErrorHandlerProp(error)}
     </div>
   );
 }

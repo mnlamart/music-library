@@ -61,7 +61,7 @@ export default async function handleRequest(...args: DocRequestArgs) {
 
   const callbackName = isbot(request.headers.get("user-agent")) ? "onAllReady" : "onShellReady";
 
-  return new Promise(async (resolve, reject) => {
+  return new Promise((resolve, reject) => {
     let didError = false;
     // NOTE: this timing will only include things that are rendered in the shell
     // and will not include suspended components and deferred loaders

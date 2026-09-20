@@ -7,7 +7,6 @@ import { checkPlaylistArchiveReadyAfterTrackArchived } from "#app/utils/playlist
 import {
   recordArchiveSuccess,
   recordCookieExpiredFailure,
-  resetCookieFailureStreak,
   isCookieExpiredFailure,
   COOKIE_FAILURE_PAUSE_THRESHOLD,
 } from "./cookie-failure-streak.ts";

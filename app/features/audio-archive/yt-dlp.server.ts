@@ -307,10 +307,10 @@ export function categorizeStderr(stderr: string): ErrorCategory | null {
  * Extract a human-readable error message from yt-dlp stderr.
  * Strips ANSI escape codes and returns the most relevant line.
  */
+const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
+
 function extractErrorMessage(stderr: string): string | null {
-  const clean = stderr
-    .replace(/\x1b\[[0-9;]*m/g, "") // strip ANSI
-    .trim();
+  const clean = stderr.replace(ANSI_ESCAPE_RE, "").trim(); // strip ANSI
 
   if (!clean) return null;
 

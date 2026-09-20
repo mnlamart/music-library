@@ -49,10 +49,10 @@ export function userHasPermission(
   const { action, entity, access } = parsePermissionString(permission);
   return user.roles.some((role) =>
     role.permissions.some(
-      (permission) =>
-        permission.entity === entity &&
-        permission.action === action &&
-        (!access || access.includes(permission.access)),
+      (rolePermission) =>
+        rolePermission.entity === entity &&
+        rolePermission.action === action &&
+        (!access || access.includes(rolePermission.access)),
     ),
   );
 }

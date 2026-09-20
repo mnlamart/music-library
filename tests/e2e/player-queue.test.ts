@@ -115,7 +115,7 @@ test.describe("Player / Queue", () => {
     const user = await login();
 
     // Create a track WITHOUT an audio file
-    const track = await insertNewTrack({ title: "No Audio Track" }, user.id);
+    await insertNewTrack({ title: "No Audio Track" }, user.id);
 
     await page.goto("/library", { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForLoadState("domcontentloaded");

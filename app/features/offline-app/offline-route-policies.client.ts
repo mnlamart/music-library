@@ -172,10 +172,11 @@ export const OFFLINE_ROUTE_POLICIES: Record<string, StubEntry> = {
     const storage = getOfflineStorage();
     const cachedPlaylists = listCachedPlaylists();
     const offlinePlaylists = await Promise.all(
-      cachedPlaylists.map(async (playlist) => ({
-        ...playlist,
-        trackCount: (await storage.listForPlaylist(playlist.id)).length,
-      })),
+      cachedPlaylists.map(async (playlist) =>
+        Object.assign({}, playlist, {
+          trackCount: (await storage.listForPlaylist(playlist.id)).length,
+        }),
+      ),
     );
     return {
       offline: true as const,

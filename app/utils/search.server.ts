@@ -512,7 +512,7 @@ export async function searchPlaylists(
   userId: string,
   limit: number = 20,
   cursor?: string,
-  usePrefix: boolean = true,
+  _usePrefix: boolean = true,
 ): Promise<SearchResponse> {
   if (!query.trim() || !userId) {
     return emptySearchResponse(limit);
