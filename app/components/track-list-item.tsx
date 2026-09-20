@@ -26,6 +26,7 @@ import {
   useOfflineTrackDownload,
   type OfflineDownloadTrack,
 } from "#app/hooks/use-offline-track-download.ts";
+import { useTrackAudioFileDownload } from "#app/hooks/use-track-audio-file-download.ts";
 import { formatDuration } from "#app/utils/format-duration.ts";
 import { isPlayableTrack } from "#app/utils/playable-track";
 import { formatServiceDateAdded } from "#app/utils/service-date.ts";
@@ -81,7 +82,9 @@ interface TrackListItemProps {
   usePlaybackIndex?: boolean;
   /** Render prop for custom per-track action buttons. Receives trackId, isInLibrary, and isDeleted. */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
-  /** When set, offline download/remove actions appear inside the three-dot menu */
+  /** When true, "Download" saves the audio file to disk (browser download) inside the three-dot menu */
+  showAudioFileDownload?: boolean;
+  /** When set, offline pin/remove actions appear inside the three-dot menu (PWA offline storage) */
   offlineDownloadTrack?: OfflineDownloadTrack;
   offlineDownloadPlaylistId?: string;
 }
@@ -134,6 +137,7 @@ export const TrackListItem = memo(function TrackListItem({
   showQuickAddToPlaylist = false,
   usePlaybackIndex = true,
   itemActions,
+  showAudioFileDownload = false,
   offlineDownloadTrack,
   offlineDownloadPlaylistId,
 }: TrackListItemProps) {
@@ -552,6 +556,9 @@ export const TrackListItem = memo(function TrackListItem({
                     </DropdownMenuItem>
                   </>
                 )}
+                {showAudioFileDownload && hasAudioFiles ? (
+                  <AudioFileDownloadDropdownItem trackId={track.id} title={track.title} />
+                ) : null}
                 {offlineDownloadTrack ? (
                   <OfflineDownloadDropdownItem
                     track={offlineDownloadTrack}
@@ -676,6 +683,13 @@ export const TrackListItem = memo(function TrackListItem({
                     </Button>
                   </>
                 )}
+                {showAudioFileDownload && hasAudioFiles ? (
+                  <AudioFileDownloadSheetButton
+                    trackId={track.id}
+                    title={track.title}
+                    onDone={() => setIsActionsSheetOpen(false)}
+                  />
+                ) : null}
                 {offlineDownloadTrack ? (
                   <OfflineDownloadSheetButton
                     track={offlineDownloadTrack}
@@ -788,6 +802,67 @@ export const TrackListItem = memo(function TrackListItem({
     </>
   );
 });
+
+function AudioFileDownloadDropdownItem({
+  trackId,
+  title,
+}: {
+  trackId: string;
+  title: string;
+}) {
+  const { isDownloading, downloadAudioFile, label } = useTrackAudioFileDownload({
+    id: trackId,
+    title,
+  });
+
+  return (
+    <DropdownMenuItem
+      disabled={isDownloading}
+      onClick={(event) => {
+        event.preventDefault();
+        void downloadAudioFile();
+      }}
+    >
+      <Icon
+        name={isDownloading ? "arrow-path" : "download"}
+        className={`h-4 w-4 mr-2 ${isDownloading ? "animate-spin" : ""}`}
+      />
+      {label}
+    </DropdownMenuItem>
+  );
+}
+
+function AudioFileDownloadSheetButton({
+  trackId,
+  title,
+  onDone,
+}: {
+  trackId: string;
+  title: string;
+  onDone: () => void;
+}) {
+  const { isDownloading, downloadAudioFile, label } = useTrackAudioFileDownload({
+    id: trackId,
+    title,
+  });
+
+  return (
+    <Button
+      variant="ghost"
+      className="w-full justify-start h-12 text-base"
+      disabled={isDownloading}
+      onClick={() => {
+        void downloadAudioFile().then(onDone);
+      }}
+    >
+      <Icon
+        name={isDownloading ? "arrow-path" : "download"}
+        className={`h-5 w-5 mr-3 ${isDownloading ? "animate-spin" : ""}`}
+      />
+      {label}
+    </Button>
+  );
+}
 
 function OfflineDownloadDropdownItem({
   track,
