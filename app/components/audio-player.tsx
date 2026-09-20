@@ -1609,39 +1609,35 @@ function QueueSectionHeading({ children }: { children: ReactNode }) {
   );
 }
 
-function measureScrollMargin(scrollElement: HTMLElement, listElement: HTMLElement): number {
-  const scrollRect = scrollElement.getBoundingClientRect();
-  const listRect = listElement.getBoundingClientRect();
-  return listRect.top - scrollRect.top + scrollElement.scrollTop;
-}
-
 function VirtualQueueTrackList({
   tracks,
   onRemoveTrack,
   onPlayTrack,
   parentRef,
   hydrateTracksForDisplay,
+  paddingStart = 0,
+  listTestId,
 }: {
   tracks: Track[];
   onRemoveTrack: (index: number) => void;
   onPlayTrack?: (index: number) => void;
   parentRef: React.RefObject<HTMLDivElement | null>;
   hydrateTracksForDisplay: (ids: string[]) => void;
+  /** Height of in-flow content above this list inside the shared scroller. */
+  paddingStart?: number;
+  listTestId?: string;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [scrollReadyEpoch, setScrollReadyEpoch] = useState(0);
-  const [scrollMargin, setScrollMargin] = useState(0);
 
   useLayoutEffect(() => {
     const scrollElement = parentRef.current;
-    const listElement = listRef.current;
-    if (!scrollElement || !listElement) return;
+    if (!scrollElement) return;
 
-    let hasMeasured = scrollElement.clientHeight > 0;
+    let hasMeasured = scrollElement.clientHeight > 0 || scrollElement.offsetHeight > 0;
     const syncMetrics = () => {
-      setScrollMargin(measureScrollMargin(scrollElement, listElement));
       if (hasMeasured) return;
-      if ((parentRef.current?.clientHeight ?? 0) <= 0) return;
+      if ((parentRef.current?.clientHeight ?? parentRef.current?.offsetHeight ?? 0) <= 0) return;
       hasMeasured = true;
       setScrollReadyEpoch((epoch) => epoch + 1);
     };
@@ -1649,7 +1645,6 @@ function VirtualQueueTrackList({
     syncMetrics();
     const observer = new ResizeObserver(syncMetrics);
     observer.observe(scrollElement);
-    observer.observe(listElement);
     const frame = requestAnimationFrame(syncMetrics);
 
     return () => {
@@ -1663,7 +1658,7 @@ function VirtualQueueTrackList({
     getScrollElement: () => parentRef.current,
     estimateSize: () => 60,
     overscan: 10,
-    scrollMargin,
+    paddingStart,
     rangeExtractor: defaultRangeExtractor,
   });
   void scrollReadyEpoch;
@@ -1695,7 +1690,7 @@ function VirtualQueueTrackList({
 
   if (virtualItems.length === 0 && tracks.length > 0) {
     return (
-      <div ref={listRef}>
+      <div ref={listRef} data-testid={listTestId} data-padding-start={paddingStart}>
         {tracks.slice(0, 30).map((track, index) => (
           <QueueTrackItem
             key={`${track.id}-${index}`}
@@ -1709,11 +1704,17 @@ function VirtualQueueTrackList({
     );
   }
 
+  // paddingStart is reserved for in-flow content above this list; only the item
+  // span contributes to this box height so we do not double-count that offset.
+  const listHeight = Math.max(virtualizer.getTotalSize() - paddingStart, 0);
+
   return (
     <div
       ref={listRef}
+      data-testid={listTestId}
+      data-padding-start={paddingStart}
       style={{
-        height: `${virtualizer.getTotalSize()}px`,
+        height: `${listHeight}px`,
         width: "100%",
         position: "relative",
       }}
@@ -1731,7 +1732,7 @@ function VirtualQueueTrackList({
               left: 0,
               width: "100%",
               height: `${virtualItem.size}px`,
-              transform: `translateY(${virtualItem.start - scrollMargin}px)`,
+              transform: `translateY(${virtualItem.start - paddingStart}px)`,
             }}
           >
             <QueueTrackItem
@@ -1769,7 +1770,51 @@ function QueueSheet({
     hydrateTracksForDisplay,
   } = useAudioPlayer();
   const queueScrollRef = useRef<HTMLDivElement>(null);
+  const beforeSpineRef = useRef<HTMLDivElement | null>(null);
+  const beforeSpineObserverRef = useRef<ResizeObserver | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [spinePaddingStart, setSpinePaddingStart] = useState(0);
+  const [upNextPaddingStart, setUpNextPaddingStart] = useState(0);
+
+  const spineHeading = getSpineSectionHeading(playContext);
+
+  const setBeforeSpineNode = useCallback((node: HTMLDivElement | null) => {
+    beforeSpineObserverRef.current?.disconnect();
+    beforeSpineObserverRef.current = null;
+    beforeSpineRef.current = node;
+    if (!node) {
+      setSpinePaddingStart(0);
+      setUpNextPaddingStart(0);
+      return;
+    }
+
+    const syncOffsets = () => {
+      setSpinePaddingStart(node.offsetHeight);
+      const upNextHeading = node.querySelector("h3");
+      setUpNextPaddingStart(upNextHeading instanceof HTMLElement ? upNextHeading.offsetHeight : 0);
+    };
+
+    syncOffsets();
+    const observer = new ResizeObserver(syncOffsets);
+    observer.observe(node);
+    beforeSpineObserverRef.current = observer;
+  }, []);
+
+  useLayoutEffect(() => {
+    return () => {
+      beforeSpineObserverRef.current?.disconnect();
+      beforeSpineObserverRef.current = null;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const beforeSpine = beforeSpineRef.current;
+    if (!beforeSpine) return;
+    setSpinePaddingStart(beforeSpine.offsetHeight);
+    const upNextHeading = beforeSpine.querySelector("h3");
+    setUpNextPaddingStart(upNextHeading instanceof HTMLElement ? upNextHeading.offsetHeight : 0);
+  }, [isOpen, upNext.length, spine.length, spineTotal, spineHeading]);
 
   const currentTrackId = currentTrack?.id;
 
@@ -1790,7 +1835,6 @@ function QueueSheet({
 
   const spineLabel = getSpineSectionLabel(playContext);
   const sheetTitle = formatQueueSheetTitle(upNext.length, spineTotal, spineLabel);
-  const spineHeading = getSpineSectionHeading(playContext);
   const isEmpty = !currentTrack && upNext.length === 0 && spine.length === 0 && spineTotal === 0;
 
   const removeUpNextTrack = useCallback(
@@ -1876,36 +1920,44 @@ function QueueSheet({
                   data-testid="queue-sheet-scroll"
                   className="flex-1 min-h-0 overflow-y-auto"
                 >
-                  {upNext.length > 0 ? (
-                    <section>
-                      <QueueSectionHeading>Up Next</QueueSectionHeading>
-                      {upNext.length >= UP_NEXT_VIRTUAL_THRESHOLD ? (
-                        isOpen ? (
-                          <VirtualQueueTrackList
-                            tracks={upNext}
-                            onRemoveTrack={removeUpNextTrack}
-                            onPlayTrack={playUpNextTrack}
-                            parentRef={queueScrollRef}
-                            hydrateTracksForDisplay={hydrateTracksForDisplay}
-                          />
-                        ) : null
-                      ) : (
-                        upNext.map((track, index) => (
-                          <QueueTrackItem
-                            key={`${track.id}-${index}`}
-                            track={track}
-                            isCurrentlyPlaying={false}
-                            onRemove={() => removeUpNextTrack(index)}
-                            onPlay={() => playUpNextTrack(index)}
-                          />
-                        ))
-                      )}
-                    </section>
-                  ) : null}
+                  <div ref={setBeforeSpineNode} data-testid="queue-sheet-before-spine">
+                    {upNext.length > 0 ? (
+                      <section>
+                        <QueueSectionHeading>Up Next</QueueSectionHeading>
+                        {upNext.length >= UP_NEXT_VIRTUAL_THRESHOLD ? (
+                          isOpen ? (
+                            <VirtualQueueTrackList
+                              tracks={upNext}
+                              onRemoveTrack={removeUpNextTrack}
+                              onPlayTrack={playUpNextTrack}
+                              parentRef={queueScrollRef}
+                              hydrateTracksForDisplay={hydrateTracksForDisplay}
+                              paddingStart={upNextPaddingStart}
+                            />
+                          ) : null
+                        ) : (
+                          upNext.map((track, index) => (
+                            <QueueTrackItem
+                              key={`${track.id}-${index}`}
+                              track={track}
+                              isCurrentlyPlaying={false}
+                              onRemove={() => removeUpNextTrack(index)}
+                              onPlay={() => playUpNextTrack(index)}
+                            />
+                          ))
+                        )}
+                      </section>
+                    ) : null}
+
+                    {spine.length > 0 || spineTotal > 0 ? (
+                      <section>
+                        <QueueSectionHeading>{spineHeading}</QueueSectionHeading>
+                      </section>
+                    ) : null}
+                  </div>
 
                   {spine.length > 0 || spineTotal > 0 ? (
-                    <section>
-                      <QueueSectionHeading>{spineHeading}</QueueSectionHeading>
+                    <section data-testid="queue-spine-tracks">
                       {spine.length > 0 ? (
                         spine.length >= SPINE_VIRTUAL_THRESHOLD ? (
                           isOpen ? (
@@ -1915,6 +1967,8 @@ function QueueSheet({
                               onPlayTrack={playSpineTrack}
                               parentRef={queueScrollRef}
                               hydrateTracksForDisplay={hydrateTracksForDisplay}
+                              paddingStart={spinePaddingStart}
+                              listTestId="queue-spine-virtual-list"
                             />
                           ) : null
                         ) : (

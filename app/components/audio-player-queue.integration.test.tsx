@@ -291,9 +291,10 @@ function spineTitlesInSheet(sheet: HTMLElement): string[] {
     within(sheet).queryByText("From Queue") ??
     within(sheet).queryByText("From Playlist");
   if (!spineHeading) return [];
-  const section = spineHeading.closest("section");
-  if (!section) return [];
-  return within(section)
+  const tracksSection =
+    within(sheet).queryByTestId("queue-spine-tracks") ?? spineHeading.closest("section");
+  if (!tracksSection) return [];
+  return within(tracksSection)
     .getAllByRole("button", { name: /Remove .+ from queue/ })
     .map(
       (button) =>
@@ -1018,6 +1019,164 @@ describe("queue sheet integration", () => {
     expect(spineSection!.querySelector("[class*='overflow-y-auto']")).toBeNull();
     expect(upNextTitlesInSheet(sheet).length).toBeGreaterThan(20);
     expect(spineTitlesInSheet(sheet).length).toBeGreaterThan(0);
+  });
+
+  test("virtualized spine rows sit flush under the From Library heading with Up Next above", async () => {
+    const user = userEvent.setup();
+    const largeSpine = mockLargeLibrarySpine(vi.mocked(fetch), 30);
+    const upNextTracks = buildPlayableTracks(5, "UpNext");
+    const ROW = 60;
+    const HEADING = 32;
+    const UP_NEXT_BLOCK = HEADING + upNextTracks.length * ROW;
+    const SCROLL_VIEWPORT = 400;
+
+    const originalResizeObserver = window.ResizeObserver;
+    const originalOffsetHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetHeight",
+    );
+    const originalOffsetWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetWidth",
+    );
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientHeight",
+    );
+
+    window.ResizeObserver = class {
+      private readonly callback: ResizeObserverCallback;
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+      observe = (target: Element) => {
+        this.callback(
+          [
+            {
+              target,
+              contentRect: target.getBoundingClientRect(),
+              borderBoxSize: [{ inlineSize: 360, blockSize: SCROLL_VIEWPORT }],
+              contentBoxSize: [{ inlineSize: 360, blockSize: SCROLL_VIEWPORT }],
+              devicePixelContentBoxSize: [{ inlineSize: 360, blockSize: SCROLL_VIEWPORT }],
+            } as ResizeObserverEntry,
+          ],
+          this as unknown as ResizeObserver,
+        );
+      };
+      unobserve = () => {};
+      disconnect = () => {};
+    };
+
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.getAttribute("data-testid") === "queue-sheet-scroll") return SCROLL_VIEWPORT;
+        return originalClientHeight?.get?.call(this) ?? 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.getAttribute("data-testid") === "queue-sheet-scroll") return SCROLL_VIEWPORT;
+        if (this.getAttribute("data-testid") === "queue-sheet-before-spine") {
+          return UP_NEXT_BLOCK + HEADING;
+        }
+        if (this.tagName === "H3") return HEADING;
+        return originalOffsetHeight?.get?.call(this) ?? 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.getAttribute("data-testid") === "queue-sheet-scroll") return 360;
+        return originalOffsetWidth?.get?.call(this) ?? 360;
+      },
+    });
+
+    function Controls() {
+      const { playTrack, playNextTrack } = useAudioPlayer();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              playTrack(
+                {
+                  ...trackA,
+                  id: largeSpine[0]!.id,
+                  title: largeSpine[0]!.title,
+                },
+                { type: "library" },
+                0,
+              )
+            }
+          >
+            Start large library playback
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              for (const track of [...upNextTracks].reverse()) {
+                playNextTrack(track);
+              }
+            }}
+          >
+            Stack some up next
+          </button>
+        </>
+      );
+    }
+
+    try {
+      renderQueueApp(<Controls />);
+      await user.click(screen.getByRole("button", { name: "Start large library playback" }));
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId("player-desktop-bar")).getByText("Library Track 1"),
+        ).toBeTruthy();
+      });
+      await user.click(screen.getByRole("button", { name: "Stack some up next" }));
+
+      const sheet = await openQueueSheet(user);
+      const scroll = within(sheet).getByTestId("queue-sheet-scroll");
+      const beforeSpine = within(sheet).getByTestId("queue-sheet-before-spine");
+      const spineHeading = within(sheet).getByText("From Library");
+      const spineTracks = within(sheet).getByTestId("queue-spine-tracks");
+      expect(scroll.contains(beforeSpine)).toBe(true);
+      expect(scroll.contains(spineTracks)).toBe(true);
+      expect(beforeSpine.contains(within(sheet).getByText("Up Next"))).toBe(true);
+      expect(beforeSpine.contains(spineHeading)).toBe(true);
+
+      await waitFor(() => {
+        const spineList = within(sheet).getByTestId("queue-spine-virtual-list");
+        expect(Number(spineList.dataset.paddingStart)).toBe(beforeSpine.offsetHeight);
+
+        const translated = Array.from(spineTracks.querySelectorAll<HTMLElement>("div")).filter(
+          (el) => el.style.position === "absolute" && el.style.transform.includes("translateY"),
+        );
+        expect(translated.length).toBeGreaterThan(0);
+        const firstTranslate = translated
+          .map((el) => {
+            const match = /translateY\(([-0-9.]+)px\)/.exec(el.style.transform);
+            return match ? Number.parseFloat(match[1]!) : Number.POSITIVE_INFINITY;
+          })
+          .sort((a, b) => a - b)[0];
+        // paddingStart reserves content-above in virtualizer coords; rows paint at 0
+        // inside the list box that begins immediately under the heading.
+        expect(firstTranslate).toBeLessThan(8);
+      });
+    } finally {
+      window.ResizeObserver = originalResizeObserver;
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, "clientHeight", originalClientHeight);
+      }
+      if (originalOffsetHeight) {
+        Object.defineProperty(HTMLElement.prototype, "offsetHeight", originalOffsetHeight);
+      }
+      if (originalOffsetWidth) {
+        Object.defineProperty(HTMLElement.prototype, "offsetWidth", originalOffsetWidth);
+      }
+    }
   });
 
   test("shuffle toggle keeps upcoming spine tracks visible in the queue sheet", async () => {
