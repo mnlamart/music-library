@@ -66,6 +66,7 @@ describe("generateOfflineShellHtml", () => {
     });
 
     expect(html).toContain('data-offline-shell="true"');
+    expect(html).toContain("en_theme");
     expect(html).toContain("localStorage.getItem('music-library:offline-root-shell')");
     expect(html).toContain("window.__reactRouterContext");
     expect(html).toContain("window.__reactRouterRouteModules = {}");

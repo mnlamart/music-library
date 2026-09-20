@@ -22,8 +22,13 @@ import { Icon } from "#app/components/ui/icon.tsx";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#app/components/ui/sheet.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "#app/components/ui/tooltip";
 import { toast } from "#app/components/ui/use-toast.ts";
+import {
+  useOfflineTrackDownload,
+  type OfflineDownloadTrack,
+} from "#app/hooks/use-offline-track-download.ts";
 import { formatDuration } from "#app/utils/format-duration.ts";
 import { isPlayableTrack } from "#app/utils/playable-track";
+import { formatServiceDateAdded } from "#app/utils/service-date.ts";
 import { useIsMobile } from "#app/utils/use-mobile.ts";
 import { AddToPlaylistMenu } from "./add-to-playlist-menu";
 
@@ -38,6 +43,9 @@ interface TrackListItemData {
   service?: { displayName: string; logoUrl: string | null } | null;
   audioFiles?: Array<{ id: string; format: string | null; objectKey: string }>;
   isInUserLibrary?: boolean;
+  releaseDate?: string | Date | null;
+  originalDate?: string | Date | null;
+  createdAt?: string | Date | null;
 }
 
 interface UserTrack {
@@ -73,6 +81,9 @@ interface TrackListItemProps {
   usePlaybackIndex?: boolean;
   /** Render prop for custom per-track action buttons. Receives trackId, isInLibrary, and isDeleted. */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
+  /** When set, offline download/remove actions appear inside the three-dot menu */
+  offlineDownloadTrack?: OfflineDownloadTrack;
+  offlineDownloadPlaylistId?: string;
 }
 
 /**
@@ -123,6 +134,8 @@ export const TrackListItem = memo(function TrackListItem({
   showQuickAddToPlaylist = false,
   usePlaybackIndex = true,
   itemActions,
+  offlineDownloadTrack,
+  offlineDownloadPlaylistId,
 }: TrackListItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionsSheetOpen, setIsActionsSheetOpen] = useState(false);
@@ -248,8 +261,14 @@ export const TrackListItem = memo(function TrackListItem({
 
   const isCompact = variant === "compact";
   const rowClassName = isCompact
-    ? "group flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-muted/50 transition-colors h-14"
-    : "group flex items-center gap-4 px-4 py-2 rounded-md hover:bg-muted/50 transition-colors h-20";
+    ? "group flex items-center gap-3 rounded-lg px-1 py-2.5 sm:px-3 hover:bg-muted/50 transition-colors h-14"
+    : "group flex items-center gap-3 px-1 py-2 sm:gap-4 sm:px-4 rounded-md hover:bg-muted/50 transition-colors h-20";
+
+  const serviceDateAdded = formatServiceDateAdded({
+    releaseDate: track.releaseDate,
+    originalDate: track.originalDate,
+    createdAt: track.createdAt ?? null,
+  });
 
   return (
     <>
@@ -465,6 +484,7 @@ export const TrackListItem = memo(function TrackListItem({
                           {track.service?.displayName && (
                             <div>Source: {track.service.displayName}</div>
                           )}
+                          {serviceDateAdded && <div>Date added: {serviceDateAdded}</div>}
                         </div>
                       </div>
                       {track.serviceUrl && (
@@ -532,6 +552,12 @@ export const TrackListItem = memo(function TrackListItem({
                     </DropdownMenuItem>
                   </>
                 )}
+                {offlineDownloadTrack ? (
+                  <OfflineDownloadDropdownItem
+                    track={offlineDownloadTrack}
+                    playlistId={offlineDownloadPlaylistId}
+                  />
+                ) : null}
                 {showQueueActions && (
                   <DropdownMenuItem onClick={handleRemoveFromQueue}>
                     <Icon name="trash" className="h-4 w-4 mr-2" />
@@ -650,6 +676,13 @@ export const TrackListItem = memo(function TrackListItem({
                     </Button>
                   </>
                 )}
+                {offlineDownloadTrack ? (
+                  <OfflineDownloadSheetButton
+                    track={offlineDownloadTrack}
+                    playlistId={offlineDownloadPlaylistId}
+                    onDone={() => setIsActionsSheetOpen(false)}
+                  />
+                ) : null}
                 {showQueueActions && (
                   <Button
                     variant="ghost"
@@ -731,6 +764,7 @@ export const TrackListItem = memo(function TrackListItem({
                     <div>Duration: {formatDuration(track.duration)}</div>
                     <div>Added: {new Date(userTrack.createdAt).toLocaleDateString()}</div>
                     {track.service?.displayName && <div>Source: {track.service.displayName}</div>}
+                    {serviceDateAdded && <div>Date added: {serviceDateAdded}</div>}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -754,3 +788,57 @@ export const TrackListItem = memo(function TrackListItem({
     </>
   );
 });
+
+function OfflineDownloadDropdownItem({
+  track,
+  playlistId,
+}: {
+  track: OfflineDownloadTrack;
+  playlistId?: string;
+}) {
+  const { hasAudio, isWorking, isBusy, label, iconName, toggleDownload } = useOfflineTrackDownload(
+    track,
+    playlistId,
+  );
+  if (!hasAudio) return null;
+
+  return (
+    <DropdownMenuItem
+      disabled={isWorking || isBusy}
+      onClick={(event) => void toggleDownload(event)}
+    >
+      <Icon name={iconName} className={`h-4 w-4 mr-2 ${isWorking ? "animate-spin" : ""}`} />
+      {label}
+    </DropdownMenuItem>
+  );
+}
+
+function OfflineDownloadSheetButton({
+  track,
+  playlistId,
+  onDone,
+}: {
+  track: OfflineDownloadTrack;
+  playlistId?: string;
+  onDone: () => void;
+}) {
+  const { hasAudio, isWorking, isBusy, label, iconName, toggleDownload } = useOfflineTrackDownload(
+    track,
+    playlistId,
+  );
+  if (!hasAudio) return null;
+
+  return (
+    <Button
+      variant="ghost"
+      className="w-full justify-start h-12 text-base"
+      disabled={isWorking || isBusy}
+      onClick={() => {
+        void toggleDownload().then(onDone);
+      }}
+    >
+      <Icon name={iconName} className={`h-5 w-5 mr-3 ${isWorking ? "animate-spin" : ""}`} />
+      {label}
+    </Button>
+  );
+}

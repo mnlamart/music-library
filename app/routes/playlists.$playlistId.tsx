@@ -32,12 +32,13 @@
 
     ⚠️  DO NOT PROCEED WITHOUT FETCHING ALL DOCUMENTATION ABOVE!
 */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { data, redirect, Link, useFetcher, useParams, useSubmit } from "react-router";
 import { useAudioPlayer } from "#app/components/audio-player-provider.tsx";
 import { type BreadcrumbHandle } from "#app/components/breadcrumbs.tsx";
 import { OfflinePlaylistDownloadButton } from "#app/components/offline/offline-playlist-download-button.tsx";
 import { OfflinePlaylistView } from "#app/components/offline/offline-playlist-view.tsx";
+
 import { PlaylistHero } from "#app/components/playlist-hero";
 import { SortableTrackList } from "#app/components/sortable-track-list";
 import {
@@ -51,6 +52,13 @@ import {
   AlertDialogTitle,
 } from "#app/components/ui/alert-dialog";
 import { Icon } from "#app/components/ui/icon.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#app/components/ui/select.tsx";
 import { toast } from "#app/components/ui/use-toast.ts";
 import { type PlaylistDetailOfflineLoaderData } from "#app/features/offline-app/offline-route-policies.client.ts";
 import { cachePlaylistMetadata } from "#app/features/offline-storage/offline-playlist-metadata.client.ts";
@@ -60,6 +68,11 @@ import { getPlaylistTitle } from "#app/utils/breadcrumb-utils.ts";
 import { chunkArray } from "#app/utils/chunk-array.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { filterPlayableTracks } from "#app/utils/playable-track.ts";
+import {
+  parsePlaylistTrackSort,
+  sortPlaylistTracks,
+  type PlaylistTrackSortOption,
+} from "#app/utils/playlist-track-sort.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { createToastHeaders } from "#app/utils/toast.server.ts";
 import {
@@ -89,6 +102,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         select: {
           id: true,
           position: true,
+          createdAt: true,
           track: {
             select: {
               id: true,
@@ -107,6 +121,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
               },
               serviceUrl: true,
               createdAt: true,
+              releaseDate: true,
+              originalDate: true,
               service: {
                 select: {
                   displayName: true,
@@ -551,6 +567,12 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
   // Optimistic state for tracks
   const [optimisticTracks, setOptimisticTracks] = useState(playlist.tracks);
   const [optimisticPlaylist, setOptimisticPlaylist] = useState(playlist);
+  const [trackSort, setTrackSort] = useState<PlaylistTrackSortOption>("custom");
+
+  const displayedTracks = useMemo(
+    () => sortPlaylistTracks(optimisticTracks, trackSort),
+    [optimisticTracks, trackSort],
+  );
 
   // Update optimistic state when loader data changes
   useEffect(() => {
@@ -827,9 +849,9 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
 
       {/* Tracks Section */}
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-2xl font-bold">Tracks</h2>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <Icon name="file-text" className="h-4 w-4" />
             <span>
               {optimisticTracks.length} track{optimisticTracks.length !== 1 ? "s" : ""}
@@ -838,6 +860,21 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
               removeTrackFetcher.state === "submitting") && (
               <Icon name="update" className="h-3 w-3 animate-spin text-primary" />
             )}
+            <Select
+              value={trackSort}
+              onValueChange={(value) => setTrackSort(parsePlaylistTrackSort(value))}
+            >
+              <SelectTrigger className="w-full sm:w-44" aria-label="Sort tracks">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="custom">Custom order</SelectItem>
+                <SelectItem value="title">Title</SelectItem>
+                <SelectItem value="artist">Artist</SelectItem>
+                <SelectItem value="duration">Duration</SelectItem>
+                <SelectItem value="dateAdded">Date added</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -856,11 +893,13 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
           </div>
         ) : (
           <SortableTrackList
-            tracks={optimisticTracks.map((pt) => ({
+            tracks={displayedTracks.map((pt) => ({
               ...pt,
               track: {
                 ...pt.track,
                 createdAt: pt.track.createdAt.toISOString(),
+                releaseDate: pt.track.releaseDate?.toISOString() ?? null,
+                originalDate: pt.track.originalDate?.toISOString() ?? null,
               },
             }))}
             playlists={playlists}
@@ -873,6 +912,7 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
             isReordering={reorderFetcher.state === "submitting"}
             isRemoving={removeTrackFetcher.state === "submitting"}
             playlistId={params.playlistId!}
+            allowReorder={trackSort === "custom"}
           />
         )}
       </div>

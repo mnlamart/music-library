@@ -22,6 +22,8 @@ interface PlaylistCardProps {
   title: string;
   description: string | null;
   tracks: PlaylistCardTrack[];
+  /** Full playlist track count when `tracks` is a cover preview subset */
+  trackCount?: number;
   createdAt: string;
   updatedAt: string;
   to?: string;
@@ -55,6 +57,7 @@ export function PlaylistCard({
   title,
   description,
   tracks,
+  trackCount,
   createdAt: _createdAt,
   updatedAt,
   to,
@@ -65,6 +68,7 @@ export function PlaylistCard({
   const { playUserPlaylist } = useAudioPlayer();
 
   const totalDuration = tracks.reduce((sum, track) => sum + (track.duration || 0), 0);
+  const displayTrackCount = trackCount ?? tracks.length;
   const gradientClass = getGradientFromTitle(title);
   const canPlay = tracks.length > 0;
 
@@ -145,7 +149,7 @@ export function PlaylistCard({
               <div className="flex items-center gap-1">
                 <Icon name="file-text" className="h-3 w-3" />
                 <span>
-                  {tracks.length} track{tracks.length !== 1 ? "s" : ""}
+                  {displayTrackCount} track{displayTrackCount !== 1 ? "s" : ""}
                 </span>
               </div>
               {totalDuration > 0 && (

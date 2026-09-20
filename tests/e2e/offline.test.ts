@@ -181,9 +181,10 @@ test.describe("Offline mode", () => {
     await trackRow.scrollIntoViewIfNeeded();
     await expect(trackRow).toBeVisible({ timeout: 10000 });
 
-    // Click the download button — it's the last button in the Actions column
-    // of this track row, with aria-label "Download for offline"
-    await trackRow.locator("..").getByRole("button", { name: "Download for offline" }).click();
+    // Open the track actions menu, then download for offline
+    const trackActions = trackRow.locator("..");
+    await trackActions.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: "Download for offline" }).click();
 
     // Wait for the download toast confirmation
     await expect(page.getByText("Downloaded for offline")).toBeVisible({
