@@ -34,6 +34,26 @@ const OFFLINE_REACT_ROUTER_CONTEXT = {
   isSpaMode: true,
 };
 
+export const OFFLINE_SHELL_THEME_SCRIPT = `(function(){
+  try {
+    var theme = null;
+    var match = document.cookie.match(/(?:^|; )en_theme=(light|dark)/);
+    if (match) theme = match[1];
+    if (!theme) {
+      var shell = localStorage.getItem('music-library:offline-root-shell');
+      if (shell) {
+        var parsed = JSON.parse(shell);
+        theme = parsed && parsed.requestInfo && parsed.requestInfo.userPrefs
+          ? parsed.requestInfo.userPrefs.theme
+          : null;
+      }
+    }
+    if (theme === 'light' || theme === 'dark') {
+      document.documentElement.className = theme + ' h-full overflow-x-hidden';
+    }
+  } catch (e) {}
+})();`;
+
 export const OFFLINE_SHELL_ENV_BOOTSTRAP = `try {
   var shell = localStorage.getItem('music-library:offline-root-shell');
   window.ENV = shell ? (JSON.parse(shell).ENV || {}) : {};
@@ -76,6 +96,7 @@ export async function generateOfflineShellHtml(assets: OfflineShellAssets): Prom
     "<head>",
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width,initial-scale=1" />',
+    `  <script>${OFFLINE_SHELL_THEME_SCRIPT}</script>`,
     "  <title>Music Library</title>",
   ];
 

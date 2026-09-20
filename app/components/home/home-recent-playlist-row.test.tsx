@@ -35,6 +35,7 @@ const makePlaylist = (overrides: Partial<HomeRecentPlaylist> = {}): HomeRecentPl
   description: "Late night listening",
   createdAt: new Date("2024-01-01"),
   updatedAt: new Date("2024-06-01"),
+  trackCount: 1,
   tracks: [
     {
       id: "pt-1",
@@ -94,4 +95,26 @@ test("renders playlist cards with covers and links", () => {
     "href",
     "/playlists/playlist-2",
   );
+});
+
+test("shows full track count even when only preview tracks are loaded", () => {
+  renderRow([
+    makePlaylist({
+      trackCount: 12,
+      tracks: [
+        {
+          id: "pt-1",
+          track: {
+            id: "track-1",
+            title: "Midnight City",
+            artist: { id: "artist-1", name: "M83" },
+            duration: 245,
+            coverImage: { objectKey: "covers/midnight-city.jpg" },
+          },
+        },
+      ],
+    }),
+  ]);
+
+  expect(screen.getByText("12 tracks")).toBeInTheDocument();
 });

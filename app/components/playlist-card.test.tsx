@@ -90,3 +90,18 @@ test("hides play when the playlist has no tracks", () => {
   expect(screen.queryByRole("button", { name: /play chill vibes/i })).not.toBeInTheDocument();
   expect(mockPlayUserPlaylist).not.toHaveBeenCalled();
 });
+
+test("uses trackCount when preview tracks are truncated", () => {
+  renderCard({
+    tracks: [baseTrack],
+    trackCount: 12,
+  });
+
+  expect(screen.getByText("12 tracks")).toBeInTheDocument();
+});
+
+test("falls back to tracks.length when trackCount is omitted", () => {
+  renderCard({ tracks: [baseTrack] });
+
+  expect(screen.getByText("1 track")).toBeInTheDocument();
+});

@@ -175,7 +175,7 @@ function PlayerSeekBar({
         className="flex-1 h-1 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
         style={{
           background: isDurationKnown(duration)
-            ? `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${getPlaybackProgressPercent(currentTime, duration)}%, hsl(var(--muted)) ${getPlaybackProgressPercent(currentTime, duration)}%, hsl(var(--muted)) 100%)`
+            ? `linear-gradient(to right, var(--primary) 0%, var(--primary) ${getPlaybackProgressPercent(currentTime, duration)}%, var(--muted) ${getPlaybackProgressPercent(currentTime, duration)}%, var(--muted) 100%)`
             : undefined,
         }}
         aria-label="Seek"
@@ -1829,14 +1829,14 @@ function QueueSheet({
           <Icon name="list-bullet" className="h-4 w-4" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="bottom" className="h-[80vh] flex flex-col">
+      <SheetContent side="bottom" className="h-[80vh] flex flex-col overflow-hidden p-2 sm:p-6">
         <SheetHeader className="flex-shrink-0">
           <SheetTitle>{sheetTitle}</SheetTitle>
           <SheetDescription className="sr-only">
             Upcoming tracks grouped by now playing, up next, and library or playlist source
           </SheetDescription>
         </SheetHeader>
-        <div className="flex-1 mt-6 min-h-0 flex flex-col gap-4">
+        <div className="flex-1 mt-6 min-h-0 flex flex-col gap-4 overflow-y-auto">
           {isEmpty ? (
             <div className="text-center py-12">
               <Icon name="file-text" className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
@@ -1846,7 +1846,7 @@ function QueueSheet({
           ) : (
             <>
               {currentTrack ? (
-                <section>
+                <section className="flex-shrink-0">
                   <QueueSectionHeading>Now playing</QueueSectionHeading>
                   <QueueTrackItem
                     track={currentTrack}
@@ -1863,7 +1863,7 @@ function QueueSheet({
                   className={
                     upNext.length >= UP_NEXT_VIRTUAL_THRESHOLD
                       ? "flex-1 min-h-0 flex flex-col"
-                      : undefined
+                      : "flex-shrink-0"
                   }
                 >
                   <QueueSectionHeading>Up Next</QueueSectionHeading>

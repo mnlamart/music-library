@@ -11,6 +11,7 @@ import {
 } from "#app/components/ui/dialog";
 import { Icon } from "#app/components/ui/icon";
 import { formatDuration } from "#app/utils/format-duration";
+import { formatServiceDateAdded } from "#app/utils/service-date.ts";
 
 export interface TrackDetails {
   id: string;
@@ -18,6 +19,8 @@ export interface TrackDetails {
   artist: { id: string; name: string };
   duration: number | null;
   createdAt: string;
+  releaseDate: string | null;
+  originalDate: string | null;
   coverImage: { objectKey: string } | null;
   service: { displayName: string } | null;
   serviceUrl: string | null;
@@ -40,6 +43,13 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
 
   const track = fetcher.data?.track;
   const isLoading = fetcher.state !== "idle";
+  const serviceDateAdded = track
+    ? formatServiceDateAdded({
+        releaseDate: track.releaseDate,
+        originalDate: track.originalDate,
+        createdAt: track.createdAt,
+      })
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,6 +96,7 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
                   <div>Duration: {formatDuration(track.duration)}</div>
                   <div>Added: {new Date(track.createdAt).toLocaleDateString()}</div>
                   {track.service?.displayName && <div>Source: {track.service.displayName}</div>}
+                  {serviceDateAdded && <div>Date added: {serviceDateAdded}</div>}
                 </div>
               </div>
               {track.serviceUrl && (
