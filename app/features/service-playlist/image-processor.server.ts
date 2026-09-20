@@ -1,4 +1,3 @@
-import { pickCoverThumbnailUrl } from "#app/types/transformations";
 import { downloadExternalImage, findOrCreateCoverImage } from "#app/utils/cover-management.server";
 import { prisma } from "#app/utils/db.server";
 

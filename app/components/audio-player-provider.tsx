@@ -400,7 +400,6 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
   const startSpinePlayback = useCallback(
     async (track: Track, context: PlaylistContext, explicitIndex?: number) => {
-      const queueTrack = queueTrackFromFullTrack(track);
       rememberTrack(track);
 
       beginPlayback();
@@ -520,7 +519,9 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         }
         setCacheVersion((version) => version + 1);
 
-        const spinePosition = order.findIndex((index) => loadedSpine[index]?.id === startTrack.id);
+        const startSpinePosition = order.findIndex(
+          (index) => loadedSpine[index]?.id === startTrack.id,
+        );
 
         setUpNext([]);
         setUpNextPlayNextCount(0);
@@ -528,7 +529,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         setSpine(loadedSpine);
         setSpineTotal(loadedSpine.length);
         setSpineOrder(order);
-        setSpinePosition(spinePosition >= 0 ? spinePosition : 0);
+        setSpinePosition(startSpinePosition >= 0 ? startSpinePosition : 0);
         setPlayContext(context);
         setIsPlayerVisible(true);
         beginPlayback();
@@ -997,15 +998,17 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   const hasNext = hasNextTrack(navigationState);
   const hasPrevious = hasPreviousTrack(navigationState);
 
+  const currentTrackId = currentTrack?.id;
+
   useEffect(() => {
-    if (!isPlayerVisible || !currentTrack || isOfflineEnvironment()) return;
+    if (!isPlayerVisible || !currentTrackId || isOfflineEnvironment()) return;
     if (!isQueueCacheEnabled(userId ?? "")) return;
 
     const storage = getOfflineStorage();
 
     void (async () => {
-      await hydrateAround(currentTrack.id);
-      const ids = collectHydrationIds(navigationState, currentTrack.id);
+      await hydrateAround(currentTrackId);
+      const ids = collectHydrationIds(navigationState, currentTrackId);
 
       for (const id of ids) {
         const queueTrack = playbackCacheRef.current.get(id);
@@ -1017,21 +1020,96 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         }
       }
     })();
-  }, [currentTrack?.id, hydrateAround, isPlayerVisible, navigationState, userId]);
+  }, [currentTrackId, hydrateAround, isPlayerVisible, navigationState, userId]);
+
+  const contextValue = useMemo(
+    () => ({
+      currentTrack,
+      isPlayerVisible,
+      playlist,
+      upNext: upNextView,
+      spine: spineView,
+      spineTotal,
+      spinePosition,
+      currentIndex,
+      playContext,
+      loopMode,
+      isShuffleEnabled,
+      playTrack,
+      playPlaylist,
+      playLibrary,
+      playUserPlaylist,
+      playNext,
+      playPrevious,
+      toggleLoop,
+      toggleShuffle,
+      closePlayer,
+      startQueuePlayback,
+      hasQueuedPlayback,
+      hasNext,
+      hasPrevious,
+      isLoadingNext,
+      addTrackToPlaylist,
+      removeTrackFromPlaylist,
+      removeCurrentFromQueue,
+      playNextTrack,
+      addToUpNext,
+      addToQueue,
+      playQueueTrack,
+      hydrateTracksForDisplay,
+      addToCurrentPlaylist,
+    }),
+    [
+      currentTrack,
+      isPlayerVisible,
+      playlist,
+      upNextView,
+      spineView,
+      spineTotal,
+      spinePosition,
+      currentIndex,
+      playContext,
+      loopMode,
+      isShuffleEnabled,
+      playTrack,
+      playPlaylist,
+      playLibrary,
+      playUserPlaylist,
+      playNext,
+      playPrevious,
+      toggleLoop,
+      toggleShuffle,
+      closePlayer,
+      startQueuePlayback,
+      hasQueuedPlayback,
+      hasNext,
+      hasPrevious,
+      isLoadingNext,
+      addTrackToPlaylist,
+      removeTrackFromPlaylist,
+      removeCurrentFromQueue,
+      playNextTrack,
+      addToUpNext,
+      addToQueue,
+      playQueueTrack,
+      hydrateTracksForDisplay,
+      addToCurrentPlaylist,
+    ],
+  );
 
   // Prefetch the next track's presigned URL while the current one plays so the
   // auto-advance transition needs no network round-trip. On a locked screen the
   // page is hidden and background fetches are throttled, so resolving the URL
   // at transition time is what makes the next track stall/silent.
   useEffect(() => {
-    if (!currentTrack || isOfflineEnvironment()) return;
+    if (!currentTrackId || isOfflineEnvironment()) return;
     const nextTarget = resolveNextTrack(navigationState);
     if (!nextTarget) return;
     const nextQueueTrack = getTrackAtTarget(navigationState, nextTarget);
     if (nextQueueTrack) {
       prefetchPlaybackAudioUrl(nextQueueTrack.id);
     }
-  }, [currentTrack?.id, navigationState]);
+  }, [currentTrackId, navigationState]);
 
   // Rebuild the restored queue from a saved `PlayerState`: re-derive the spine
   // from the play context, replay Up Next + position on top, and leave the
@@ -1273,44 +1351,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   }, [userId, isOnline, restoreQueueOffline]);
 
   return (
-    <AudioPlayerContext.Provider
-      value={{
-        currentTrack,
-        isPlayerVisible,
-        playlist,
-        upNext: upNextView,
-        spine: spineView,
-        spineTotal,
-        spinePosition,
-        currentIndex,
-        playContext,
-        loopMode,
-        isShuffleEnabled,
-        playTrack,
-        playPlaylist,
-        playLibrary,
-        playUserPlaylist,
-        playNext,
-        playPrevious,
-        toggleLoop,
-        toggleShuffle,
-        closePlayer,
-        startQueuePlayback,
-        hasQueuedPlayback,
-        hasNext,
-        hasPrevious,
-        isLoadingNext,
-        addTrackToPlaylist,
-        removeTrackFromPlaylist,
-        removeCurrentFromQueue,
-        playNextTrack,
-        addToUpNext,
-        addToQueue,
-        playQueueTrack,
-        hydrateTracksForDisplay,
-        addToCurrentPlaylist,
-      }}
-    >
+    <AudioPlayerContext.Provider value={contextValue}>
       {children}
       <InstallAppBanner playerVisible={isPlayerVisible} />
       <AudioPlayer

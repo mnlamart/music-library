@@ -16,6 +16,8 @@ import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 import { Skeleton } from "./ui/skeleton";
 
+const PLAYLIST_SKELETON_KEYS = ["playlist-skel-0", "playlist-skel-1", "playlist-skel-2"] as const;
+
 /**
  * Playlist data structure for the add-to-playlist menu
  */
@@ -209,8 +211,8 @@ export function AddToPlaylistMenu({
         <ScrollArea className="h-64">
           {isLoadingPlaylists ? (
             <div role="status" aria-label="Loading playlists" className="space-y-1">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="px-2 py-2" aria-hidden="true">
+              {PLAYLIST_SKELETON_KEYS.map((key) => (
+                <div key={key} className="px-2 py-2" aria-hidden="true">
                   <Skeleton className="h-4 w-2/3 mb-1.5" />
                   <Skeleton className="h-3 w-1/4" />
                 </div>

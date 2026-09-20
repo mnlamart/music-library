@@ -249,11 +249,12 @@ export class ServicePlaylistService {
       const syncedPlaylistIds = new Set(syncedPlaylists.map((p) => p.externalId));
       const syncedPlaylistInternalIds = new Map(syncedPlaylists.map((p) => [p.externalId, p.id]));
 
-      const playlistsWithSyncStatus: PlaylistWithSyncStatus[] = allPlaylists.map((playlist) => ({
-        ...playlist,
-        isSynced: syncedPlaylistIds.has(playlist.id || ""),
-        playlistInternalId: syncedPlaylistInternalIds.get(playlist.id || "") || null,
-      }));
+      const playlistsWithSyncStatus: PlaylistWithSyncStatus[] = allPlaylists.map((playlist) =>
+        Object.assign({}, playlist, {
+          isSynced: syncedPlaylistIds.has(playlist.id || ""),
+          playlistInternalId: syncedPlaylistInternalIds.get(playlist.id || "") || null,
+        }),
+      );
 
       return {
         playlists: playlistsWithSyncStatus,
@@ -431,7 +432,7 @@ export class ServicePlaylistService {
       if (error instanceof Error) {
         throw error;
       }
-      throw new Error("Failed to fetch playlist items from external service");
+      throw new Error("Failed to fetch playlist items from external service", { cause: error });
     }
 
     const { result: processResult, timedOut } = await this.processBatches(
@@ -622,14 +623,15 @@ export class ServicePlaylistService {
 
     return {
       playlist,
-      tracks: playlistTracks.map((pt) => ({
-        ...pt.track,
-        artist: pt.track.artist || { id: "", name: "Unknown Artist" },
-        position: pt.position,
-        isDeleted: pt.isDeleted,
-        deletedAt: pt.deletedAt,
-        thumbnailUrl: pt.thumbnailUrl,
-      })),
+      tracks: playlistTracks.map((pt) =>
+        Object.assign({}, pt.track, {
+          artist: pt.track.artist || { id: "", name: "Unknown Artist" },
+          position: pt.position,
+          isDeleted: pt.isDeleted,
+          deletedAt: pt.deletedAt,
+          thumbnailUrl: pt.thumbnailUrl,
+        }),
+      ),
     };
   }
 
@@ -662,31 +664,32 @@ export class ServicePlaylistService {
       tracks: [],
     };
 
-    const tracks: TrackWithUserStatus[] = result.tracks.map((track) => ({
-      ...track,
-      artist: track.artist || { id: "", name: "Unknown Artist" },
-      isDeleted: track.isDeleted || false,
-      deletedAt: track.deletedAt || null,
-      coverImage: track.coverImage
-        ? {
-            objectKey: track.coverImage.objectKey,
-          }
-        : null,
-      thumbnailUrl: (track as { thumbnailUrl?: string | null }).thumbnailUrl || null,
-      service: track.service
-        ? {
-            name: track.service.name,
-            displayName: track.service.displayName,
-            logoUrl: track.service.logoUrl,
-          }
-        : undefined,
-      audioFiles: track.audioFiles?.map((af) => ({
-        id: af.id,
-        format: af.format,
-        objectKey: af.objectKey,
-      })),
-      isInUserLibrary: libraryTrackIds.has(track.id),
-    }));
+    const tracks: TrackWithUserStatus[] = result.tracks.map((track) =>
+      Object.assign({}, track, {
+        artist: track.artist || { id: "", name: "Unknown Artist" },
+        isDeleted: track.isDeleted || false,
+        deletedAt: track.deletedAt || null,
+        coverImage: track.coverImage
+          ? {
+              objectKey: track.coverImage.objectKey,
+            }
+          : null,
+        thumbnailUrl: (track as { thumbnailUrl?: string | null }).thumbnailUrl || null,
+        service: track.service
+          ? {
+              name: track.service.name,
+              displayName: track.service.displayName,
+              logoUrl: track.service.logoUrl,
+            }
+          : undefined,
+        audioFiles: track.audioFiles?.map((af) => ({
+          id: af.id,
+          format: af.format,
+          objectKey: af.objectKey,
+        })),
+        isInUserLibrary: libraryTrackIds.has(track.id),
+      }),
+    );
 
     playlist.tracks = tracks;
 

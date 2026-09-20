@@ -58,13 +58,13 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await parseFormData(request, { maxFileSize: MAX_SIZE });
   const submission = await parseWithZod(formData, {
-    schema: PhotoFormSchema.transform(async (data) => {
-      if (data.intent === "delete") return { intent: "delete" };
-      if (data.photoFile.size <= 0) return z.NEVER;
+    schema: PhotoFormSchema.transform(async (formValues) => {
+      if (formValues.intent === "delete") return { intent: "delete" };
+      if (formValues.photoFile.size <= 0) return z.NEVER;
       return {
-        intent: data.intent,
+        intent: formValues.intent,
         image: {
-          objectKey: await uploadProfileImage(userId, data.photoFile),
+          objectKey: await uploadProfileImage(userId, formValues.photoFile),
         },
       };
     }),

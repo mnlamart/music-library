@@ -43,22 +43,6 @@ const PAGE_SIZE = 20;
 const STATUS_FILTERS = ["all", "pending", "processing", "completed", "failed"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
-interface JobWithTrack {
-  id: string;
-  status: string;
-  priority: boolean;
-  retryCount: number;
-  errorHistory: string;
-  lastAttemptAt: Date | null;
-  createdAt: Date;
-  track: {
-    id: string;
-    title: string;
-    artist: { id: string; name: string };
-    service: { id: string; name: string; displayName: string };
-  };
-}
-
 interface LoaderData {
   workerState: {
     status: string;
@@ -211,7 +195,7 @@ export async function loader({ request, url }: Route.LoaderArgs): Promise<Loader
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const userId = await requireUserWithRole(request, "admin");
+  await requireUserWithRole(request, "admin");
 
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -650,16 +634,17 @@ export default function AudioQueueRoute({ loaderData }: Route.ComponentProps) {
   );
 }
 
+function AudioQueue403({
+  error,
+}: {
+  error: { data?: { message?: string } };
+  params: Record<string, string | undefined>;
+}) {
+  return <p>You must be an admin to access the audio queue: {error?.data?.message}</p>;
+}
+
 export function ErrorBoundary() {
-  return (
-    <GeneralErrorBoundary
-      statusHandlers={{
-        403: ({ error }) => (
-          <p>You must be an admin to access the audio queue: {error?.data.message}</p>
-        ),
-      }}
-    />
-  );
+  return <GeneralErrorBoundary statusHandlers={{ 403: AudioQueue403 }} />;
 }
 
 export async function clientAction(args: Route.ClientActionArgs) {

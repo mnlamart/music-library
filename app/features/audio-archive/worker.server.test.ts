@@ -103,8 +103,6 @@ function mockPendingArchiveJobs(jobs: Array<Record<string, unknown>>) {
 }
 
 describe("processQueueTick", () => {
-  const originalEnv = { ...process.env };
-
   beforeEach(async () => {
     vi.clearAllMocks();
     const { resetCookieFailureStreak } = await import("./cookie-failure-streak.ts");
@@ -181,7 +179,7 @@ describe("processQueueTick", () => {
 
   describe("AUDIO_ARCHIVE_ENABLED check", () => {
     it("skips processing when AUDIO_ARCHIVE_ENABLED is not true", async () => {
-      const originalEnv = process.env.AUDIO_ARCHIVE_ENABLED;
+      const originalAudioArchiveEnabled = process.env.AUDIO_ARCHIVE_ENABLED;
       process.env.AUDIO_ARCHIVE_ENABLED = "false";
 
       const { processQueueTick } = await import("./worker.server.ts");
@@ -189,7 +187,7 @@ describe("processQueueTick", () => {
 
       expect(mockPrisma.archiveJob.findMany).not.toHaveBeenCalled();
 
-      process.env.AUDIO_ARCHIVE_ENABLED = originalEnv;
+      process.env.AUDIO_ARCHIVE_ENABLED = originalAudioArchiveEnabled;
     });
   });
 

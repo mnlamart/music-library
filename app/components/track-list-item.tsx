@@ -82,6 +82,8 @@ interface TrackListItemProps {
   usePlaybackIndex?: boolean;
   /** Render prop for custom per-track action buttons. Receives trackId, isInLibrary, and isDeleted. */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
+  /** Static per-track action content; preferred over itemActions when both are set. */
+  itemActionsContent?: ReactNode;
   /** When true, "Download" saves the audio file to disk (browser download) inside the three-dot menu */
   showAudioFileDownload?: boolean;
   /** When set, offline pin/remove actions appear inside the three-dot menu (PWA offline storage) */
@@ -137,6 +139,7 @@ export const TrackListItem = memo(function TrackListItem({
   showQuickAddToPlaylist = false,
   usePlaybackIndex = true,
   itemActions,
+  itemActionsContent,
   showAudioFileDownload = false,
   offlineDownloadTrack,
   offlineDownloadPlaylistId,
@@ -146,15 +149,8 @@ export const TrackListItem = memo(function TrackListItem({
   const [isPlaylistSheetOpen, setIsPlaylistSheetOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
   const isMobile = useIsMobile();
-  const {
-    currentTrack,
-    currentIndex,
-    isPlayerVisible,
-    playTrack,
-    playNextTrack,
-    addToUpNext,
-    addToQueue,
-  } = useAudioPlayer();
+  const { currentTrack, currentIndex, playTrack, playNextTrack, addToUpNext, addToQueue } =
+    useAudioPlayer();
 
   const handleRemoveFromQueue = useCallback(() => {
     if (onRemoveFromQueue) {
@@ -384,45 +380,43 @@ export const TrackListItem = memo(function TrackListItem({
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          {showQuickAddToPlaylist && playlists != null && (
-            <>
-              {isMobile ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  aria-label="Add to playlist"
-                  onClick={handleQuickAddToPlaylist}
-                >
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button>
-              ) : (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      aria-label="Add to playlist"
-                    >
-                      <Icon name="plus" className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    onPointerDown={handleMenuPointerDown}
-                    onClick={handleMenuClick}
+          {showQuickAddToPlaylist &&
+            playlists != null &&
+            (isMobile ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label="Add to playlist"
+                onClick={handleQuickAddToPlaylist}
+              >
+                <Icon name="plus" className="h-4 w-4" />
+              </Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    aria-label="Add to playlist"
                   >
-                    <AddToPlaylistMenu
-                      trackId={track.id}
-                      trackTitle={track.title}
-                      playlists={playlists}
-                    />
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </>
-          )}
+                    <Icon name="plus" className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  onPointerDown={handleMenuPointerDown}
+                  onClick={handleMenuClick}
+                >
+                  <AddToPlaylistMenu
+                    trackId={track.id}
+                    trackTitle={track.title}
+                    playlists={playlists}
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ))}
           {isMobile ? (
             /* Mobile: Bottom Sheet */
             <Button
@@ -584,11 +578,12 @@ export const TrackListItem = memo(function TrackListItem({
 
         {/* Custom actions from render prop */}
         <div onClick={(e) => e.stopPropagation()}>
-          {itemActions?.({
-            trackId: track.id,
-            isInLibrary: !!track.isInUserLibrary,
-            isDeleted: !!isDeleted,
-          })}
+          {itemActionsContent ??
+            itemActions?.({
+              trackId: track.id,
+              isInLibrary: !!track.isInUserLibrary,
+              isDeleted: !!isDeleted,
+            })}
         </div>
       </div>
 
@@ -803,13 +798,7 @@ export const TrackListItem = memo(function TrackListItem({
   );
 });
 
-function AudioFileDownloadDropdownItem({
-  trackId,
-  title,
-}: {
-  trackId: string;
-  title: string;
-}) {
+function AudioFileDownloadDropdownItem({ trackId, title }: { trackId: string; title: string }) {
   const { isDownloading, downloadAudioFile, label } = useTrackAudioFileDownload({
     id: trackId,
     title,

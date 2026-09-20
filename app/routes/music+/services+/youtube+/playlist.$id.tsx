@@ -310,10 +310,10 @@ export default function YouTubeSyncedPlaylistDetailPage() {
 
   const handleToggleLibrary = useCallback(
     (trackId: string, currentIsInLibrary: boolean) => {
-      const action = currentIsInLibrary ? "remove" : "add";
+      const libraryAction = currentIsInLibrary ? "remove" : "add";
       setLibraryStatus((prev) => ({ ...prev, [trackId]: !currentIsInLibrary }));
       void libraryFetcher.submit(
-        { trackId, action },
+        { trackId, action: libraryAction },
         { method: "post", action: "/resources/track-library" },
       );
     },

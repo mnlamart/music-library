@@ -761,7 +761,7 @@ describe("Search Utilities", () => {
       });
 
       // Create a playlist for this user
-      const playlist = await prisma.userPlaylist.create({
+      await prisma.userPlaylist.create({
         data: {
           title: "My Favorite Songs",
           ownerId: user.id,

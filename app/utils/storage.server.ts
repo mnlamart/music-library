@@ -256,7 +256,9 @@ export async function signRequest(params: {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`Failed to generate signed URL for ${method} ${key}:`, error);
-    throw new Error(`Failed to generate signed URL for ${method} ${key}: ${errorMessage}`);
+    throw new Error(`Failed to generate signed URL for ${method} ${key}: ${errorMessage}`, {
+      cause: error,
+    });
   }
 }
 
@@ -479,7 +481,7 @@ export async function deleteFile(key: string, _timings?: Timings): Promise<void>
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`Failed to delete file from storage:`, error);
-    throw new Error(`Failed to delete object: ${key} - ${errorMessage}`);
+    throw new Error(`Failed to delete object: ${key} - ${errorMessage}`, { cause: error });
   }
 }
 

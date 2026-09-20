@@ -145,7 +145,7 @@ describe("getSpinePlayOrder", () => {
       spinePosition: 1,
     });
 
-    expect(getSpinePlayOrder(state).map((track) => track.id)).toEqual(["s1", "s2"]);
+    expect(getSpinePlayOrder(state).map((item) => item.id)).toEqual(["s1", "s2"]);
   });
 });
 
@@ -156,7 +156,7 @@ describe("getUpcomingSpinePlayOrder", () => {
       spinePosition: 1,
     });
 
-    expect(getUpcomingSpinePlayOrder(state).map((track) => track.id)).toEqual(["s2"]);
+    expect(getUpcomingSpinePlayOrder(state).map((item) => item.id)).toEqual(["s2"]);
   });
 
   test("returns empty when current track is last in spine order", () => {
@@ -223,13 +223,13 @@ describe("getQueueSpineDisplayTracks", () => {
   test("shows upcoming spine when something is playing", () => {
     const state = baseState({ spinePosition: 0 });
 
-    expect(getQueueSpineDisplayTracks(state, true).map((track) => track.id)).toEqual(["s2", "s3"]);
+    expect(getQueueSpineDisplayTracks(state, true).map((item) => item.id)).toEqual(["s2", "s3"]);
   });
 
   test("shows full spine play order when nothing is playing", () => {
     const state = baseState({ spinePosition: 0 });
 
-    expect(getQueueSpineDisplayTracks(state, false).map((track) => track.id)).toEqual([
+    expect(getQueueSpineDisplayTracks(state, false).map((item) => item.id)).toEqual([
       "s1",
       "s2",
       "s3",

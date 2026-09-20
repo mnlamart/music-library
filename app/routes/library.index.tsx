@@ -50,6 +50,30 @@ type UserTrack = {
   };
 };
 
+type LibraryTrackListItemProps = {
+  track: UserTrack["track"];
+  userTrack: UserTrack;
+  index: number;
+  playlists: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    _count: { tracks: number };
+  }>;
+};
+
+function LibraryTrackListItem({ track, userTrack, index, playlists }: LibraryTrackListItemProps) {
+  return (
+    <TrackListItem
+      track={track}
+      userTrack={userTrack}
+      index={index}
+      playlists={playlists}
+      showAudioFileDownload
+    />
+  );
+}
+
 export async function loader({ request, url }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
 
@@ -260,8 +284,8 @@ export default function LibraryIndexRoute({
       void (async () => {
         try {
           await fetchNextPage();
-        } catch (error) {
-          console.error("Failed to fetch next page:", error);
+        } catch (fetchError) {
+          console.error("Failed to fetch next page:", fetchError);
         }
       })();
     }
@@ -410,12 +434,11 @@ export default function LibraryIndexRoute({
                       transform: `translateY(${virtualItem.start}px)`,
                     }}
                   >
-                    <TrackListItem
+                    <LibraryTrackListItem
                       track={item.track}
                       userTrack={item}
                       index={itemIndex}
                       playlists={playlists}
-                      showAudioFileDownload
                     />
                   </div>
                 );

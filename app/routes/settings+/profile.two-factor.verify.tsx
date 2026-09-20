@@ -69,10 +69,10 @@ export async function action({ request }: Route.ActionArgs) {
 
   const submission = await parseWithZod(formData, {
     schema: () =>
-      ActionSchema.superRefine(async (data, ctx) => {
-        if (data.intent === "cancel") return;
+      ActionSchema.superRefine(async (formValues, ctx) => {
+        if (formValues.intent === "cancel") return;
         const codeIsValid = await isCodeValid({
-          code: data.code,
+          code: formValues.code,
           type: twoFAVerifyVerificationType,
           target: userId,
         });

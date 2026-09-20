@@ -45,10 +45,10 @@ export async function action({ request }: Route.ActionArgs) {
   await checkHoneypot(formData);
   const submission = await parseWithZod(formData, {
     schema: (intent) =>
-      LoginFormSchema.transform(async (data, ctx) => {
-        if (intent !== null) return { ...data, session: null };
+      LoginFormSchema.transform(async (formValues, ctx) => {
+        if (intent !== null) return { ...formValues, session: null };
 
-        const loginResult = await login(data);
+        const loginResult = await login(formValues);
         if (loginResult.status === "disabled") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -64,7 +64,7 @@ export async function action({ request }: Route.ActionArgs) {
           return z.NEVER;
         }
 
-        return { ...data, session: loginResult.session };
+        return { ...formValues, session: loginResult.session };
       }),
     async: true,
   });

@@ -1,5 +1,5 @@
 import { type SEOHandle } from "@nasa-gcn/remix-seo";
-import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { data, Form, useActionData, useNavigation } from "react-router";
 import { Button } from "#app/components/ui/button.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { prisma } from "#app/utils/db.server.ts";

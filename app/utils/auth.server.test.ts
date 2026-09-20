@@ -29,7 +29,7 @@ test("checkIsCommonPassword returns false when password is not found in breach d
     http.get(`https://api.pwnedpasswords.com/range/${prefix}`, () => {
       // Response with realistic suffixes that won't match
       return new HttpResponse(
-        "1234567890123456789012345678901234A:1\n" + "1234567890123456789012345678901234B:2",
+        "1234567890123456789012345678901234A:1\n1234567890123456789012345678901234B:2",
         { status: 200 },
       );
     }),
@@ -88,7 +88,7 @@ describe("timeout handling", () => {
         // swap to this when we can use fake timers:
         // await vi.advanceTimersByTimeAsync(twoSecondDelay)
         return new HttpResponse(
-          "1234567890123456789012345678901234A:1\n" + "1234567890123456789012345678901234B:2",
+          "1234567890123456789012345678901234A:1\n1234567890123456789012345678901234B:2",
           { status: 200 },
         );
       }),

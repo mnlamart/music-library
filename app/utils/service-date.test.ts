@@ -36,8 +36,8 @@ describe("getServiceDateAdded", () => {
 
 describe("formatServiceDateAdded", () => {
   test("formats a valid date for display", () => {
-    expect(
-      formatServiceDateAdded({ releaseDate: "2009-10-25T06:57:33.000Z" }),
-    ).toBe(new Date("2009-10-25T06:57:33.000Z").toLocaleDateString());
+    expect(formatServiceDateAdded({ releaseDate: "2009-10-25T06:57:33.000Z" })).toBe(
+      new Date("2009-10-25T06:57:33.000Z").toLocaleDateString(),
+    );
   });
 });
