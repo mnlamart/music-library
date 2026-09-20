@@ -415,7 +415,7 @@ export default function LibraryIndexRoute({
                       userTrack={item}
                       index={itemIndex}
                       playlists={playlists}
-                      offlineDownloadTrack={item.track}
+                      showAudioFileDownload
                     />
                   </div>
                 );
