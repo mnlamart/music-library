@@ -1610,6 +1610,23 @@ function QueueSectionHeading({ children }: { children: ReactNode }) {
 }
 
 function measureScrollMargin(scrollElement: HTMLElement, listElement: HTMLElement): number {
+  // Prefer offsetTop relative to the scrollport when it is the offsetParent
+  // (queue-sheet-scroll is position:relative). This avoids stale getBoundingClientRect
+  // reads against detached fallback list nodes after the virtualizer mounts.
+  let offset = 0;
+  let node: HTMLElement | null = listElement;
+  while (node && node !== scrollElement) {
+    offset += node.offsetTop;
+    const parent = node.offsetParent as HTMLElement | null;
+    if (parent === scrollElement) {
+      return offset;
+    }
+    if (!parent || !scrollElement.contains(parent)) {
+      break;
+    }
+    node = parent;
+  }
+
   const scrollRect = scrollElement.getBoundingClientRect();
   const listRect = listElement.getBoundingClientRect();
   return listRect.top - scrollRect.top + scrollElement.scrollTop;
@@ -1628,18 +1645,25 @@ function VirtualQueueTrackList({
   parentRef: React.RefObject<HTMLDivElement | null>;
   hydrateTracksForDisplay: (ids: string[]) => void;
 }) {
-  const listRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [listElement, setListElement] = useState<HTMLDivElement | null>(null);
   const [scrollReadyEpoch, setScrollReadyEpoch] = useState(0);
   const [scrollMargin, setScrollMargin] = useState(0);
 
+  const setListRef = useCallback((node: HTMLDivElement | null) => {
+    listRef.current = node;
+    setListElement(node);
+  }, []);
+
   useLayoutEffect(() => {
     const scrollElement = parentRef.current;
-    const listElement = listRef.current;
     if (!scrollElement || !listElement) return;
 
     let hasMeasured = scrollElement.clientHeight > 0;
     const syncMetrics = () => {
-      setScrollMargin(measureScrollMargin(scrollElement, listElement));
+      // Always read the live list node — fallback → virtual swaps the DOM node.
+      const liveList = listRef.current ?? listElement;
+      setScrollMargin(measureScrollMargin(scrollElement, liveList));
       if (hasMeasured) return;
       if ((parentRef.current?.clientHeight ?? 0) <= 0) return;
       hasMeasured = true;
@@ -1650,13 +1674,23 @@ function VirtualQueueTrackList({
     const observer = new ResizeObserver(syncMetrics);
     observer.observe(scrollElement);
     observer.observe(listElement);
-    const frame = requestAnimationFrame(syncMetrics);
+    scrollElement.addEventListener("scroll", syncMetrics, { passive: true });
+
+    // Second rAF catches sibling virtualizers committing their total heights
+    // after this list's first layout pass.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      syncMetrics();
+      raf2 = requestAnimationFrame(syncMetrics);
+    });
 
     return () => {
-      cancelAnimationFrame(frame);
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
       observer.disconnect();
+      scrollElement.removeEventListener("scroll", syncMetrics);
     };
-  }, [parentRef, tracks.length]);
+  }, [parentRef, listElement, tracks.length]);
 
   const virtualizer = useVirtualizer({
     count: tracks.length,
@@ -1695,7 +1729,7 @@ function VirtualQueueTrackList({
 
   if (virtualItems.length === 0 && tracks.length > 0) {
     return (
-      <div ref={listRef}>
+      <div ref={setListRef}>
         {tracks.slice(0, 30).map((track, index) => (
           <QueueTrackItem
             key={`${track.id}-${index}`}
@@ -1711,7 +1745,7 @@ function VirtualQueueTrackList({
 
   return (
     <div
-      ref={listRef}
+      ref={setListRef}
       style={{
         height: `${virtualizer.getTotalSize()}px`,
         width: "100%",
@@ -1874,7 +1908,7 @@ function QueueSheet({
                 <div
                   ref={queueScrollRef}
                   data-testid="queue-sheet-scroll"
-                  className="flex-1 min-h-0 overflow-y-auto"
+                  className="relative flex-1 min-h-0 overflow-y-auto"
                 >
                   {upNext.length > 0 ? (
                     <section>
