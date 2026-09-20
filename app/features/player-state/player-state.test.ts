@@ -168,4 +168,19 @@ describe("player-state resource", () => {
     ).rejects.toBeInstanceOf(Response);
     expect(await prisma.playerState.count()).toBe(0);
   });
+
+  test("persists a uint32 shuffle seed that exceeds Prisma signed Int", async () => {
+    const { userId, cookie } = await createUserCookie();
+
+    const response = await action({
+      request: saveRequest(cookie, { ...sampleState, shuffleSeed: 0xffffffff }),
+      params: {},
+      context: {},
+    } as never);
+
+    expect((response as Response).ok).toBe(true);
+
+    const row = await prisma.playerState.findUniqueOrThrow({ where: { userId } });
+    expect(row.shuffleSeed).toBe(0x7fffffff);
+  });
 });

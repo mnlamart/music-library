@@ -196,16 +196,29 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     loopMode: "off",
   });
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // True once the restore attempt has settled (fetched + applied, or nothing to
-  // restore). Debounced persistence is gated on this so the initial empty state
-  // can never overwrite a saved queue before it has been fetched.
-  const restoreSettledRef = useRef(false);
+  // User id we last completed a successful *online* restore for. Persist and
+  // unload-flush are gated on this matching the current user so we never:
+  // - flush the initial empty snapshot over a saved queue (tab close mid-restore)
+  // - write another user's in-memory queue onto this account after a switch
+  // - persist an offline-truncated Up Next (undownloaded ids dropped) to the server
+  const onlineRestoredForUserIdRef = useRef<string | null>(null);
+  // Bumped when `userId` changes so an in-flight restore cannot apply after a switch.
+  const restoreEpochRef = useRef(0);
   // Track which restore path has run so a connectivity change doesn't re-run it
   // (or clobber an already-complete queue): offline partial restore runs at most
   // once, and a full online restore (initial load or post-offline backfill) runs
   // at most once.
   const offlineRestoreDoneRef = useRef(false);
   const onlineRestoreDoneRef = useRef(false);
+  const lastUserIdRef = useRef(userId);
+  if (lastUserIdRef.current !== userId) {
+    lastUserIdRef.current = userId;
+    restoreEpochRef.current += 1;
+    if (userId && userId !== onlineRestoredForUserIdRef.current) {
+      onlineRestoreDoneRef.current = false;
+      offlineRestoreDoneRef.current = false;
+    }
+  }
 
   const isOnline = useOnlineStatus();
 
@@ -1083,8 +1096,8 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // for offline playback. The spine is intentionally NOT re-derived (no network
   // round-trips); it backfills via a full online restore once the network
   // returns. A client-side spine snapshot is never cached.
-  const restoreQueueOffline = useCallback(async () => {
-    const saved = readCachedPlayerState();
+  const restoreQueueOffline = useCallback(async (restoreUserId: string) => {
+    const saved = readCachedPlayerState(restoreUserId);
     if (!saved) return;
 
     const storage = getOfflineStorage();
@@ -1140,15 +1153,16 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     };
   }, [playContext, currentTrack?.id, upNext, shuffleSeed, loopMode]);
 
-  // Debounced write: ~1s after the last queue mutation. Gated on the restore
-  // settling so the initial empty state never overwrites a saved queue before
-  // it has been fetched.
+  // Debounced write: ~1s after the last queue mutation. Gated on a successful
+  // online restore for *this* user so the initial empty snapshot, a previous
+  // user's queue, or an offline-truncated Up Next can never overwrite the
+  // saved row.
   useEffect(() => {
-    if (!userId || !restoreSettledRef.current) return;
+    if (!userId || onlineRestoredForUserIdRef.current !== userId) return;
 
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
-      writeCachedPlayerState(playerStateRef.current);
+      writeCachedPlayerState(userId, playerStateRef.current);
       persistPlayerState(playerStateRef.current);
     }, 1000);
 
@@ -1162,8 +1176,9 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     if (!userId) return;
 
     const flush = () => {
+      if (onlineRestoredForUserIdRef.current !== userId) return;
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-      writeCachedPlayerState(playerStateRef.current);
+      writeCachedPlayerState(userId, playerStateRef.current);
       persistPlayerState(playerStateRef.current, { keepalive: true });
     };
     window.addEventListener("beforeunload", flush);
@@ -1182,27 +1197,23 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   useEffect(() => {
     if (!userId || !isOnline || onlineRestoreDoneRef.current) return;
 
-    let cancelled = false;
+    const epoch = restoreEpochRef.current;
     void (async () => {
       try {
         const saved = await fetchPlayerState();
-        if (cancelled) return;
+        if (epoch !== restoreEpochRef.current) return;
         if (saved) {
           await restoreQueueFromServer(saved);
         }
+        if (epoch !== restoreEpochRef.current) return;
         onlineRestoreDoneRef.current = true;
+        onlineRestoredForUserIdRef.current = userId;
       } catch (error) {
-        if (!cancelled) {
+        if (epoch === restoreEpochRef.current) {
           console.error("Failed to restore player state:", error);
         }
-      } finally {
-        restoreSettledRef.current = true;
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [userId, isOnline, restoreQueueFromServer]);
 
   // Offline partial restore: rebuild the current track + Up Next from the local
@@ -1214,23 +1225,17 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       return;
     }
 
-    let cancelled = false;
+    const epoch = restoreEpochRef.current;
     offlineRestoreDoneRef.current = true;
     void (async () => {
       try {
-        await restoreQueueOffline();
+        await restoreQueueOffline(userId);
       } catch (error) {
-        if (!cancelled) {
+        if (epoch === restoreEpochRef.current) {
           console.error("Failed to restore player state offline:", error);
         }
-      } finally {
-        restoreSettledRef.current = true;
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [userId, isOnline, restoreQueueOffline]);
 
   return (

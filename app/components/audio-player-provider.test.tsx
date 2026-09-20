@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, test, vi, beforeEach, afterEach } from "vitest";
 import { getOfflineStorage } from "#app/features/offline-storage/offline-storage.client.ts";
 import { writeCachedPlayerState } from "#app/features/player-state/player-state-cache.client.ts";
+import { PLAYER_STATE_ROUTE } from "#app/features/player-state/player-state.ts";
 import { type FullTrack } from "#app/types/frontend/shared";
 import { AudioPlayerProvider, useAudioPlayer } from "./audio-player-provider";
 
@@ -562,7 +563,7 @@ test("offline load restores the current track + Up Next from downloaded tracks w
   window.localStorage.clear();
 
   // Mirror the saved queue as if it was persisted before going offline.
-  writeCachedPlayerState({
+  writeCachedPlayerState("user-1", {
     playContext: { type: "library" },
     currentTrackId: "track-1",
     upNextIds: ["track-2"],
@@ -596,7 +597,7 @@ test("offline load restores the current track + Up Next from downloaded tracks w
 test("offline load restores downloaded Up Next tracks in order", async () => {
   window.localStorage.clear();
 
-  writeCachedPlayerState({
+  writeCachedPlayerState("user-1", {
     playContext: { type: "library" },
     currentTrackId: "track-1",
     upNextIds: ["track-2", "track-3"],
@@ -628,7 +629,7 @@ test("reconnect backfills the spine after an offline partial restore", async () 
   const fetchMock = vi.mocked(fetch);
   window.localStorage.clear();
 
-  writeCachedPlayerState({
+  writeCachedPlayerState("user-1", {
     playContext: { type: "library" },
     currentTrackId: "track-1",
     upNextIds: ["track-2"],
@@ -689,4 +690,133 @@ test("reconnect backfills the spine after an offline partial restore", async () 
   // The queue is now complete: current track + Up Next are re-resolved from the
   // server and the spine is backfilled.
   expect(screen.getByTestId("up-next-count").textContent).toBe("1");
+});
+
+function persistPutCalls(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls.filter((call) => {
+    const init = call[1] as RequestInit | undefined;
+    return String(call[0]) === PLAYER_STATE_ROUTE && init?.method === "PUT";
+  });
+}
+
+function mockOnlineRestore(fetchMock: ReturnType<typeof vi.mocked<typeof fetch>>) {
+  fetchMock
+    .mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        playContext: { type: "library" },
+        currentTrackId: "track-1",
+        upNextIds: ["track-2"],
+        shuffleSeed: 42,
+        loopMode: "off",
+      }),
+    } as Response)
+    .mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        tracks: [playableTrack, { ...playableTrack, id: "track-2", title: "Up Next Song" }],
+      }),
+    } as Response)
+    .mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: async () => ({ tracks: [spineTrack], total: 1 }),
+    } as Response);
+}
+
+test("does not persist empty player state on pagehide before restore completes", () => {
+  const fetchMock = vi.mocked(fetch);
+  // Restore GET never resolves — the user closes the tab while it is in flight.
+  fetchMock.mockImplementation(() => new Promise(() => {}));
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  window.dispatchEvent(new Event("pagehide"));
+
+  expect(persistPutCalls(fetchMock)).toHaveLength(0);
+});
+
+test("persists on pagehide after a successful online restore", async () => {
+  const fetchMock = vi.mocked(fetch);
+  mockOnlineRestore(fetchMock);
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  window.dispatchEvent(new Event("pagehide"));
+
+  expect(persistPutCalls(fetchMock).length).toBeGreaterThan(0);
+});
+
+test("does not persist the previous user's queue after a user switch before restore", async () => {
+  const fetchMock = vi.mocked(fetch);
+  mockOnlineRestore(fetchMock);
+
+  const { rerender } = render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  // User B's restore hangs. Closing the tab (or the debounce firing) must not
+  // write user-1's in-memory queue onto user-2's PlayerState row.
+  fetchMock.mockClear();
+  fetchMock.mockImplementation(() => new Promise(() => {}));
+
+  rerender(
+    <AudioPlayerProvider userId="user-2">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  window.dispatchEvent(new Event("pagehide"));
+
+  expect(persistPutCalls(fetchMock)).toHaveLength(0);
+});
+
+test("offline partial restore does not persist truncated Up Next on pagehide", async () => {
+  const fetchMock = vi.mocked(fetch);
+  window.localStorage.clear();
+
+  writeCachedPlayerState("user-1", {
+    playContext: { type: "library" },
+    currentTrackId: "track-1",
+    upNextIds: ["track-2", "track-3"],
+    shuffleSeed: null,
+    loopMode: "off",
+  });
+
+  mockOfflineStorage([downloadedSummary("track-1", "Test Song")]);
+  vi.stubGlobal("navigator", { onLine: false });
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  window.dispatchEvent(new Event("pagehide"));
+
+  expect(persistPutCalls(fetchMock)).toHaveLength(0);
 });

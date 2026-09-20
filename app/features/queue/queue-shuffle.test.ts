@@ -1,11 +1,24 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
+  clampShuffleSeed,
   createSeededRandom,
   createShuffledOrder,
   fisherYatesShuffle,
   generateShuffleSeed,
   reshuffleFromCurrent,
 } from "./queue-shuffle.ts";
+
+describe("clampShuffleSeed", () => {
+  test("leaves a signed 32-bit seed unchanged", () => {
+    expect(clampShuffleSeed(42)).toBe(42);
+    expect(clampShuffleSeed(0x7fffffff)).toBe(0x7fffffff);
+  });
+
+  test("masks unsigned 32-bit values into Prisma Int range", () => {
+    expect(clampShuffleSeed(0xffffffff)).toBe(0x7fffffff);
+    expect(clampShuffleSeed(0x80000000)).toBe(0);
+  });
+});
 
 describe("createSeededRandom", () => {
   test("returns values in [0, 1)", () => {
@@ -35,11 +48,24 @@ describe("createSeededRandom", () => {
 });
 
 describe("generateShuffleSeed", () => {
-  test("returns a 32-bit unsigned integer", () => {
+  test("returns a signed 32-bit integer that Prisma Int can store", () => {
     const seed = generateShuffleSeed();
     expect(Number.isInteger(seed)).toBe(true);
     expect(seed).toBeGreaterThanOrEqual(0);
-    expect(seed).toBeLessThanOrEqual(0xffffffff);
+    expect(seed).toBeLessThanOrEqual(0x7fffffff);
+  });
+
+  test("clamps a CSPRNG value above signed 32-bit max", () => {
+    const spy = vi.spyOn(crypto, "getRandomValues").mockImplementation((buffer) => {
+      (buffer as Uint32Array)[0] = 0xffffffff;
+      return buffer;
+    });
+
+    try {
+      expect(generateShuffleSeed()).toBe(0x7fffffff);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   test("produces varied seeds across calls", () => {
