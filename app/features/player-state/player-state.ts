@@ -47,13 +47,15 @@ export async function fetchPlayerState(): Promise<PlayerStateData | null> {
 export function persistPlayerState(data: PlayerStateData, options?: { keepalive?: boolean }): void {
   if (typeof window === "undefined") return;
 
-  void fetch(PLAYER_STATE_ROUTE, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-    credentials: "same-origin",
-    keepalive: options?.keepalive ?? false,
-  }).catch(() => {
+  void Promise.resolve(
+    fetch(PLAYER_STATE_ROUTE, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+      credentials: "same-origin",
+      keepalive: options?.keepalive ?? false,
+    }),
+  ).catch(() => {
     // Network errors during persistence must not interrupt playback.
   });
 }

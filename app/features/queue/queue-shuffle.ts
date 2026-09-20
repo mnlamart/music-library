@@ -3,17 +3,23 @@ export type RandomFn = () => number;
 const defaultRandom: RandomFn = () => Math.random();
 
 /**
- * Generate a fresh 32-bit unsigned shuffle seed using the platform CSPRNG when
- * available, falling back to `Math.random` in environments without
- * `crypto.getRandomValues` (e.g. some test runners).
+ * Generate a fresh shuffle seed that fits Prisma `Int` (signed 32-bit).
+ * `crypto.getRandomValues` yields unsigned 32-bit values; those above
+ * `0x7fffffff` are masked so a persist never throws on integer overflow
+ * (which would silently drop the whole queue).
  */
 export function generateShuffleSeed(): number {
   if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
     const buffer = new Uint32Array(1);
     crypto.getRandomValues(buffer);
-    return buffer[0]!;
+    return buffer[0]! & 0x7fffffff;
   }
-  return Math.floor(Math.random() * 0xffffffff) >>> 0;
+  return Math.floor(Math.random() * 0x80000000);
+}
+
+/** Clamp an untrusted seed so it can be stored in a Prisma `Int` column. */
+export function clampShuffleSeed(seed: number): number {
+  return (seed >>> 0) & 0x7fffffff;
 }
 
 /**

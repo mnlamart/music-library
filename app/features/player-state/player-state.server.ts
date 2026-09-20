@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type LoopMode } from "#app/features/queue/queue-navigation.ts";
+import { clampShuffleSeed } from "#app/features/queue/queue-shuffle.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { type PlayContextJson, type PlayerStateData } from "./player-state.ts";
 
@@ -51,6 +52,7 @@ function safeParsePlayContext(raw: string | null): PlayContextJson | null {
 export async function savePlayerState(userId: string, data: PlayerStateData): Promise<void> {
   const playContext = data.playContext ? JSON.stringify(data.playContext) : null;
   const upNextIds = JSON.stringify(data.upNextIds);
+  const shuffleSeed = data.shuffleSeed === null ? null : clampShuffleSeed(data.shuffleSeed);
 
   await prisma.playerState.upsert({
     where: { userId },
@@ -59,14 +61,14 @@ export async function savePlayerState(userId: string, data: PlayerStateData): Pr
       playContext,
       currentTrackId: data.currentTrackId,
       upNextIds,
-      shuffleSeed: data.shuffleSeed,
+      shuffleSeed,
       loopMode: data.loopMode,
     },
     update: {
       playContext,
       currentTrackId: data.currentTrackId,
       upNextIds,
-      shuffleSeed: data.shuffleSeed,
+      shuffleSeed,
       loopMode: data.loopMode,
     },
   });

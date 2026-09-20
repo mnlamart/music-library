@@ -8,7 +8,11 @@ import { type PlayContextJson, type PlayerStateData } from "./player-state.ts";
  * restore the current track + Up Next *if those tracks are downloaded* without
  * hitting the network. The resolved track list (spine) is never cached here.
  */
-const PLAYER_STATE_LOCAL_KEY = "music-library:player-state";
+const PLAYER_STATE_LOCAL_KEY_PREFIX = "music-library:player-state:";
+
+function playerStateLocalKey(userId: string) {
+  return `${PLAYER_STATE_LOCAL_KEY_PREFIX}${userId}`;
+}
 
 function isPlayContextJson(value: unknown): value is PlayContextJson {
   if (value === null || typeof value !== "object") return false;
@@ -48,11 +52,11 @@ function isPlayerStateData(value: unknown): value is PlayerStateData {
 }
 
 /** Read the locally mirrored player state, or `null` when absent or corrupt. */
-export function readCachedPlayerState(): PlayerStateData | null {
-  if (typeof window === "undefined") return null;
+export function readCachedPlayerState(userId: string): PlayerStateData | null {
+  if (typeof window === "undefined" || !userId) return null;
 
   try {
-    const raw = window.localStorage.getItem(PLAYER_STATE_LOCAL_KEY);
+    const raw = window.localStorage.getItem(playerStateLocalKey(userId));
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     return isPlayerStateData(parsed) ? parsed : null;
@@ -65,11 +69,11 @@ export function readCachedPlayerState(): PlayerStateData | null {
  * Mirror the player state locally for offline restore. Best-effort: a failed
  * write (private mode / quota exceeded) must never break playback.
  */
-export function writeCachedPlayerState(data: PlayerStateData): void {
-  if (typeof window === "undefined") return;
+export function writeCachedPlayerState(userId: string, data: PlayerStateData): void {
+  if (typeof window === "undefined" || !userId) return;
 
   try {
-    window.localStorage.setItem(PLAYER_STATE_LOCAL_KEY, JSON.stringify(data));
+    window.localStorage.setItem(playerStateLocalKey(userId), JSON.stringify(data));
   } catch {
     // Offline restore is best-effort — swallow storage failures.
   }

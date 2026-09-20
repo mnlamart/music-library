@@ -18,26 +18,35 @@ beforeEach(() => {
 });
 
 test("round-trips a player state through the local mirror", () => {
-  writeCachedPlayerState(savedState);
+  writeCachedPlayerState("user-1", savedState);
 
-  expect(readCachedPlayerState()).toEqual(savedState);
+  expect(readCachedPlayerState("user-1")).toEqual(savedState);
 });
 
 test("returns null when no state has been mirrored", () => {
-  expect(readCachedPlayerState()).toBeNull();
+  expect(readCachedPlayerState("user-1")).toBeNull();
+});
+
+test("scopes the mirror per user so accounts on a shared browser do not leak", () => {
+  writeCachedPlayerState("user-a", savedState);
+  writeCachedPlayerState("user-b", { ...savedState, currentTrackId: "track-other" });
+
+  expect(readCachedPlayerState("user-a")?.currentTrackId).toBe("track-1");
+  expect(readCachedPlayerState("user-b")?.currentTrackId).toBe("track-other");
+  expect(readCachedPlayerState("user-c")).toBeNull();
 });
 
 test("returns null for corrupt JSON", () => {
-  window.localStorage.setItem("music-library:player-state", "{not-json");
-  expect(readCachedPlayerState()).toBeNull();
+  window.localStorage.setItem("music-library:player-state:user-1", "{not-json");
+  expect(readCachedPlayerState("user-1")).toBeNull();
 });
 
 test("returns null for a structurally invalid state", () => {
   window.localStorage.setItem(
-    "music-library:player-state",
+    "music-library:player-state:user-1",
     JSON.stringify({ playContext: { type: "nonsense" }, upNextIds: "not-an-array" }),
   );
-  expect(readCachedPlayerState()).toBeNull();
+  expect(readCachedPlayerState("user-1")).toBeNull();
 });
 
 test("writes do not throw when localStorage is unavailable", () => {
@@ -45,5 +54,5 @@ test("writes do not throw when localStorage is unavailable", () => {
     throw new Error("quota exceeded");
   });
 
-  expect(() => writeCachedPlayerState(savedState)).not.toThrow();
+  expect(() => writeCachedPlayerState("user-1", savedState)).not.toThrow();
 });
