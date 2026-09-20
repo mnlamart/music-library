@@ -1020,6 +1020,256 @@ describe("queue sheet integration", () => {
     expect(spineTitlesInSheet(sheet).length).toBeGreaterThan(0);
   });
 
+  test("places first virtualized spine row flush under From Library when Up Next precedes it", async () => {
+    const user = userEvent.setup();
+    const largeSpine = mockLargeLibrarySpine(vi.mocked(fetch), 25);
+    const bulkTracks = buildPlayableTracks(25, "UpNext");
+    const viewportHeight = 480;
+    const rowHeight = 60;
+    const headingHeight = 32;
+    const upNextBlockHeight = headingHeight + bulkTracks.length * rowHeight;
+    const spineListOffset = upNextBlockHeight + headingHeight;
+    const scrollTopOnScreen = 120;
+
+    function Controls() {
+      const { playTrack, playNextTrack } = useAudioPlayer();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              playTrack(
+                {
+                  ...trackA,
+                  id: largeSpine[0]!.id,
+                  title: largeSpine[0]!.title,
+                },
+                { type: "library" },
+                0,
+              )
+            }
+          >
+            Start large library playback
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              for (const track of [...bulkTracks].reverse()) {
+                playNextTrack(track);
+              }
+            }}
+          >
+            Stack bulk up next
+          </button>
+        </>
+      );
+    }
+
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const prototypeDescriptors = {
+      offsetHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight"),
+      offsetWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth"),
+      offsetTop: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetTop"),
+      offsetParent: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetParent"),
+      clientHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight"),
+      scrollHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight"),
+    };
+
+    function parseTranslateY(element: HTMLElement): number {
+      const match = /translateY\((-?\d+(?:\.\d+)?)px\)/.exec(element.style.transform);
+      return match ? Number.parseFloat(match[1]!) : 0;
+    }
+
+    function isQueueScroll(element: HTMLElement) {
+      return element.getAttribute("data-testid") === "queue-sheet-scroll";
+    }
+
+    function isSpineListRoot(element: HTMLElement) {
+      return (
+        element.parentElement?.tagName === "SECTION" &&
+        element.parentElement.querySelector("h3")?.textContent === "From Library" &&
+        element.style.position === "relative"
+      );
+    }
+
+    function isSpineVirtualRow(element: HTMLElement) {
+      return element.style.position === "absolute" && Boolean(element.style.transform);
+    }
+
+    function contentOffsetTop(element: HTMLElement): number | null {
+      if (isQueueScroll(element)) return 0;
+      if (element.tagName === "H3" && element.textContent === "From Library") {
+        return upNextBlockHeight;
+      }
+      if (isSpineListRoot(element)) return spineListOffset;
+      if (isSpineVirtualRow(element)) return spineListOffset + parseTranslateY(element);
+
+      const virtualRow = element.parentElement;
+      if (virtualRow && isSpineVirtualRow(virtualRow)) {
+        return spineListOffset + parseTranslateY(virtualRow);
+      }
+      return null;
+    }
+
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (isQueueScroll(this)) return viewportHeight;
+        return rowHeight;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get() {
+        return 390;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (isQueueScroll(this)) return viewportHeight;
+        return prototypeDescriptors.clientHeight?.get?.call(this) ?? 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (isQueueScroll(this)) {
+          return upNextBlockHeight + headingHeight + largeSpine.length * rowHeight;
+        }
+        return prototypeDescriptors.scrollHeight?.get?.call(this) ?? 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetTop", {
+      configurable: true,
+      get(this: HTMLElement) {
+        // Prefer offset relative to the queue scrollport (offsetParent mock below).
+        if (isSpineListRoot(this)) return spineListOffset;
+        if (this.tagName === "H3" && this.textContent === "From Library") {
+          return upNextBlockHeight;
+        }
+        return prototypeDescriptors.offsetTop?.get?.call(this) ?? 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "offsetParent", {
+      configurable: true,
+      get(this: HTMLElement) {
+        const scroll = this.closest("[data-testid='queue-sheet-scroll']");
+        if (scroll instanceof HTMLElement && this !== scroll) return scroll;
+        return prototypeDescriptors.offsetParent?.get?.call(this) ?? null;
+      },
+    });
+
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      const scroll = document.querySelector(
+        "[data-testid='queue-sheet-scroll']",
+      ) as HTMLElement | null;
+
+      // Force the legacy rect formula to a stale/zero margin at mount (and keep it
+      // from discovering the real list offset later). Geometry assertions for the
+      // heading + rows still use content offsets below.
+      if (isQueueScroll(this) || isSpineListRoot(this)) {
+        return {
+          x: 0,
+          y: scrollTopOnScreen,
+          top: scrollTopOnScreen,
+          left: 0,
+          bottom: scrollTopOnScreen + (isQueueScroll(this) ? viewportHeight : 0),
+          right: 390,
+          width: 390,
+          height: isQueueScroll(this) ? viewportHeight : Number.parseFloat(this.style.height) || 0,
+          toJSON() {
+            return this;
+          },
+        };
+      }
+
+      if (!(scroll instanceof HTMLElement)) {
+        return originalGetBoundingClientRect.call(this);
+      }
+
+      const rowHost =
+        !isSpineVirtualRow(this) && this.parentElement && isSpineVirtualRow(this.parentElement)
+          ? this.parentElement
+          : this;
+
+      const contentY = contentOffsetTop(rowHost);
+      if (contentY === null) {
+        return originalGetBoundingClientRect.call(this);
+      }
+
+      const top = scrollTopOnScreen + (contentY - scroll.scrollTop);
+      const height = this.tagName === "H3" ? headingHeight : rowHeight;
+      return {
+        x: 0,
+        y: top,
+        top,
+        left: 0,
+        bottom: top + height,
+        right: 390,
+        width: 390,
+        height,
+        toJSON() {
+          return this;
+        },
+      };
+    };
+
+    try {
+      renderQueueApp(<Controls />);
+      await user.click(screen.getByRole("button", { name: "Start large library playback" }));
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId("player-desktop-bar")).getByText("Library Track 1"),
+        ).toBeTruthy();
+      });
+      await user.click(screen.getByRole("button", { name: "Stack bulk up next" }));
+
+      const sheet = await openQueueSheet(user);
+      const scroll = within(sheet).getByTestId("queue-sheet-scroll");
+      const spineHeading = within(sheet).getByText("From Library");
+      const spineSection = spineHeading.closest("section");
+      expect(spineSection).toBeTruthy();
+      expect(within(sheet).getByText("Up Next")).toBeTruthy();
+
+      await waitFor(() => {
+        const virtualRows = Array.from(spineSection!.querySelectorAll("div")).filter(
+          (node) => node instanceof HTMLElement && isSpineVirtualRow(node),
+        );
+        expect(virtualRows.length).toBeGreaterThan(0);
+      });
+
+      // Bring "From Library" near the top of the shared scrollport. The white band
+      // appears when the virtualizer sees this scroll offset with a too-small margin.
+      scroll.scrollTop = upNextBlockHeight;
+      expect(scroll.scrollTop).toBe(upNextBlockHeight);
+      scroll.dispatchEvent(new Event("scroll"));
+
+      await waitFor(() => {
+        const virtualRows = Array.from(spineSection!.querySelectorAll("div")).filter(
+          (node): node is HTMLDivElement =>
+            node instanceof HTMLDivElement && isSpineVirtualRow(node),
+        );
+        expect(virtualRows.length).toBeGreaterThan(0);
+
+        const topmostRow = virtualRows.reduce((best, row) =>
+          parseTranslateY(row) < parseTranslateY(best) ? row : best,
+        );
+
+        const headingRect = spineHeading.getBoundingClientRect();
+        const rowRect = topmostRow.getBoundingClientRect();
+        expect(Math.abs(rowRect.top - headingRect.bottom)).toBeLessThan(2);
+      });
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+      for (const [name, descriptor] of Object.entries(prototypeDescriptors)) {
+        if (descriptor) {
+          Object.defineProperty(HTMLElement.prototype, name, descriptor);
+        }
+      }
+    }
+  });
+
   test("shuffle toggle keeps upcoming spine tracks visible in the queue sheet", async () => {
     const user = userEvent.setup();
     mockSpineAndHydration(vi.mocked(fetch));
