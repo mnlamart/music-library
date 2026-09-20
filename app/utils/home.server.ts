@@ -37,6 +37,7 @@ export type HomeRecentPlaylist = {
   description: string | null;
   createdAt: Date;
   updatedAt: Date;
+  trackCount: number;
   tracks: Array<{
     id: string;
     track: {
@@ -210,6 +211,9 @@ export async function loadHomeData(request: Request) {
         description: true,
         createdAt: true,
         updatedAt: true,
+        _count: {
+          select: { tracks: true },
+        },
         tracks: {
           select: {
             id: true,
@@ -241,6 +245,16 @@ export async function loadHomeData(request: Request) {
     }),
   ]);
 
+  const recentPlaylistsWithCount: HomeRecentPlaylist[] = recentPlaylists.map((playlist) => ({
+    id: playlist.id,
+    title: playlist.title,
+    description: playlist.description,
+    createdAt: playlist.createdAt,
+    updatedAt: playlist.updatedAt,
+    trackCount: playlist._count.tracks,
+    tracks: playlist.tracks,
+  }));
+
   return data<HomeListeningData>({
     mode,
     totalTracks,
@@ -251,7 +265,7 @@ export async function loadHomeData(request: Request) {
       totalPlaylists,
     },
     recentTracks,
-    recentPlaylists,
+    recentPlaylists: recentPlaylistsWithCount,
     // YouTube data is only needed for the listening-hub view (not gray zone)
     youtubeData:
       mode === "listening"

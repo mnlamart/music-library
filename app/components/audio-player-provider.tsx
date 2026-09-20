@@ -11,6 +11,7 @@ import {
 import { isOfflineEnvironment } from "#app/features/offline-app/is-offline-environment.client.ts";
 import { getOfflineStorage } from "#app/features/offline-storage/offline-storage.client.ts";
 import { offlineSummaryToFullTrack } from "#app/features/offline-storage/offline-track-summary.client.ts";
+import { isQueueCacheEnabled } from "#app/features/offline-storage/queue-cache-preference.client.ts";
 import { prefetchPlaybackAudioUrl } from "#app/features/offline-storage/resolve-playback-url.client.ts";
 import {
   collectHydrationIds,
@@ -1001,6 +1002,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
   useEffect(() => {
     if (!isPlayerVisible || !currentTrackId || isOfflineEnvironment()) return;
+    if (!isQueueCacheEnabled(userId ?? "")) return;
 
     const storage = getOfflineStorage();
 
@@ -1018,7 +1020,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         }
       }
     })();
-  }, [currentTrackId, hydrateAround, isPlayerVisible, navigationState]);
+  }, [currentTrackId, hydrateAround, isPlayerVisible, navigationState, userId]);
 
   const contextValue = useMemo(
     () => ({

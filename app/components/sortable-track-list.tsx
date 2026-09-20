@@ -49,6 +49,8 @@ interface SortableListTrack {
   thumbnailUrl?: string | null;
   serviceUrl: string | null;
   createdAt: string;
+  releaseDate?: string | null;
+  originalDate?: string | null;
   service?: { displayName: string; logoUrl: string | null } | null;
   /** Audio files available for playback, mapped from Prisma TrackAudioFile relation */
   audioFiles?: Array<{ id: string; format: string | null; objectKey: string }>;
@@ -58,6 +60,7 @@ interface SortableListTrack {
 interface PlaylistTrack {
   id: string;
   position: number;
+  createdAt?: string | Date;
   track: SortableListTrack;
 }
 
@@ -77,6 +80,7 @@ interface SortableTrackItemProps {
   playlistId: string;
   /** Render prop for custom per-track action buttons (e.g., library toggle). */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
+  allowReorder?: boolean;
 }
 
 function SortableTrackItem({
@@ -89,9 +93,11 @@ function SortableTrackItem({
   showSelection,
   playlistId,
   itemActions,
+  allowReorder = true,
 }: SortableTrackItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: track.id,
+    disabled: !allowReorder,
   });
 
   const style = {
@@ -123,35 +129,40 @@ function SortableTrackItem({
       )}
 
       {/* Drag Handle */}
-      <Button
-        {...attributes}
-        {...listeners}
-        variant="ghost"
-        size="sm"
-        className={cn(
-          "absolute top-1/2 -translate-y-1/2 w-8 h-12 p-0 cursor-grab active:cursor-grabbing opacity-80 group-hover:opacity-100 transition-all duration-200 ease-out hover:bg-muted/50 rounded z-30",
-          showSelection ? "left-8" : "left-2",
-        )}
-        aria-pressed={isDragging}
-        aria-label={`Drag handle for track ${index + 1}: ${track.track.title} by ${track.track.artist.name}. Press Space or Enter to activate drag mode, then use arrow keys to reorder.`}
-        aria-describedby={`track-${track.id}-description`}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && isDragging) {
-            e.preventDefault();
-            // Cancel drag operation
-            announceToScreenReader("Drag operation cancelled");
-          }
-        }}
-      >
-        <Icon
-          name="drag-handle-dots-2"
-          className="h-4 w-4 text-foreground/60 transition-colors duration-200"
-          aria-hidden="true"
-        />
-      </Button>
+      {allowReorder ? (
+        <Button
+          {...attributes}
+          {...listeners}
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "absolute top-1/2 -translate-y-1/2 w-8 h-12 p-0 cursor-grab active:cursor-grabbing opacity-80 group-hover:opacity-100 transition-all duration-200 ease-out hover:bg-muted/50 rounded z-30",
+            showSelection ? "left-8" : "left-2",
+          )}
+          aria-pressed={isDragging}
+          aria-label={`Drag handle for track ${index + 1}: ${track.track.title} by ${track.track.artist.name}. Press Space or Enter to activate drag mode, then use arrow keys to reorder.`}
+          aria-describedby={`track-${track.id}-description`}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && isDragging) {
+              e.preventDefault();
+              // Cancel drag operation
+              announceToScreenReader("Drag operation cancelled");
+            }
+          }}
+        >
+          <Icon
+            name="drag-handle-dots-2"
+            className="h-4 w-4 text-foreground/60 transition-colors duration-200"
+            aria-hidden="true"
+          />
+        </Button>
+      ) : null}
 
       {/* Track Item */}
-      <div className={cn("pl-10", showSelection && "pl-16")} id={`track-${track.id}-description`}>
+      <div
+        className={cn(allowReorder ? "pl-10" : "pl-0", showSelection && "pl-16")}
+        id={`track-${track.id}-description`}
+      >
         <TrackListItem
           track={track.track}
           userTrack={{ createdAt: track.track.createdAt }}
@@ -187,6 +198,8 @@ interface SortableTrackListProps {
   playlistId: string;
   /** Render prop for custom per-track action buttons (e.g., library toggle). */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
+  /** When false, drag-and-drop reordering is disabled (e.g. while a non-custom sort is active). */
+  allowReorder?: boolean;
 }
 
 export function SortableTrackList({
@@ -203,6 +216,7 @@ export function SortableTrackList({
   className,
   playlistId,
   itemActions,
+  allowReorder = true,
 }: SortableTrackListProps) {
   const [items, setItems] = useState(tracks);
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
@@ -216,6 +230,7 @@ export function SortableTrackList({
   );
 
   function handleDragEnd(event: DragEndEvent) {
+    if (!allowReorder) return;
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -447,6 +462,7 @@ export function SortableTrackList({
                 showSelection={showSelection}
                 playlistId={playlistId}
                 itemActions={itemActions}
+                allowReorder={allowReorder}
               />
             ))}
           </SortableContext>

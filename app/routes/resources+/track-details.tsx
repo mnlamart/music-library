@@ -25,6 +25,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
       duration: true,
       createdAt: true,
+      releaseDate: true,
+      originalDate: true,
       coverImage: {
         select: {
           objectKey: true,

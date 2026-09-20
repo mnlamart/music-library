@@ -3,7 +3,6 @@ import { useVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/rea
 import { useCallback, useEffect, useRef } from "react";
 import { data, useSearchParams } from "react-router";
 import { OfflineLibraryView } from "#app/components/offline/offline-library-view.tsx";
-import { OfflineTrackDownloadButton } from "#app/components/offline/offline-track-download-button.tsx";
 import { TrackListItem } from "#app/components/track-list-item";
 import { Checkbox } from "#app/components/ui/checkbox.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
@@ -36,6 +35,9 @@ type UserTrack = {
       objectKey: string;
     } | null;
     serviceUrl: string | null;
+    createdAt?: Date;
+    releaseDate?: Date | null;
+    originalDate?: Date | null;
     service?: {
       displayName: string;
       logoUrl: string | null;
@@ -67,7 +69,7 @@ function LibraryTrackListItem({ track, userTrack, index, playlists }: LibraryTra
       userTrack={userTrack}
       index={index}
       playlists={playlists}
-      itemActionsContent={<OfflineTrackDownloadButton track={track} />}
+      showAudioFileDownload
     />
   );
 }
@@ -100,6 +102,8 @@ export async function loader({ request, url }: Route.LoaderArgs) {
           },
           createdAt: true,
           updatedAt: true,
+          releaseDate: true,
+          originalDate: true,
           service: {
             select: {
               name: true,
@@ -372,7 +376,7 @@ export default function LibraryIndexRoute({
                       }}
                       className="bg-background border-b"
                     >
-                      <div className="flex items-center gap-4 px-4 py-3 text-sm font-medium text-muted-foreground">
+                      <div className="flex items-center gap-4 px-1 py-3 text-sm font-medium text-muted-foreground sm:px-4">
                         <div className="w-8 flex items-center justify-center min-w-8">#</div>
                         <div className="flex-1 min-w-0">Title</div>
                         <div className="hidden lg:flex items-center justify-center w-20">Saved</div>

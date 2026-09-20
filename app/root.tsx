@@ -22,6 +22,7 @@ import { AutoplayGuideDialog } from "./components/autoplay-guide-dialog";
 import { BottomNav } from "./components/bottom-nav.tsx";
 import { OfflineAwareErrorBoundary } from "./components/offline/offline-aware-error-boundary.tsx";
 import { OfflineStatusBanner } from "./components/offline/offline-status-banner.tsx";
+import { PullToRefreshProvider } from "./components/pull-to-refresh.tsx";
 import { EpicProgress } from "./components/progress-bar.tsx";
 import { RouteHydrateFallback } from "./components/route-hydrate-fallback.tsx";
 import { href as iconsHref } from "./components/ui/icon.tsx";
@@ -331,7 +332,9 @@ function ShellLayout() {
         id="main-content"
       >
         <div className="container">
-          <Outlet />
+          <PullToRefreshProvider>
+            <Outlet />
+          </PullToRefreshProvider>
         </div>
       </div>
 

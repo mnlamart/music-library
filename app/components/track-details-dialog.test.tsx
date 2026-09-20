@@ -73,6 +73,8 @@ test("shows track details when loaded", () => {
       artist: { id: "artist-1", name: "Test Artist" },
       duration: 180,
       createdAt: "2025-01-01T00:00:00.000Z",
+      releaseDate: "2009-10-25T06:57:33.000Z",
+      originalDate: null,
       coverImage: { objectKey: "covers/test.jpg" },
       service: { displayName: "YouTube" },
       serviceUrl: "https://youtube.com/watch?v=abc",
@@ -86,6 +88,9 @@ test("shows track details when loaded", () => {
   // Duration is formatted
   expect(screen.getByText("Duration: 3:00")).toBeDefined();
   expect(screen.getByText("Source: YouTube")).toBeDefined();
+  expect(
+    screen.getByText(`Date added: ${new Date("2009-10-25T06:57:33.000Z").toLocaleDateString()}`),
+  ).toBeDefined();
 });
 
 test("shows Open on YouTube button when serviceUrl is present", () => {

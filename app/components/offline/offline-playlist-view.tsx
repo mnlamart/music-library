@@ -1,5 +1,4 @@
 import { Link } from "react-router";
-import { OfflineTrackDownloadButton } from "#app/components/offline/offline-track-download-button.tsx";
 import { TrackListItem } from "#app/components/track-list-item.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { type OfflineTrackSummary } from "#app/features/offline-storage/types.ts";
@@ -41,7 +40,8 @@ function OfflinePlaylistTrackItem({
       index={index}
       playlistContext={{ type: "playlist", playlistId }}
       showPlaylistActions={false}
-      itemActionsContent={<OfflineTrackDownloadButton playlistId={playlistId} track={trackData} />}
+      offlineDownloadTrack={trackData}
+      offlineDownloadPlaylistId={playlistId}
     />
   );
 }
