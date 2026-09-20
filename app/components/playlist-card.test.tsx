@@ -105,3 +105,19 @@ test("falls back to tracks.length when trackCount is omitted", () => {
 
   expect(screen.getByText("1 track")).toBeInTheDocument();
 });
+
+test("uses totalDuration when preview tracks are truncated", () => {
+  renderCard({
+    tracks: [baseTrack],
+    trackCount: 12,
+    totalDuration: 3600,
+  });
+
+  expect(screen.getByText("1:00:00")).toBeInTheDocument();
+});
+
+test("falls back to summing preview tracks when totalDuration is omitted", () => {
+  renderCard({ tracks: [baseTrack] });
+
+  expect(screen.getByText("4:05")).toBeInTheDocument();
+});
