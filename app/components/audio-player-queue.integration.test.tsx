@@ -1141,9 +1141,9 @@ describe("queue sheet integration", () => {
       const scroll = within(sheet).getByTestId("queue-sheet-scroll");
       const beforeSpine = within(sheet).getByTestId("queue-sheet-before-spine");
       const spineHeading = within(sheet).getByText("From Library");
-      const spineTracks = within(sheet).getByTestId("queue-spine-tracks");
+      const spineTracksSection = within(sheet).getByTestId("queue-spine-tracks");
       expect(scroll.contains(beforeSpine)).toBe(true);
-      expect(scroll.contains(spineTracks)).toBe(true);
+      expect(scroll.contains(spineTracksSection)).toBe(true);
       expect(beforeSpine.contains(within(sheet).getByText("Up Next"))).toBe(true);
       expect(beforeSpine.contains(spineHeading)).toBe(true);
 
@@ -1151,7 +1151,9 @@ describe("queue sheet integration", () => {
         const spineList = within(sheet).getByTestId("queue-spine-virtual-list");
         expect(Number(spineList.dataset.paddingStart)).toBe(beforeSpine.offsetHeight);
 
-        const translated = Array.from(spineTracks.querySelectorAll<HTMLElement>("div")).filter(
+        const translated = Array.from(
+          spineTracksSection.querySelectorAll<HTMLElement>("div"),
+        ).filter(
           (el) => el.style.position === "absolute" && el.style.transform.includes("translateY"),
         );
         expect(translated.length).toBeGreaterThan(0);
