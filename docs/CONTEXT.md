@@ -116,6 +116,8 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 - **Queue Cache** — Tracks auto-cached from the active queue for listening continuity. Stored in the same device storage as pinned downloads but eligible for LRU eviction when storage is tight. A track that is both pinned and queue-cached counts as pinned.
 
+- **Queue Cache Preference** — Per-user, device-local setting (`localStorage`) for whether Queue Cache auto-writes run while listening. Default is on. Opting out stops new auto-cache writes only; it does not purge existing queue-cached tracks. Managed on `/downloads`.
+
 - **Offline Shell** — Cached HTML, JS, CSS, and static assets so the app loads and navigates without network. Service-worker precache plus a supplemental root shell cache (user, theme, ENV) for warm navigations when loader fetches fail.
 
 - **Offline Live Route** — A route that serves real Cached Playback data from device storage when offline (library, playlists, downloads, home).
@@ -244,7 +246,7 @@ Home page redesign decisions (implemented). Route: `app/routes/_marketing+/index
 
 44. **Install prompt: smart, dual placement** — Platform-aware install UX (Android `beforeinstallprompt` button; iOS Share → Add to Home Screen coach mark). Shown when not already in standalone mode; dismissible with `localStorage` so it does not nag. **Two surfaces:** (1) global bottom banner above the audio player, (2) contextual block on the logged-in home page. Hide both once installed or permanently dismissed.
 
-45. **Cached Playback: manual downloads + queue auto-cache** — Device storage (not presigned URLs). Users can explicitly download tracks or playlists for planned offline listening; the app also auto-caches the current queue track plus the next three while online. **Hybrid storage:** track/playlist metadata in IndexedDB, audio bytes in OPFS (via a Web Worker on iOS). Request `navigator.storage.persist()` where supported. Do not store audio in the service-worker Cache API.
+45. **Cached Playback: manual downloads + queue auto-cache** — Device storage (not presigned URLs). Users can explicitly download tracks or playlists for planned offline listening; the app also auto-caches the current queue track plus lookahead while online, gated by **Queue Cache Preference** (default on; per-user `localStorage`; toggle on `/downloads`). Opting out stops new Queue Cache writes only — existing queue-cached bytes stay until LRU eviction or an explicit purge. **Clear auto-cached tracks** on `/downloads` deletes queue-only tracks (`isQueueCached && !isPinned`); Pinned Downloads are kept. Remote/presigned URL prefetch for seamless online skips is unaffected by the preference. **Hybrid storage:** track/playlist metadata in IndexedDB, audio bytes in OPFS (via a Web Worker on iOS). Request `navigator.storage.persist()` where supported. Do not store audio in the service-worker Cache API.
 
 46. **Manual offline downloads: per-track and per-playlist** — Download action on individual track rows plus bulk "Download playlist" on user playlists and synced YouTube playlists. No "download entire library" in v1.
 

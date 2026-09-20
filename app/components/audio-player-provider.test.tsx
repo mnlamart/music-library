@@ -8,6 +8,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi, beforeEach, afterEach } from "vitest";
 import { getOfflineStorage } from "#app/features/offline-storage/offline-storage.client.ts";
+import { isQueueCacheEnabled } from "#app/features/offline-storage/queue-cache-preference.client.ts";
+import { prefetchPlaybackAudioUrl } from "#app/features/offline-storage/resolve-playback-url.client.ts";
 import { writeCachedPlayerState } from "#app/features/player-state/player-state-cache.client.ts";
 import { PLAYER_STATE_ROUTE } from "#app/features/player-state/player-state.ts";
 import { type FullTrack } from "#app/types/frontend/shared";
@@ -62,6 +64,10 @@ vi.mock("#app/features/offline-storage/offline-storage.client.ts", () => ({
 
 vi.mock("#app/features/offline-storage/resolve-playback-url.client.ts", () => ({
   prefetchPlaybackAudioUrl: vi.fn(),
+}));
+
+vi.mock("#app/features/offline-storage/queue-cache-preference.client.ts", () => ({
+  isQueueCacheEnabled: vi.fn(() => true),
 }));
 
 const playableTrack: FullTrack = {
@@ -876,4 +882,125 @@ test("offline partial restore does not persist truncated Up Next on pagehide", a
   window.dispatchEvent(new Event("pagehide"));
 
   expect(persistPutCalls(fetchMock)).toHaveLength(0);
+});
+
+test("queue auto-cache writes when Queue Cache Preference is enabled", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.mocked(fetch);
+  const cacheQueueTrack = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(isQueueCacheEnabled).mockReturnValue(true);
+  vi.mocked(getOfflineStorage).mockReturnValue({
+    cacheQueueTrack,
+    listDownloaded: vi.fn().mockResolvedValue([]),
+    listPinned: vi.fn().mockResolvedValue([]),
+    listForPlaylist: vi.fn().mockResolvedValue([]),
+  } as unknown as ReturnType<typeof getOfflineStorage>);
+
+  fetchMock.mockImplementation(async (input) => {
+    const url = String(input);
+    if (url === PLAYER_STATE_ROUTE || url.includes(PLAYER_STATE_ROUTE)) {
+      return {
+        status: 204,
+        ok: true,
+        json: async () => null,
+      } as Response;
+    }
+    if (url.includes("/api/queue-spine")) {
+      return {
+        ok: true,
+        json: async () => ({ tracks: [spineTrack], total: 1 }),
+      } as Response;
+    }
+    if (url.includes("/api/tracks/playback")) {
+      return {
+        ok: true,
+        json: async () => ({ tracks: [playableTrack] }),
+      } as Response;
+    }
+    return { ok: true, json: async () => ({}) } as Response;
+  });
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <PlayTrackProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Play library track" }));
+
+  await waitFor(() => {
+    expect(cacheQueueTrack).toHaveBeenCalled();
+  });
+  expect(cacheQueueTrack.mock.calls[0]?.[0]).toMatchObject({ id: "track-1" });
+});
+
+test("queue auto-cache skips OPFS write when Queue Cache Preference is off", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.mocked(fetch);
+  const cacheQueueTrack = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(isQueueCacheEnabled).mockReturnValue(false);
+  vi.mocked(getOfflineStorage).mockReturnValue({
+    cacheQueueTrack,
+    listDownloaded: vi.fn().mockResolvedValue([]),
+    listPinned: vi.fn().mockResolvedValue([]),
+    listForPlaylist: vi.fn().mockResolvedValue([]),
+  } as unknown as ReturnType<typeof getOfflineStorage>);
+
+  const nextTrack = {
+    ...spineTrack,
+    id: "track-2",
+    title: "Next Song",
+  };
+  const nextPlayable: FullTrack = {
+    ...playableTrack,
+    id: "track-2",
+    title: "Next Song",
+  };
+
+  fetchMock.mockImplementation(async (input) => {
+    const url = String(input);
+    if (url === PLAYER_STATE_ROUTE || url.includes(PLAYER_STATE_ROUTE)) {
+      return {
+        status: 204,
+        ok: true,
+        json: async () => null,
+      } as Response;
+    }
+    if (url.includes("/api/queue-spine")) {
+      return {
+        ok: true,
+        json: async () => ({
+          tracks: [spineTrack, nextTrack],
+          total: 2,
+        }),
+      } as Response;
+    }
+    if (url.includes("/api/tracks/playback")) {
+      return {
+        ok: true,
+        json: async () => ({ tracks: [playableTrack, nextPlayable] }),
+      } as Response;
+    }
+    return { ok: true, json: async () => ({}) } as Response;
+  });
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <PlayTrackProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Play library track" }));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("playlist-length").textContent).toBe("2");
+  });
+
+  // Allow auto-cache effect + prefetch effect to settle
+  await waitFor(() => {
+    expect(prefetchPlaybackAudioUrl).toHaveBeenCalled();
+  });
+
+  expect(cacheQueueTrack).not.toHaveBeenCalled();
+  expect(isQueueCacheEnabled).toHaveBeenCalledWith("user-1");
 });

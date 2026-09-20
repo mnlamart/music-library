@@ -11,6 +11,7 @@ import {
 import { isOfflineEnvironment } from "#app/features/offline-app/is-offline-environment.client.ts";
 import { getOfflineStorage } from "#app/features/offline-storage/offline-storage.client.ts";
 import { offlineSummaryToFullTrack } from "#app/features/offline-storage/offline-track-summary.client.ts";
+import { isQueueCacheEnabled } from "#app/features/offline-storage/queue-cache-preference.client.ts";
 import { prefetchPlaybackAudioUrl } from "#app/features/offline-storage/resolve-playback-url.client.ts";
 import {
   collectHydrationIds,
@@ -998,6 +999,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
   useEffect(() => {
     if (!isPlayerVisible || !currentTrack || isOfflineEnvironment()) return;
+    if (!isQueueCacheEnabled(userId ?? "")) return;
 
     const storage = getOfflineStorage();
 
@@ -1015,7 +1017,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         }
       }
     })();
-  }, [currentTrack?.id, hydrateAround, isPlayerVisible, navigationState]);
+  }, [currentTrack?.id, hydrateAround, isPlayerVisible, navigationState, userId]);
 
   // Prefetch the next track's presigned URL while the current one plays so the
   // auto-advance transition needs no network round-trip. On a locked screen the
