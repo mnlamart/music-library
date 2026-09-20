@@ -38,6 +38,8 @@ export type HomeRecentPlaylist = {
   createdAt: Date;
   updatedAt: Date;
   trackCount: number;
+  /** Sum of all track durations in the playlist (not just cover preview tracks) */
+  totalDuration: number;
   tracks: Array<{
     id: string;
     track: {
@@ -163,6 +165,20 @@ async function loadYoutubeData(userId: string): Promise<HomeYoutubeData> {
   }
 }
 
+/**
+ * Sum track durations per playlist from duration-only join rows.
+ * Used so home cards can show full playlist length while only loading cover previews.
+ */
+export function accumulatePlaylistDurations(
+  rows: Array<{ playlistId: string; track: { duration: number | null } }>,
+): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    totals.set(row.playlistId, (totals.get(row.playlistId) ?? 0) + (row.track.duration ?? 0));
+  }
+  return totals;
+}
+
 export async function loadHomeData(request: Request) {
   const userId = await getUserId(request);
 
@@ -245,6 +261,19 @@ export async function loadHomeData(request: Request) {
     }),
   ]);
 
+  const playlistIds = recentPlaylists.map((playlist) => playlist.id);
+  const durationRows =
+    playlistIds.length === 0
+      ? []
+      : await prisma.userPlaylistTrack.findMany({
+          where: { playlistId: { in: playlistIds } },
+          select: {
+            playlistId: true,
+            track: { select: { duration: true } },
+          },
+        });
+  const durationByPlaylist = accumulatePlaylistDurations(durationRows);
+
   const recentPlaylistsWithCount: HomeRecentPlaylist[] = recentPlaylists.map((playlist) => ({
     id: playlist.id,
     title: playlist.title,
@@ -252,6 +281,7 @@ export async function loadHomeData(request: Request) {
     createdAt: playlist.createdAt,
     updatedAt: playlist.updatedAt,
     trackCount: playlist._count.tracks,
+    totalDuration: durationByPlaylist.get(playlist.id) ?? 0,
     tracks: playlist.tracks,
   }));
 

@@ -24,6 +24,8 @@ interface PlaylistCardProps {
   tracks: PlaylistCardTrack[];
   /** Full playlist track count when `tracks` is a cover preview subset */
   trackCount?: number;
+  /** Full playlist duration in seconds when `tracks` is a cover preview subset */
+  totalDuration?: number;
   createdAt: string;
   updatedAt: string;
   to?: string;
@@ -58,6 +60,7 @@ export function PlaylistCard({
   description,
   tracks,
   trackCount,
+  totalDuration: totalDurationProp,
   createdAt: _createdAt,
   updatedAt,
   to,
@@ -67,7 +70,8 @@ export function PlaylistCard({
   const isMobile = useIsMobile();
   const { playUserPlaylist } = useAudioPlayer();
 
-  const totalDuration = tracks.reduce((sum, track) => sum + (track.duration || 0), 0);
+  const previewDuration = tracks.reduce((sum, track) => sum + (track.duration || 0), 0);
+  const totalDuration = totalDurationProp ?? previewDuration;
   const displayTrackCount = trackCount ?? tracks.length;
   const gradientClass = getGradientFromTitle(title);
   const canPlay = tracks.length > 0;

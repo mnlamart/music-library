@@ -30,6 +30,7 @@ export function HomeRecentPlaylistRow({ recentPlaylists }: HomeRecentPlaylistRow
             description={playlist.description}
             tracks={playlist.tracks.map((playlistTrack) => playlistTrack.track)}
             trackCount={playlist.trackCount}
+            totalDuration={playlist.totalDuration}
             createdAt={playlist.createdAt.toISOString()}
             updatedAt={playlist.updatedAt.toISOString()}
           />
