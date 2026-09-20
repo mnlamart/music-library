@@ -1678,7 +1678,7 @@ function VirtualQueueTrackList({
       .slice(0, 30)
       .map((_, index) => index)
       .join(",");
-  }, [virtualItems, tracks.length]);
+  }, [virtualItems, tracks]);
 
   useEffect(() => {
     const indices =
