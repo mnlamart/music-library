@@ -921,6 +921,13 @@ export function AudioPlayer(props: AudioPlayerProps) {
       loadedTrackIdRef.current = null;
       setAudioSrc(undefined);
       setPlaybackError(null);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute("src");
+        audioRef.current.load();
+      }
+      setIsPlaying(false);
+      setCurrentTime(0);
       return;
     }
     loadedTrackIdRef.current = null;
