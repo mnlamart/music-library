@@ -70,6 +70,14 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 - **UserTrack** — A user's membership in their personal library: an active link between a user and a `Track`. Adding or removing a `UserTrack` is always an explicit user action; playlist sync never creates one.
 
+### Listening Insights
+
+- **On-Repeat Snapshot** — A frozen, system-generated, read-only playlist of the user's top tracks by `play_completed` **UsageEvent** count over a rolling **30-day** window ending at generation time. Capped at **30 tracks**, ranked by completed-play count (tie-break TBD at implementation). Each row shows that track's completed-listen count for the window. Snapshots are dated and retained historically — not a single replace-in-place playlist. Distinct from **UserPlaylist** (user-curated, editable).
+
+- **Snapshot Shelf** — UI that shows the **latest 3** On-Repeat Snapshots, plus a control to open the full snapshot history page (all snapshots for the user).
+
+- **Promote Snapshot** — From an On-Repeat Snapshot, the user can copy all of its tracks into a **new or existing UserPlaylist** in one action. The snapshot itself stays read-only; promotion is the only edit path.
+
 ### Audio Player & Queue
 
 - **Queue Spine** — Ordered playable tracks for the active play context (library or playlist). Loaded in one request as lightweight `QueueTrack` rows (id, title, artist). The spine is the automatic continuation after **Up Next** is drained; shuffle permutes spine play order client-side.
@@ -92,7 +100,7 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 - **MOCKS** — Environment variable (`MOCKS=true`) enabling server-side mocking of all external services (YouTube API, yt-dlp, Tigris uploads, Telegram). Used in development and CI.
 
-- **UsageEvent** — Append-only product analytics row (`signup`, `login`, `library_add`, `play_started`, `play_completed`). Written via `recordUsageEvent`; powers the admin user activity feed.
+- **UsageEvent** — Append-only product analytics row (`signup`, `login`, `library_add`, `play_started`, `play_completed`). Written via `recordUsageEvent`; powers the admin user activity feed, `/history`, and **On-Repeat Snapshot** ranking (`play_completed` only).
 
 - **DailyUsageStat** — Per-UTC-day counter for admin time-series charts (`signups`, `logins`, `library_adds`, `plays_*`, `dau`). Incremented when usage events are recorded.
 
@@ -277,3 +285,7 @@ Home page redesign decisions (implemented). Route: `app/routes/_marketing+/index
 59. **Mobile player sheet — Add to Playlist self-fetching** — `AddToPlaylistMenu`'s `playlists` prop becomes optional. When omitted, the component self-fetches the user's playlists from a new `GET /resources/playlists` route on mount. This avoids passing playlist data through the audio player component tree.
 
 60. **Mobile player sheet — Track details dialog with lazy fetch** — Tapping "Track Details" in the overflow sheet opens a dialog modal. Track detail data (service name, source URL, added date) is fetched on-demand from a new `GET /resources/track-details?trackId=...` route. `FullTrack` is not enriched — the player stays lightweight.
+
+### Listening Insights
+
+61. **On-Repeat Snapshot from `play_completed` only** — Rank by `play_completed` **UsageEvent**s (not `play_started`). Rolling **30-day** window at generation time. Persist dated **snapshots** (not a single replace-in-place list). Cap at **30 tracks**; each row shows the completed-listen count for that window. UI: **Snapshot Shelf** (latest 3) + full history page. Snapshots are **read-only**; the only mutation path is **Promote Snapshot** (add all tracks to a new or existing **UserPlaylist**). See [ADR-024](./decisions/024-on-repeat-snapshots.md).
