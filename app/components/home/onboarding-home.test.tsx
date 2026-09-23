@@ -50,6 +50,7 @@ test("shows upload link for admin users", () => {
 
   const uploadLink = screen.getByRole("link", { name: /upload your files/i });
   expect(uploadLink).toHaveAttribute("href", "/music/services/local/upload");
+  expect(screen.getByText(/search for tracks from search/i)).toBeInTheDocument();
 });
 
 test("hides upload link for non-admin users", () => {
