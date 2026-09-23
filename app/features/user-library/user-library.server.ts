@@ -92,6 +92,10 @@ export async function addTracksToUserLibrary(
       .map((userTrack) => userTrack.id);
     const toCreate = uniqueTrackIds.filter((trackId) => !existingByTrackId.has(trackId));
 
+    // Library lists/plays by UserTrack.createdAt desc. Stagger stamps so the
+    // first id in `trackIds` (YouTube playlist order) sorts first, not reverse.
+    const bulkAddedAtMs = Date.now();
+
     await prisma.$transaction(async (tx) => {
       for (const idChunk of chunkArray(toReactivate)) {
         await tx.userTrack.updateMany({
@@ -99,9 +103,14 @@ export async function addTracksToUserLibrary(
           data: { isActive: true, deletedAt: null },
         });
       }
+      let createIndex = 0;
       for (const trackIdChunk of chunkArray(toCreate)) {
         await tx.userTrack.createMany({
-          data: trackIdChunk.map((trackId) => ({ userId, trackId })),
+          data: trackIdChunk.map((trackId) => ({
+            userId,
+            trackId,
+            createdAt: new Date(bulkAddedAtMs - createIndex++),
+          })),
         });
       }
     });
