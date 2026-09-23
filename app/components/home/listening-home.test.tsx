@@ -43,6 +43,7 @@ const baseListeningData: HomeListeningData = {
   },
   recentTracks: [],
   recentPlaylists: [],
+  onRepeatSnapshots: [],
   youtubeData: Promise.resolve({
     hasYouTubeConnection: true,
     youtubeStats: {

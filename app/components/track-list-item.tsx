@@ -58,11 +58,12 @@ interface TrackListItemProps {
   userTrack: UserTrack;
   index: number;
   playlistContext?: {
-    type: "library" | "playlist" | "artist" | "album" | "track" | "music";
+    type: "library" | "playlist" | "artist" | "album" | "track" | "music" | "onRepeatSnapshot";
     playlistId?: string;
     artistId?: string;
     albumId?: string;
     trackId?: string;
+    snapshotId?: string;
   };
   isDeleted?: boolean;
   showQueueActions?: boolean;

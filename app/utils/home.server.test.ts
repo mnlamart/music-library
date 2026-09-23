@@ -45,6 +45,10 @@ vi.mock("#app/features/service-playlist/service-playlist.server.ts", () => ({
   })),
 }));
 
+vi.mock("#app/features/on-repeat-snapshots/queries.server.ts", () => ({
+  listOnRepeatSnapshotShelf: vi.fn().mockResolvedValue([]),
+}));
+
 function unwrapHomeData(result: Awaited<ReturnType<typeof loadHomeData>>): HomeData {
   return (result as { data: HomeData }).data;
 }

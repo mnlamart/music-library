@@ -46,6 +46,7 @@
     "stop": "lsof -ti:3000 | xargs kill -9",
     "reset-storage": "tsx scripts/reset-storage.ts",
     "migrate-audio-keys": "tsx scripts/migrate-audio-object-keys.ts",
+    "generate-on-repeat-snapshots": "tsx scripts/generate-on-repeat-snapshots.ts",
     "db:manage": "tsx scripts/manage-db.ts",
     "make-admin": "tsx scripts/make-admin.ts",
     "prepare": "husky"

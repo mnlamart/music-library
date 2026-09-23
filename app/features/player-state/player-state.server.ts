@@ -10,6 +10,7 @@ const playContextSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("artist"), artistId: z.string().min(1) }),
   z.object({ type: z.literal("album"), albumId: z.string().min(1) }),
   z.object({ type: z.literal("track"), trackId: z.string().min(1) }),
+  z.object({ type: z.literal("onRepeatSnapshot"), snapshotId: z.string().min(1) }),
 ]);
 
 const playerStateSchema = z.object({

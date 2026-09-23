@@ -4,6 +4,7 @@ import { useAudioPlayer } from "#app/components/audio-player-provider.tsx";
 import { ArchivingBanner } from "#app/components/home/archiving-banner.tsx";
 import { HomeRecentPlaylistRow } from "#app/components/home/home-recent-playlist-row.tsx";
 import { HomeRecentTrackRow } from "#app/components/home/home-recent-track-row.tsx";
+import { SnapshotShelf } from "#app/components/home/snapshot-shelf.tsx";
 import { InstallAppHomePrompt } from "#app/components/pwa/install-app-home-prompt.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import {
@@ -28,6 +29,7 @@ export function ListeningHome({
   stats,
   recentTracks,
   recentPlaylists,
+  onRepeatSnapshots,
   youtubeData,
 }: ListeningHomeProps) {
   const { playLibrary, isLoadingNext } = useAudioPlayer();
@@ -71,6 +73,8 @@ export function ListeningHome({
         </div>
         <HomeRecentTrackRow recentTracks={recentTracks} />
       </section>
+
+      <SnapshotShelf snapshots={onRepeatSnapshots} hideWhenEmpty />
 
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between">

@@ -38,12 +38,18 @@ type TrackSpineParams = {
   trackId: string;
 };
 
+type OnRepeatSnapshotSpineParams = {
+  context: "onRepeatSnapshot";
+  snapshotId: string;
+};
+
 export type QueueSpineParams =
   | LibrarySpineParams
   | PlaylistSpineParams
   | ArtistSpineParams
   | AlbumSpineParams
-  | TrackSpineParams;
+  | TrackSpineParams
+  | OnRepeatSnapshotSpineParams;
 
 type ParseResult = { ok: true; value: QueueSpineParams } | { ok: false; error: string };
 
@@ -109,6 +115,18 @@ export function parseQueueSpineParams(searchParams: URLSearchParams): ParseResul
     };
   }
 
+  if (context === "onRepeatSnapshot") {
+    const snapshotId = searchParams.get("snapshotId");
+    if (!snapshotId) {
+      return { ok: false, error: "Snapshot ID is required" };
+    }
+
+    return {
+      ok: true,
+      value: { context: "onRepeatSnapshot", snapshotId },
+    };
+  }
+
   return { ok: false, error: "Invalid context parameter" };
 }
 
@@ -167,6 +185,24 @@ export async function fetchQueueSpine(
       select: QUEUE_TRACK_SELECT,
       orderBy: { createdAt: "asc" },
     });
+    return { tracks, total: tracks.length };
+  }
+
+  if (params.context === "onRepeatSnapshot") {
+    const snapshotTracks = await prisma.onRepeatSnapshotTrack.findMany({
+      where: {
+        snapshotId: params.snapshotId,
+        snapshot: { userId },
+      },
+      select: {
+        track: {
+          select: QUEUE_TRACK_SELECT,
+        },
+      },
+      orderBy: { position: "asc" },
+    });
+
+    const tracks = snapshotTracks.map((row) => row.track);
     return { tracks, total: tracks.length };
   }
 
