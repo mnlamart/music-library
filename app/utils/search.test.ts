@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
+import { USAGE_EVENT_TYPES } from "#app/features/usage-analytics/record-usage.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import {
   searchAlbums,
@@ -17,6 +18,7 @@ describe("Search Utilities", () => {
     // Clean up test data
     await prisma.userPlaylistTrack.deleteMany();
     await prisma.userPlaylist.deleteMany();
+    await prisma.usageEvent.deleteMany();
     await prisma.userTrack.deleteMany();
     await prisma.track.deleteMany();
     await prisma.album.deleteMany();
@@ -951,6 +953,149 @@ describe("Search Utilities", () => {
       expect(result.results.some((r) => r.type === "track" && r.title === "Rock-n-Roll")).toBe(
         true,
       );
+    });
+  });
+
+  describe("Personal Play Boost (ADR-028)", () => {
+    async function seedBoostFixture() {
+      const timestamp = Date.now();
+      const localService = await prisma.service.upsert({
+        where: { name: "local" },
+        update: {},
+        create: {
+          name: "local",
+          displayName: "Local Upload",
+          baseUrl: "",
+          isActive: true,
+        },
+      });
+
+      const user = await prisma.user.create({
+        data: {
+          email: `boost-${timestamp}@test.com`,
+          username: `boost-${timestamp}`,
+        },
+      });
+      const otherUser = await prisma.user.create({
+        data: {
+          email: `boost-other-${timestamp}@test.com`,
+          username: `boost-other-${timestamp}`,
+        },
+      });
+
+      const artist = await prisma.artist.create({
+        data: {
+          name: "Boost Artist",
+          normalizedName: "boost artist",
+        },
+      });
+
+      // Same contains-tier titles for query "Boost"; Alpha sorts before Zebra by title.
+      const familiar = await prisma.track.create({
+        data: {
+          title: "Zebra Boost Familiar Track",
+          artistId: artist.id,
+          serviceId: localService.id,
+          externalId: `boost-familiar-${timestamp}`,
+        },
+      });
+      const unfamiliar = await prisma.track.create({
+        data: {
+          title: "Alpha Boost Unfamiliar Track",
+          artistId: artist.id,
+          serviceId: localService.id,
+          externalId: `boost-unfamiliar-${timestamp}`,
+        },
+      });
+      // Exact title match for query "Song" — zero plays must still beat contains+plays.
+      const exactUnused = await prisma.track.create({
+        data: {
+          title: "Song",
+          artistId: artist.id,
+          serviceId: localService.id,
+          externalId: `boost-exact-${timestamp}`,
+        },
+      });
+      const containsHeavy = await prisma.track.create({
+        data: {
+          title: "Midnight Song Reprise",
+          artistId: artist.id,
+          serviceId: localService.id,
+          externalId: `boost-contains-heavy-${timestamp}`,
+        },
+      });
+
+      for (const track of [familiar, unfamiliar, exactUnused, containsHeavy]) {
+        await prisma.userTrack.create({
+          data: { userId: user.id, trackId: track.id },
+        });
+      }
+
+      // Personal lifetime completes on familiar (soft-boost signal).
+      for (let i = 0; i < 12; i++) {
+        await prisma.usageEvent.create({
+          data: {
+            type: USAGE_EVENT_TYPES.play_completed,
+            userId: user.id,
+            trackId: familiar.id,
+          },
+        });
+      }
+      // Other user's plays must never affect this user's ranking.
+      for (let i = 0; i < 50; i++) {
+        await prisma.usageEvent.create({
+          data: {
+            type: USAGE_EVENT_TYPES.play_completed,
+            userId: otherUser.id,
+            trackId: unfamiliar.id,
+          },
+        });
+      }
+      // Heavy personal plays on a contains match — still must not beat exact "Song".
+      for (let i = 0; i < 80; i++) {
+        await prisma.usageEvent.create({
+          data: {
+            type: USAGE_EVENT_TYPES.play_completed,
+            userId: user.id,
+            trackId: containsHeavy.id,
+          },
+        });
+      }
+
+      return { user, familiar, unfamiliar, exactUnused, containsHeavy };
+    }
+
+    it("soft-boosts personal lifetime plays among matching tracks when authed", async () => {
+      const { user, familiar, unfamiliar } = await seedBoostFixture();
+
+      const result = await searchTracks("Boost", 10, undefined, true, user.id);
+      const trackIds = result.results.filter((r) => r.type === "track").map((r) => r.id);
+
+      expect(trackIds).toContain(familiar.id);
+      expect(trackIds).toContain(unfamiliar.id);
+      expect(trackIds.indexOf(familiar.id)).toBeLessThan(trackIds.indexOf(unfamiliar.id));
+    });
+
+    it("does not apply personal play boost when logged out (relevance only)", async () => {
+      const { familiar, unfamiliar } = await seedBoostFixture();
+
+      const result = await searchTracks("Boost", 10);
+      const trackIds = result.results.filter((r) => r.type === "track").map((r) => r.id);
+
+      expect(trackIds).toContain(familiar.id);
+      expect(trackIds).toContain(unfamiliar.id);
+      // Without boost, title ASC tie-break puts Alpha before Zebra.
+      expect(trackIds.indexOf(unfamiliar.id)).toBeLessThan(trackIds.indexOf(familiar.id));
+    });
+
+    it("does not hard-override relevance: exact match beats contains despite plays", async () => {
+      const { user, exactUnused, containsHeavy } = await seedBoostFixture();
+
+      const result = await searchTracks("Song", 10, undefined, true, user.id);
+      const trackIds = result.results.filter((r) => r.type === "track").map((r) => r.id);
+
+      expect(trackIds[0]).toBe(exactUnused.id);
+      expect(trackIds.indexOf(exactUnused.id)).toBeLessThan(trackIds.indexOf(containsHeavy.id));
     });
   });
 });
