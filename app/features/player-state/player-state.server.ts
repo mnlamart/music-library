@@ -2,11 +2,18 @@ import { z } from "zod";
 import { type LoopMode } from "#app/features/queue/queue-navigation.ts";
 import { clampShuffleSeed } from "#app/features/queue/queue-shuffle.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { PLAYLIST_TRACK_SORT_OPTIONS } from "#app/utils/playlist-track-sort.ts";
 import { type PlayContextJson, type PlayerStateData } from "./player-state.ts";
+
+const playlistSortSchema = z.enum(PLAYLIST_TRACK_SORT_OPTIONS);
 
 const playContextSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("library") }),
-  z.object({ type: z.literal("playlist"), playlistId: z.string().min(1) }),
+  z.object({
+    type: z.literal("playlist"),
+    playlistId: z.string().min(1),
+    sort: playlistSortSchema.optional(),
+  }),
   z.object({ type: z.literal("artist"), artistId: z.string().min(1) }),
   z.object({ type: z.literal("album"), albumId: z.string().min(1) }),
   z.object({ type: z.literal("track"), trackId: z.string().min(1) }),

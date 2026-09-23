@@ -22,7 +22,16 @@ function isPlayContextJson(value: unknown): value is PlayContextJson {
     case "library":
       return true;
     case "playlist":
-      return typeof context.playlistId === "string" && context.playlistId.length > 0;
+      return (
+        typeof context.playlistId === "string" &&
+        context.playlistId.length > 0 &&
+        (context.sort === undefined ||
+          context.sort === "custom" ||
+          context.sort === "title" ||
+          context.sort === "artist" ||
+          context.sort === "duration" ||
+          context.sort === "dateAdded")
+      );
     case "artist":
       return typeof context.artistId === "string" && context.artistId.length > 0;
     case "album":

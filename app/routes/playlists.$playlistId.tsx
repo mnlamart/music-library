@@ -685,7 +685,7 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
   const confirmBulkQueueAction = () => {
     if (!bulkQueueDialogAction) return;
 
-    const tracks = optimisticTracks.map((pt) => pt.track as FullTrack);
+    const tracks = displayedTracks.map((pt) => pt.track as FullTrack);
     const playable = filterPlayableTracks(tracks);
     applyBulkQueueAction(playable, bulkQueueDialogAction);
 
@@ -768,7 +768,7 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
   };
 
   const handleBulkPlayNextSelection = (playlistTrackIds: string[]) => {
-    const selectedTracks = optimisticTracks.filter((pt) => playlistTrackIds.includes(pt.id));
+    const selectedTracks = displayedTracks.filter((pt) => playlistTrackIds.includes(pt.id));
     const tracks = selectedTracks.map((pt) => pt.track as FullTrack);
     const playable = filterPlayableTracks(tracks);
 
@@ -782,7 +782,7 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
   };
 
   const handleBulkAddToUpNextSelection = (playlistTrackIds: string[]) => {
-    const selectedTracks = optimisticTracks.filter((pt) => playlistTrackIds.includes(pt.id));
+    const selectedTracks = displayedTracks.filter((pt) => playlistTrackIds.includes(pt.id));
     const tracks = selectedTracks.map((pt) => pt.track as FullTrack);
     const playable = filterPlayableTracks(tracks);
 
@@ -796,7 +796,7 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
   };
 
   const handleBulkAddToQueueSelection = (playlistTrackIds: string[]) => {
-    const selectedTracks = optimisticTracks.filter((pt) => playlistTrackIds.includes(pt.id));
+    const selectedTracks = displayedTracks.filter((pt) => playlistTrackIds.includes(pt.id));
     const tracks = selectedTracks.map((pt) => pt.track as FullTrack);
     const playable = filterPlayableTracks(tracks);
 
@@ -912,6 +912,7 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
             isReordering={reorderFetcher.state === "submitting"}
             isRemoving={removeTrackFetcher.state === "submitting"}
             playlistId={params.playlistId!}
+            trackSort={trackSort}
             allowReorder={trackSort === "custom"}
           />
         )}

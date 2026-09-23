@@ -63,6 +63,7 @@ interface TrackListItemProps {
     artistId?: string;
     albumId?: string;
     trackId?: string;
+    sort?: "custom" | "title" | "artist" | "duration" | "dateAdded";
   };
   isDeleted?: boolean;
   showQueueActions?: boolean;

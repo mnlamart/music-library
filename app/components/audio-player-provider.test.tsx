@@ -181,11 +181,15 @@ function PlayLibraryProbe() {
   );
 }
 
-function PlayUserPlaylistProbe() {
+function PlayUserPlaylistProbe({
+  sort,
+}: {
+  sort?: "custom" | "title" | "artist" | "duration" | "dateAdded";
+}) {
   const { playUserPlaylist } = useAudioPlayer();
 
   return (
-    <button type="button" onClick={() => void playUserPlaylist("playlist-1")}>
+    <button type="button" onClick={() => void playUserPlaylist("playlist-1", sort)}>
       Play user playlist
     </button>
   );
@@ -461,6 +465,43 @@ test("playUserPlaylist requests playlist queue spine and hydrates playback", asy
   expect(spineRequestUrl).toContain("/api/queue-spine");
   expect(spineRequestUrl).toContain("context=playlist");
   expect(spineRequestUrl).toContain("playlistId=playlist-1");
+  expect(spineRequestUrl).not.toContain("sort=");
+});
+
+test("playUserPlaylist passes playlist track sort to the queue spine", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.mocked(fetch);
+
+  fetchMock
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tracks: [spineTrack],
+        total: 1,
+      }),
+    } as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ tracks: [playableTrack] }),
+    } as Response);
+
+  render(
+    <AudioPlayerProvider>
+      <PlayUserPlaylistProbe sort="title" />
+    </AudioPlayerProvider>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Play user playlist" }));
+
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  const spineRequestUrl = String(fetchMock.mock.calls[0]?.[0]);
+  expect(spineRequestUrl).toContain("/api/queue-spine");
+  expect(spineRequestUrl).toContain("context=playlist");
+  expect(spineRequestUrl).toContain("playlistId=playlist-1");
+  expect(spineRequestUrl).toContain("sort=title");
 });
 
 test("playTrack falls back to offline downloads when online spine fetch fails", async () => {

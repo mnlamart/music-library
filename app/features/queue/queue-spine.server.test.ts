@@ -66,7 +66,23 @@ describe("parseQueueSpineParams", () => {
     const params = new URLSearchParams("context=playlist&playlistId=pl-1");
     expect(parseQueueSpineParams(params)).toEqual({
       ok: true,
-      value: { context: "playlist", playlistId: "pl-1" },
+      value: { context: "playlist", playlistId: "pl-1", sort: "custom" },
+    });
+  });
+
+  test("accepts playlist context with sort", () => {
+    const params = new URLSearchParams("context=playlist&playlistId=pl-1&sort=title");
+    expect(parseQueueSpineParams(params)).toEqual({
+      ok: true,
+      value: { context: "playlist", playlistId: "pl-1", sort: "title" },
+    });
+  });
+
+  test("defaults unknown playlist sort to custom", () => {
+    const params = new URLSearchParams("context=playlist&playlistId=pl-1&sort=nope");
+    expect(parseQueueSpineParams(params)).toEqual({
+      ok: true,
+      value: { context: "playlist", playlistId: "pl-1", sort: "custom" },
     });
   });
 
@@ -180,10 +196,13 @@ describe("fetchQueueSpine", () => {
   test("returns playlist spine ordered by position", async () => {
     vi.mocked(prisma.userPlaylistTrack.findMany).mockResolvedValue([
       {
+        position: 0,
+        createdAt: new Date("2024-01-01"),
         track: {
           id: "track-2",
           title: "Song Two",
           artist: { id: "artist-2", name: "Artist Two" },
+          duration: 120,
         },
       },
     ] as never);
@@ -191,6 +210,7 @@ describe("fetchQueueSpine", () => {
     const result = await fetchQueueSpine("user-1", {
       context: "playlist",
       playlistId: "pl-1",
+      sort: "custom",
     });
 
     expect(prisma.userPlaylistTrack.findMany).toHaveBeenCalledWith(
@@ -200,11 +220,58 @@ describe("fetchQueueSpine", () => {
           playlist: { ownerId: "user-1" },
         },
         orderBy: { position: "asc" },
-        select: { track: { select: QUEUE_TRACK_SELECT } },
+        select: {
+          position: true,
+          createdAt: true,
+          track: {
+            select: {
+              ...QUEUE_TRACK_SELECT,
+              duration: true,
+            },
+          },
+        },
       }),
     );
     expect(result.total).toBe(1);
+    expect(result.tracks[0]).toEqual({
+      id: "track-2",
+      title: "Song Two",
+      artist: { id: "artist-2", name: "Artist Two" },
+    });
     expect(result.tracks[0]).not.toHaveProperty("audioFiles");
+  });
+
+  test("returns playlist spine sorted by title when sort=title", async () => {
+    vi.mocked(prisma.userPlaylistTrack.findMany).mockResolvedValue([
+      {
+        position: 0,
+        createdAt: new Date("2024-01-01"),
+        track: {
+          id: "track-z",
+          title: "Zebra",
+          artist: { id: "artist-1", name: "A" },
+          duration: 100,
+        },
+      },
+      {
+        position: 1,
+        createdAt: new Date("2024-01-02"),
+        track: {
+          id: "track-a",
+          title: "Apple",
+          artist: { id: "artist-2", name: "B" },
+          duration: 200,
+        },
+      },
+    ] as never);
+
+    const result = await fetchQueueSpine("user-1", {
+      context: "playlist",
+      playlistId: "pl-1",
+      sort: "title",
+    });
+
+    expect(result.tracks.map((track) => track.id)).toEqual(["track-a", "track-z"]);
   });
 
   test("returns the full artist discography (no 50-track cap)", async () => {

@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "#app/components/ui/dropdown-menu.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
+import { type PlaylistTrackSortOption } from "#app/utils/playlist-track-sort.ts";
 import { cn } from "#app/utils/misc.tsx";
 import { TrackListItem } from "./track-list-item";
 
@@ -78,6 +79,7 @@ interface SortableTrackItemProps {
   onSelectionChange: (trackId: string, selected: boolean) => void;
   showSelection: boolean;
   playlistId: string;
+  trackSort: PlaylistTrackSortOption;
   /** Render prop for custom per-track action buttons (e.g., library toggle). */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
   allowReorder?: boolean;
@@ -92,6 +94,7 @@ function SortableTrackItem({
   onSelectionChange,
   showSelection,
   playlistId,
+  trackSort,
   itemActions,
   allowReorder = true,
 }: SortableTrackItemProps) {
@@ -167,7 +170,7 @@ function SortableTrackItem({
           track={track.track}
           userTrack={{ createdAt: track.track.createdAt }}
           index={index}
-          playlistContext={{ type: "playlist", playlistId: playlistId }}
+          playlistContext={{ type: "playlist", playlistId, sort: trackSort }}
           playlists={playlists}
           showPlaylistActions={true}
           onRemoveFromPlaylist={() => onRemove(track.id)}
@@ -196,6 +199,7 @@ interface SortableTrackListProps {
   isRemoving?: boolean;
   className?: string;
   playlistId: string;
+  trackSort?: PlaylistTrackSortOption;
   /** Render prop for custom per-track action buttons (e.g., library toggle). */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
   /** When false, drag-and-drop reordering is disabled (e.g. while a non-custom sort is active). */
@@ -215,6 +219,7 @@ export function SortableTrackList({
   isRemoving = false,
   className,
   playlistId,
+  trackSort = "custom",
   itemActions,
   allowReorder = true,
 }: SortableTrackListProps) {
@@ -461,6 +466,7 @@ export function SortableTrackList({
                 onSelectionChange={handleSelectionChange}
                 showSelection={showSelection}
                 playlistId={playlistId}
+                trackSort={trackSort}
                 itemActions={itemActions}
                 allowReorder={allowReorder}
               />

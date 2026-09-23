@@ -61,6 +61,10 @@ import {
 import { useOnlineStatus } from "#app/hooks/use-online-status.ts";
 import { type FullTrack, type QueueTrack } from "#app/types/frontend/shared";
 import { isPlayableTrack } from "#app/utils/playable-track";
+import {
+  parsePlaylistTrackSort,
+  type PlaylistTrackSortOption,
+} from "#app/utils/playlist-track-sort.ts";
 import { AudioPlayer } from "./audio-player";
 import { InstallAppBanner } from "./pwa/install-app-banner";
 
@@ -75,6 +79,8 @@ interface PlaylistContext {
   albumId?: string;
   trackId?: string;
   cursor?: string;
+  /** Active playlist track sort; only meaningful for playlist context. */
+  sort?: PlaylistTrackSortOption;
 }
 
 interface AudioPlayerContextType {
@@ -92,7 +98,7 @@ interface AudioPlayerContextType {
   playTrack: (track: Track, context: PlaylistContext, index?: number) => void;
   playPlaylist: (tracks: Track[], context: PlaylistContext, startIndex?: number) => void;
   playLibrary: () => Promise<void>;
-  playUserPlaylist: (playlistId: string) => Promise<void>;
+  playUserPlaylist: (playlistId: string, sort?: PlaylistTrackSortOption) => Promise<void>;
   playNext: () => void;
   playPrevious: () => void;
   toggleLoop: () => void;
@@ -123,10 +129,42 @@ interface AudioPlayerProviderProps {
   userId?: string | null;
 }
 
+function playlistSortOrCustom(sort: PlaylistTrackSortOption | undefined): PlaylistTrackSortOption {
+  return sort ?? "custom";
+}
+
+function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boolean {
+  if (!a || a.type !== b.type) return false;
+  if (a.playlistId !== b.playlistId) return false;
+  if (a.artistId !== b.artistId) return false;
+  if (a.albumId !== b.albumId) return false;
+  if (a.trackId !== b.trackId) return false;
+  if (a.type === "playlist") {
+    return playlistSortOrCustom(a.sort) === playlistSortOrCustom(b.sort);
+  }
+  return true;
+}
+
+function playlistContextFromJson(context: PlayContextJson | null): PlaylistContext | null {
+  if (!context) return null;
+  if (context.type === "playlist") {
+    return {
+      type: "playlist",
+      playlistId: context.playlistId,
+      sort: parsePlaylistTrackSort(context.sort),
+    };
+  }
+  return context;
+}
+
 function toQueueSpineContext(context: PlaylistContext): QueueSpineContext | null {
   if (context.type === "library") return { type: "library" };
   if (context.type === "playlist" && context.playlistId) {
-    return { type: "playlist", playlistId: context.playlistId };
+    return {
+      type: "playlist",
+      playlistId: context.playlistId,
+      sort: playlistSortOrCustom(context.sort),
+    };
   }
   if (context.type === "artist" && context.artistId) {
     return { type: "artist", artistId: context.artistId };
@@ -145,7 +183,10 @@ function playContextToJson(context: PlaylistContext | null): PlayContextJson | n
   if (!context) return null;
   if (context.type === "library") return { type: "library" };
   if (context.type === "playlist" && context.playlistId) {
-    return { type: "playlist", playlistId: context.playlistId };
+    const sort = playlistSortOrCustom(context.sort);
+    return sort === "custom"
+      ? { type: "playlist", playlistId: context.playlistId }
+      : { type: "playlist", playlistId: context.playlistId, sort };
   }
   if (context.type === "artist" && context.artistId) {
     return { type: "artist", artistId: context.artistId };
@@ -469,14 +510,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
       noteUserQueueMutation();
 
-      if (
-        playContext &&
-        (playContext.type !== context.type ||
-          playContext.playlistId !== context.playlistId ||
-          playContext.artistId !== context.artistId ||
-          playContext.albumId !== context.albumId ||
-          playContext.trackId !== context.trackId)
-      ) {
+      if (playContext && !isSamePlayContext(playContext, context)) {
         resetQueueState();
       }
 
@@ -498,14 +532,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
           ? playableTracks.findIndex((track) => track.id === requestedTrack.id)
           : 0;
 
-        if (
-          playContext &&
-          (playContext.type !== context.type ||
-            playContext.playlistId !== context.playlistId ||
-            playContext.artistId !== context.artistId ||
-            playContext.albumId !== context.albumId ||
-            playContext.trackId !== context.trackId)
-        ) {
+        if (playContext && !isSamePlayContext(playContext, context)) {
           resetQueueState();
         }
 
@@ -594,18 +621,20 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   ]);
 
   const playUserPlaylist = useCallback(
-    async (playlistId: string) => {
+    async (playlistId: string, sort: PlaylistTrackSortOption = "custom") => {
       noteUserQueueMutation();
       setIsLoadingNext(true);
       try {
-        if (playContext?.type !== "playlist" || playContext.playlistId !== playlistId) {
+        const context: PlaylistContext = {
+          type: "playlist",
+          playlistId,
+          sort: playlistSortOrCustom(sort),
+        };
+        if (!isSamePlayContext(playContext, context)) {
           resetQueueState();
         }
 
-        const loadedSpine = await loadSpineForContext({
-          type: "playlist",
-          playlistId,
-        });
+        const loadedSpine = await loadSpineForContext(context);
         if (loadedSpine.tracks.length === 0) return;
 
         const order = buildShuffledOrder(loadedSpine.tracks.length);
@@ -619,7 +648,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         setSpineTotal(loadedSpine.total);
         setSpineOrder(order);
         setSpinePosition(0);
-        setPlayContext({ type: "playlist", playlistId });
+        setPlayContext(context);
         setIsPlayerVisible(true);
 
         await hydrateAround(firstQueueTrack.id);
@@ -638,8 +667,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       hydrateAround,
       loadSpineForContext,
       noteUserQueueMutation,
-      playContext?.playlistId,
-      playContext?.type,
+      playContext,
       resetQueueState,
     ],
   );
@@ -1116,7 +1144,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // player paused (restore-and-wait — no autoplay).
   const restoreQueueFromServer = useCallback(
     async (saved: PlayerStateData) => {
-      const context: PlaylistContext | null = saved.playContext;
+      const context = playlistContextFromJson(saved.playContext);
 
       // Resolve the current track + Up Next ids to full tracks via the playback
       // batch endpoint, which enforces the user's library access and therefore
@@ -1230,7 +1258,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     }
     setCacheVersion((version) => version + 1);
 
-    setPlayContext(saved.playContext);
+    setPlayContext(playlistContextFromJson(saved.playContext));
     setLoopMode(saved.loopMode);
     setShuffleSeed(saved.shuffleSeed);
     setUpNext(resolvedUpNext.map(queueTrackFromFullTrack));
