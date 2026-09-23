@@ -234,6 +234,10 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // at most once.
   const offlineRestoreDoneRef = useRef(false);
   const onlineRestoreDoneRef = useRef(false);
+  // Set immediately before the online restore writes queue state. A slower
+  // offline partial restore must not apply after this — it would wipe the
+  // spine and persist a truncated Up Next (only downloaded ids).
+  const onlineRestoreAppliedRef = useRef(false);
   // Set when the user starts or edits a queue before (or instead of) restore.
   // In-flight restore must not overwrite that session.
   const userMutatedQueueRef = useRef(false);
@@ -248,6 +252,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     playlistFetchEpochRef.current += 1;
     onlineRestoreDoneRef.current = false;
     offlineRestoreDoneRef.current = false;
+    onlineRestoreAppliedRef.current = false;
     userMutatedQueueRef.current = false;
     onlineRestoredForUserIdRef.current = null;
     wantsAutoPlayRef.current = false;
@@ -1220,6 +1225,10 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         saved.shuffleSeed ?? undefined,
       );
 
+      // Claim the queue before writing so a concurrent offline restore cannot
+      // apply a truncated snapshot after these setStates.
+      onlineRestoreAppliedRef.current = true;
+
       setPlayContext(context);
       setLoopMode(saved.loopMode);
       setShuffleSeed(saved.shuffleSeed);
@@ -1292,6 +1301,12 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     for (const track of [currentFullTrack, ...resolvedUpNext]) {
       if (track) playbackCacheRef.current.set(track);
     }
+
+    // Online restore already applied the full queue (or persist is unlocked
+    // after a successful fetch). Applying now would drop undownloaded Up Next
+    // ids and wipe the backfilled spine.
+    if (onlineRestoreAppliedRef.current || onlineRestoreDoneRef.current) return;
+
     setCacheVersion((version) => version + 1);
 
     setPlayContext(saved.playContext);
@@ -1426,7 +1441,13 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // most once, only when the app loads offline (a full online restore has not
   // yet happened).
   useEffect(() => {
-    if (!userId || isOnline || offlineRestoreDoneRef.current || onlineRestoreDoneRef.current) {
+    if (
+      !userId ||
+      isOnline ||
+      offlineRestoreDoneRef.current ||
+      onlineRestoreDoneRef.current ||
+      onlineRestoreAppliedRef.current
+    ) {
       return;
     }
 

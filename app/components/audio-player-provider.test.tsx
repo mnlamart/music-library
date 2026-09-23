@@ -699,6 +699,100 @@ test("reconnect backfills the spine after an offline partial restore", async () 
   expect(screen.getByTestId("up-next-count").textContent).toBe("1");
 });
 
+test("late offline restore does not clobber a completed online restore or persist truncated Up Next", async () => {
+  const fetchMock = vi.mocked(fetch);
+  window.localStorage.clear();
+
+  writeCachedPlayerState("user-1", {
+    playContext: { type: "library" },
+    currentTrackId: "track-1",
+    upNextIds: ["track-2", "track-3"],
+    shuffleSeed: null,
+    loopMode: "off",
+  });
+
+  let resolveDownloaded: ((summaries: Array<Record<string, unknown>>) => void) | undefined;
+  const downloadedPromise = new Promise<Array<Record<string, unknown>>>((resolve) => {
+    resolveDownloaded = resolve;
+  });
+  vi.mocked(getOfflineStorage).mockReturnValue({
+    cacheQueueTrack: vi.fn().mockResolvedValue(undefined),
+    listDownloaded: vi.fn().mockReturnValue(downloadedPromise),
+    listPinned: vi.fn().mockResolvedValue([]),
+    listForPlaylist: vi.fn().mockResolvedValue([]),
+  } as unknown as ReturnType<typeof getOfflineStorage>);
+
+  vi.stubGlobal("navigator", { onLine: false });
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(vi.mocked(getOfflineStorage)().listDownloaded).toHaveBeenCalled();
+  });
+
+  fetchMock.mockImplementation((input) => {
+    const url = String(input);
+    if (url === PLAYER_STATE_ROUTE) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({
+          playContext: { type: "library" },
+          currentTrackId: "track-1",
+          upNextIds: ["track-2", "track-3"],
+          shuffleSeed: null,
+          loopMode: "off",
+        }),
+      } as Response);
+    }
+    if (url.includes("/api/tracks/playback")) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({
+          tracks: [
+            playableTrack,
+            { ...playableTrack, id: "track-2", title: "Up Next Song" },
+            { ...playableTrack, id: "track-3", title: "Later Song" },
+          ],
+        }),
+      } as Response);
+    }
+    if (url.includes("/api/queue-spine")) {
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ tracks: [spineTrack], total: 1 }),
+      } as Response);
+    }
+    return Promise.resolve({ status: 200, ok: true, json: async () => ({}) } as Response);
+  });
+
+  window.dispatchEvent(new Event("online"));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("up-next-count").textContent).toBe("2");
+  });
+
+  resolveDownloaded?.([downloadedSummary("track-1", "Test Song")]);
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(screen.getByTestId("up-next-count").textContent).toBe("2");
+
+  window.dispatchEvent(new Event("pagehide"));
+
+  const puts = persistPutCalls(fetchMock);
+  expect(puts.length).toBeGreaterThan(0);
+  const body = JSON.parse(String((puts[0]?.[1] as RequestInit | undefined)?.body)) as {
+    upNextIds: string[];
+  };
+  expect(body.upNextIds).toEqual(["track-2", "track-3"]);
+});
+
 function persistPutCalls(fetchMock: ReturnType<typeof vi.fn>) {
   return fetchMock.mock.calls.filter((call) => {
     const init = call[1] as RequestInit | undefined;
