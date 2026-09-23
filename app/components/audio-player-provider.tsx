@@ -117,6 +117,14 @@ interface AudioPlayerContextType {
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
 
+const EMPTY_PLAYER_STATE: PlayerStateData = {
+  playContext: null,
+  currentTrackId: null,
+  upNextIds: [],
+  shuffleSeed: null,
+  loopMode: "off",
+};
+
 interface AudioPlayerProviderProps {
   children: ReactNode;
   /** The authenticated user's id, or `null` when signed out. Drives queue persistence + restore. */
@@ -214,15 +222,44 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // Set when the user starts or edits a queue before (or instead of) restore.
   // In-flight restore must not overwrite that session.
   const userMutatedQueueRef = useRef(false);
-  const lastUserIdRef = useRef(userId);
-  if (lastUserIdRef.current !== userId) {
-    lastUserIdRef.current = userId;
+  // Logout/login are client-side actions, so this provider stays mounted in
+  // `root.tsx`. Drop the previous account's in-memory queue immediately — a
+  // later 204 restore would otherwise enable persist while the old tracks are
+  // still in state and write them onto the next user's PlayerState row.
+  const [sessionUserId, setSessionUserId] = useState(userId);
+  if (sessionUserId !== userId) {
+    setSessionUserId(userId);
     restoreEpochRef.current += 1;
-    if (userId && userId !== onlineRestoredForUserIdRef.current) {
-      onlineRestoreDoneRef.current = false;
-      offlineRestoreDoneRef.current = false;
-      userMutatedQueueRef.current = false;
+    playlistFetchEpochRef.current += 1;
+    onlineRestoreDoneRef.current = false;
+    offlineRestoreDoneRef.current = false;
+    userMutatedQueueRef.current = false;
+    onlineRestoredForUserIdRef.current = null;
+    wantsAutoPlayRef.current = false;
+    upNextPlayNextCountRef.current = 0;
+    playbackCacheRef.current.clear();
+    pendingHydrationIdsRef.current.clear();
+    if (hydrationTimerRef.current) {
+      clearTimeout(hydrationTimerRef.current);
+      hydrationTimerRef.current = null;
     }
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    playerStateRef.current = EMPTY_PLAYER_STATE;
+    setCurrentTrack(null);
+    setIsPlayerVisible(false);
+    setUpNext([]);
+    setUpNextPlayNextCount(0);
+    setSpine([]);
+    setSpineTotal(0);
+    setSpineOrder([]);
+    setSpinePosition(0);
+    setPlayContext(null);
+    setLoopMode("off");
+    setShuffleSeed(null);
+    setIsLoadingNext(false);
   }
 
   const [persistEpoch, setPersistEpoch] = useState(0);

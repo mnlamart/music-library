@@ -797,6 +797,133 @@ test("does not persist the previous user's queue after a user switch before rest
   expect(persistPutCalls(fetchMock)).toHaveLength(0);
 });
 
+test("restores the saved queue when the same user logs back in", async () => {
+  const fetchMock = vi.mocked(fetch);
+  mockOnlineRestore(fetchMock);
+
+  const { rerender } = render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  rerender(
+    <AudioPlayerProvider userId={null}>
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+  expect(screen.getByTestId("current-track-id").textContent).toBe("");
+
+  fetchMock.mockClear();
+  mockOnlineRestore(fetchMock);
+
+  rerender(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+  expect(screen.getByTestId("up-next-count").textContent).toBe("1");
+});
+
+test("hides the previous user's queue as soon as the session user changes", async () => {
+  const fetchMock = vi.mocked(fetch);
+  mockOnlineRestore(fetchMock);
+
+  const { rerender } = render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+  expect(screen.getByTestId("player-visible").textContent).toBe("true");
+  expect(screen.getByTestId("up-next-count").textContent).toBe("1");
+
+  // Logout is a client-side action: AudioPlayerProvider stays mounted in root.
+  fetchMock.mockClear();
+  fetchMock.mockImplementation(() => new Promise(() => {}));
+
+  rerender(
+    <AudioPlayerProvider userId={null}>
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  expect(screen.getByTestId("current-track-id").textContent).toBe("");
+  expect(screen.getByTestId("player-visible").textContent).toBe("false");
+  expect(screen.getByTestId("up-next-count").textContent).toBe("0");
+});
+
+test("does not persist the previous user's queue after the next account's empty restore", async () => {
+  const fetchMock = vi.mocked(fetch);
+  mockOnlineRestore(fetchMock);
+
+  const { rerender } = render(
+    <AudioPlayerProvider userId="user-1">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  // User B has no PlayerState. A 204 restore currently enables persist while
+  // user-1's queue is still in memory, so the next PUT would steal that queue.
+  fetchMock.mockClear();
+  fetchMock.mockImplementation((input) => {
+    const url = String(input);
+    if (url === PLAYER_STATE_ROUTE) {
+      return Promise.resolve({
+        status: 204,
+        ok: true,
+        json: async () => null,
+      } as Response);
+    }
+    return Promise.resolve({ status: 200, ok: true, json: async () => ({}) } as Response);
+  });
+
+  rerender(
+    <AudioPlayerProvider userId="user-2">
+      <QueueProbe />
+    </AudioPlayerProvider>,
+  );
+
+  expect(screen.getByTestId("current-track-id").textContent).toBe("");
+  expect(screen.getByTestId("player-visible").textContent).toBe("false");
+
+  await waitFor(() => {
+    const restoreGets = fetchMock.mock.calls.filter((call) => {
+      const init = call[1] as RequestInit | undefined;
+      return String(call[0]) === PLAYER_STATE_ROUTE && init?.method === "GET";
+    });
+    expect(restoreGets.length).toBeGreaterThan(0);
+  });
+
+  // Let the 204 restore mark persist as enabled for user-2, then flush.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  window.dispatchEvent(new Event("pagehide"));
+
+  const stolen = persistPutCalls(fetchMock).some((call) => {
+    const body = JSON.parse(String((call[1] as RequestInit | undefined)?.body ?? "{}")) as {
+      currentTrackId?: string | null;
+      upNextIds?: string[];
+    };
+    return body.currentTrackId === "track-1" || body.upNextIds?.includes("track-2");
+  });
+  expect(stolen).toBe(false);
+});
+
 test("does not replace a user-started queue when restore completes late", async () => {
   const user = userEvent.setup();
   let resolveRestore: ((value: Response) => void) | undefined;
