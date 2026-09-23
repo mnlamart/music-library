@@ -1,6 +1,11 @@
+import { listLibraryQueueSpineTracks } from "#app/features/listening-insights/library-tracks.server.ts";
+import {
+  DEFAULT_LIBRARY_SORT,
+  parseLibrarySort,
+  type LibrarySortOption,
+} from "#app/features/listening-insights/heavy-rotation.ts";
 import { type QueueTrack } from "#app/types/frontend/shared.ts";
 import { prisma } from "#app/utils/db.server.ts";
-import { buildLibraryUserTracksWhere } from "#app/utils/library-user-tracks.server.ts";
 import {
   parsePlaylistTrackSort,
   sortPlaylistTracks,
@@ -21,6 +26,7 @@ export const QUEUE_TRACK_SELECT = {
 type LibrarySpineParams = {
   context: "library";
   hasAudioOnly: true;
+  sort: LibrarySortOption;
 };
 
 type PlaylistSpineParams = {
@@ -69,7 +75,11 @@ export function parseQueueSpineParams(searchParams: URLSearchParams): ParseResul
 
     return {
       ok: true,
-      value: { context: "library", hasAudioOnly: true },
+      value: {
+        context: "library",
+        hasAudioOnly: true,
+        sort: parseLibrarySort(searchParams.get("sort") ?? DEFAULT_LIBRARY_SORT),
+      },
     };
   }
 
@@ -145,20 +155,11 @@ export async function fetchQueueSpine(
   params: QueueSpineParams,
 ): Promise<{ tracks: QueueTrack[]; total: number }> {
   if (params.context === "library") {
-    const userTracks = await prisma.userTrack.findMany({
-      where: buildLibraryUserTracksWhere({
-        userId,
-        hasAudioOnly: params.hasAudioOnly,
-      }),
-      select: {
-        track: {
-          select: QUEUE_TRACK_SELECT,
-        },
-      },
-      orderBy: { createdAt: "desc" },
+    const tracks = await listLibraryQueueSpineTracks({
+      userId,
+      sort: params.sort,
+      hasAudioOnly: params.hasAudioOnly,
     });
-
-    const tracks = userTracks.map((userTrack) => userTrack.track);
     return { tracks, total: tracks.length };
   }
 

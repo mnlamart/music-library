@@ -3,12 +3,17 @@ import { type LoopMode } from "#app/features/queue/queue-navigation.ts";
 import { clampShuffleSeed } from "#app/features/queue/queue-shuffle.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { PLAYLIST_TRACK_SORT_OPTIONS } from "#app/utils/playlist-track-sort.ts";
+import { LIBRARY_SORT_OPTIONS } from "#app/features/listening-insights/heavy-rotation.ts";
 import { type PlayContextJson, type PlayerStateData } from "./player-state.ts";
 
 const playlistSortSchema = z.enum(PLAYLIST_TRACK_SORT_OPTIONS);
+const librarySortSchema = z.enum(LIBRARY_SORT_OPTIONS);
 
 const playContextSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("library") }),
+  z.object({
+    type: z.literal("library"),
+    sort: librarySortSchema.optional(),
+  }),
   z.object({
     type: z.literal("playlist"),
     playlistId: z.string().min(1),

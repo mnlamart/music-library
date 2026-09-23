@@ -64,6 +64,7 @@ interface TrackListItemProps {
     albumId?: string;
     trackId?: string;
     sort?: "custom" | "title" | "artist" | "duration" | "dateAdded";
+    librarySort?: "dateAdded" | "mostPlayedMonth" | "mostPlayedEver";
     snapshotId?: string;
   };
   isDeleted?: boolean;

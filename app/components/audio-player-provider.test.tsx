@@ -172,11 +172,11 @@ function PlaySingleTrackProbe() {
   );
 }
 
-function PlayLibraryProbe() {
+function PlayLibraryProbe({ sort }: { sort?: "dateAdded" | "mostPlayedMonth" | "mostPlayedEver" }) {
   const { playLibrary } = useAudioPlayer();
 
   return (
-    <button type="button" onClick={() => void playLibrary()}>
+    <button type="button" onClick={() => void playLibrary(sort)}>
       Play library
     </button>
   );
@@ -326,6 +326,42 @@ test("playLibrary requests queue spine and hydrates the first track", async () =
   const spineRequestUrl = String(fetchMock.mock.calls[0]?.[0]);
   expect(spineRequestUrl).toContain("/api/queue-spine");
   expect(spineRequestUrl).toContain("hasAudio=1");
+  expect(spineRequestUrl).not.toContain("sort=");
+});
+
+test("playLibrary passes mostPlayed library sort to the queue spine", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.mocked(fetch);
+
+  fetchMock
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tracks: [spineTrack],
+        total: 1,
+      }),
+    } as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ tracks: [playableTrack] }),
+    } as Response);
+
+  render(
+    <AudioPlayerProvider>
+      <PlayLibraryProbe sort="mostPlayedMonth" />
+    </AudioPlayerProvider>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Play library" }));
+
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  const spineRequestUrl = String(fetchMock.mock.calls[0]?.[0]);
+  expect(spineRequestUrl).toContain("/api/queue-spine");
+  expect(spineRequestUrl).toContain("context=library");
+  expect(spineRequestUrl).toContain("sort=mostPlayedMonth");
 });
 
 test("playTrack requests artist queue spine and hydrates playback", async () => {

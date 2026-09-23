@@ -63,6 +63,7 @@ type LibraryTrackListItemProps = {
   track: UserTrack["track"];
   userTrack: UserTrack;
   index: number;
+  librarySort: LibrarySortOption;
   playlists: Array<{
     id: string;
     title: string;
@@ -71,13 +72,20 @@ type LibraryTrackListItemProps = {
   }>;
 };
 
-function LibraryTrackListItem({ track, userTrack, index, playlists }: LibraryTrackListItemProps) {
+function LibraryTrackListItem({
+  track,
+  userTrack,
+  index,
+  librarySort,
+  playlists,
+}: LibraryTrackListItemProps) {
   return (
     <TrackListItem
       track={track}
       userTrack={userTrack}
       index={index}
       playlists={playlists}
+      playlistContext={{ type: "library", librarySort }}
       showAudioFileDownload
     />
   );
@@ -437,6 +445,7 @@ export default function LibraryIndexRoute({
                       track={item.track}
                       userTrack={item}
                       index={itemIndex}
+                      librarySort={sort}
                       playlists={playlists}
                     />
                   </div>

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import { USAGE_EVENT_TYPES } from "#app/features/usage-analytics/record-usage.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { createUser } from "#tests/db-utils.ts";
-import { listLibraryUserTracks } from "./library-tracks.server.ts";
+import { listLibraryQueueSpineTracks, listLibraryUserTracks } from "./library-tracks.server.ts";
 
 async function createTrack(title: string) {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -41,6 +41,48 @@ async function seedCompleted(userId: string, trackId: string, createdAt: Date, c
     });
   }
 }
+
+describe("listLibraryQueueSpineTracks", () => {
+  beforeEach(async () => {
+    await prisma.usageEvent.deleteMany();
+    await prisma.trackAudioFile.deleteMany();
+    await prisma.userTrack.deleteMany();
+    await prisma.track.deleteMany();
+    await prisma.artist.deleteMany();
+    await prisma.session.deleteMany();
+    await prisma.user.deleteMany();
+  });
+
+  test("mostPlayedMonth spine matches library page order with minimal projection", async () => {
+    const user = await prisma.user.create({ data: createUser() });
+    const low = await createTrack("Low");
+    const high = await createTrack("High");
+    const zero = await createTrack("Zero");
+    const now = new Date("2026-09-20T12:00:00.000Z");
+
+    await addToLibrary(user.id, low.id, new Date("2026-01-01T00:00:00.000Z"));
+    await addToLibrary(user.id, high.id, new Date("2026-01-02T00:00:00.000Z"));
+    await addToLibrary(user.id, zero.id, new Date("2026-01-03T00:00:00.000Z"));
+
+    await seedCompleted(user.id, high.id, new Date("2026-09-05T12:00:00.000Z"), 5);
+    await seedCompleted(user.id, low.id, new Date("2026-09-05T12:00:00.000Z"), 1);
+
+    const tracks = await listLibraryQueueSpineTracks({
+      userId: user.id,
+      sort: "mostPlayedMonth",
+      hasAudioOnly: false,
+      now,
+    });
+
+    expect(tracks.map((track) => track.title)).toEqual(["High", "Low", "Zero"]);
+    expect(tracks[0]).toEqual({
+      id: high.id,
+      title: "High",
+      artist: expect.objectContaining({ name: expect.any(String) }),
+    });
+    expect(tracks[0]).not.toHaveProperty("audioFiles");
+  });
+});
 
 describe("listLibraryUserTracks most-played sorts", () => {
   beforeEach(async () => {

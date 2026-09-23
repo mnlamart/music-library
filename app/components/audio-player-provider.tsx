@@ -65,6 +65,11 @@ import {
   parsePlaylistTrackSort,
   type PlaylistTrackSortOption,
 } from "#app/utils/playlist-track-sort.ts";
+import {
+  DEFAULT_LIBRARY_SORT,
+  parseLibrarySort,
+  type LibrarySortOption,
+} from "#app/features/listening-insights/heavy-rotation.ts";
 import { AudioPlayer } from "./audio-player";
 import { InstallAppBanner } from "./pwa/install-app-banner";
 
@@ -89,6 +94,8 @@ interface PlaylistContext {
   cursor?: string;
   /** Active playlist track sort; only meaningful for playlist context. */
   sort?: PlaylistTrackSortOption;
+  /** Active library sort; only meaningful for library context. */
+  librarySort?: LibrarySortOption;
 }
 
 interface AudioPlayerContextType {
@@ -105,7 +112,7 @@ interface AudioPlayerContextType {
   isShuffleEnabled: boolean;
   playTrack: (track: Track, context: PlaylistContext, index?: number) => void;
   playPlaylist: (tracks: Track[], context: PlaylistContext, startIndex?: number) => void;
-  playLibrary: () => Promise<void>;
+  playLibrary: (sort?: LibrarySortOption) => Promise<void>;
   playUserPlaylist: (playlistId: string, sort?: PlaylistTrackSortOption) => Promise<void>;
   playNext: () => void;
   playPrevious: () => void;
@@ -149,6 +156,10 @@ function playlistSortOrCustom(sort: PlaylistTrackSortOption | undefined): Playli
   return sort ?? "custom";
 }
 
+function librarySortOrDefault(sort: LibrarySortOption | undefined): LibrarySortOption {
+  return sort ?? DEFAULT_LIBRARY_SORT;
+}
+
 function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boolean {
   if (!a || a.type !== b.type) return false;
   if (a.playlistId !== b.playlistId) return false;
@@ -158,6 +169,9 @@ function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boole
   if (a.snapshotId !== b.snapshotId) return false;
   if (a.type === "playlist") {
     return playlistSortOrCustom(a.sort) === playlistSortOrCustom(b.sort);
+  }
+  if (a.type === "library") {
+    return librarySortOrDefault(a.librarySort) === librarySortOrDefault(b.librarySort);
   }
   return true;
 }
@@ -171,11 +185,19 @@ function playlistContextFromJson(context: PlayContextJson | null): PlaylistConte
       sort: parsePlaylistTrackSort(context.sort),
     };
   }
+  if (context.type === "library") {
+    return {
+      type: "library",
+      librarySort: parseLibrarySort(context.sort),
+    };
+  }
   return context;
 }
 
 function toQueueSpineContext(context: PlaylistContext): QueueSpineContext | null {
-  if (context.type === "library") return { type: "library" };
+  if (context.type === "library") {
+    return { type: "library", sort: librarySortOrDefault(context.librarySort) };
+  }
   if (context.type === "playlist" && context.playlistId) {
     return {
       type: "playlist",
@@ -201,7 +223,10 @@ function toQueueSpineContext(context: PlaylistContext): QueueSpineContext | null
 /** Reduce a client `PlaylistContext` to the persisted spine-reconstructing subset. */
 function playContextToJson(context: PlaylistContext | null): PlayContextJson | null {
   if (!context) return null;
-  if (context.type === "library") return { type: "library" };
+  if (context.type === "library") {
+    const sort = librarySortOrDefault(context.librarySort);
+    return sort === DEFAULT_LIBRARY_SORT ? { type: "library" } : { type: "library", sort };
+  }
   if (context.type === "playlist" && context.playlistId) {
     const sort = playlistSortOrCustom(context.sort);
     return sort === "custom"
@@ -648,49 +673,56 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     ],
   );
 
-  const playLibrary = useCallback(async () => {
-    noteUserQueueMutation();
-    setIsLoadingNext(true);
-    try {
-      if (playContext?.type !== "library") {
-        resetQueueState();
+  const playLibrary = useCallback(
+    async (sort: LibrarySortOption = DEFAULT_LIBRARY_SORT) => {
+      noteUserQueueMutation();
+      setIsLoadingNext(true);
+      try {
+        const context: PlaylistContext = {
+          type: "library",
+          librarySort: librarySortOrDefault(sort),
+        };
+        if (!isSamePlayContext(playContext, context)) {
+          resetQueueState();
+        }
+
+        const loadedSpine = await loadSpineForContext(context);
+        if (loadedSpine.tracks.length === 0) return;
+
+        const order = buildShuffledOrder(loadedSpine.tracks.length);
+        const firstQueueTrack = loadedSpine.tracks[order[0] ?? 0];
+        if (!firstQueueTrack) return;
+
+        setUpNext([]);
+        setUpNextPlayNextCount(0);
+        upNextPlayNextCountRef.current = 0;
+        setSpine(loadedSpine.tracks);
+        setSpineTotal(loadedSpine.total);
+        setSpineOrder(order);
+        setSpinePosition(0);
+        setPlayContext(context);
+        setIsPlayerVisible(true);
+
+        await hydrateAround(firstQueueTrack.id);
+        const fullTrack = resolveFullTrack(playbackCacheRef.current, firstQueueTrack);
+        if (!isPlayableTrack(fullTrack)) return;
+
+        beginPlayback();
+        setCurrentTrack(fullTrack);
+      } finally {
+        setIsLoadingNext(false);
       }
-
-      const loadedSpine = await loadSpineForContext({ type: "library" });
-      if (loadedSpine.tracks.length === 0) return;
-
-      const order = buildShuffledOrder(loadedSpine.tracks.length);
-      const firstQueueTrack = loadedSpine.tracks[order[0] ?? 0];
-      if (!firstQueueTrack) return;
-
-      setUpNext([]);
-      setUpNextPlayNextCount(0);
-      upNextPlayNextCountRef.current = 0;
-      setSpine(loadedSpine.tracks);
-      setSpineTotal(loadedSpine.total);
-      setSpineOrder(order);
-      setSpinePosition(0);
-      setPlayContext({ type: "library" });
-      setIsPlayerVisible(true);
-
-      await hydrateAround(firstQueueTrack.id);
-      const fullTrack = resolveFullTrack(playbackCacheRef.current, firstQueueTrack);
-      if (!isPlayableTrack(fullTrack)) return;
-
-      beginPlayback();
-      setCurrentTrack(fullTrack);
-    } finally {
-      setIsLoadingNext(false);
-    }
-  }, [
-    beginPlayback,
-    buildShuffledOrder,
-    hydrateAround,
-    loadSpineForContext,
-    noteUserQueueMutation,
-    playContext?.type,
-    resetQueueState,
-  ]);
+    },
+    [
+      beginPlayback,
+      buildShuffledOrder,
+      hydrateAround,
+      loadSpineForContext,
+      noteUserQueueMutation,
+      playContext,
+      resetQueueState,
+    ],
+  );
 
   const playUserPlaylist = useCallback(
     async (playlistId: string, sort: PlaylistTrackSortOption = "custom") => {
