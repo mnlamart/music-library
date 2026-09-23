@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { getRecentlyPlayedTracks } from "#app/features/recently-played/recently-played.server.ts";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { getWeeklyWrap } from "#app/features/weekly-wrap/weekly-wrap.server.ts";
 import { getUserId } from "#app/utils/auth.server.ts";
@@ -44,6 +45,10 @@ vi.mock("#app/features/service-playlist/service-playlist.server.ts", () => ({
   createServicePlaylistService: vi.fn(() => ({
     getSyncedPlaylists: vi.fn().mockResolvedValue([]),
   })),
+}));
+
+vi.mock("#app/features/recently-played/recently-played.server.ts", () => ({
+  getRecentlyPlayedTracks: vi.fn(),
 }));
 
 vi.mock("#app/features/weekly-wrap/weekly-wrap.server.ts", () => ({
@@ -96,6 +101,7 @@ describe("loadHomeData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(prisma.userPlaylistTrack.findMany).mockResolvedValue([]);
+    vi.mocked(getRecentlyPlayedTracks).mockResolvedValue([]);
     vi.mocked(getWeeklyWrap).mockResolvedValue(null);
   });
 
@@ -176,9 +182,44 @@ describe("loadHomeData", () => {
       totalTracks: 4,
       playableTracks: 2,
       archivingCount: 2,
+      recentlyPlayed: [],
       weeklyWrap: { finishes: 5, uniqueTracks: 3, dayStreak: 2 },
     });
+    expect(getRecentlyPlayedTracks).toHaveBeenCalledWith({ userId: "user-1" });
     expect(getWeeklyWrap).toHaveBeenCalledWith("user-1");
+  });
+
+  test("includes recentlyPlayed tracks from play_completed query", async () => {
+    const recentlyPlayed = [
+      {
+        playedAt: new Date("2026-09-23T12:00:00.000Z"),
+        track: {
+          id: "track-1",
+          title: "Finished Song",
+          duration: 180,
+          serviceUrl: null,
+          artist: { id: "a1", name: "Artist" },
+          coverImage: null,
+          service: null,
+          audioFiles: [],
+        },
+      },
+    ];
+    vi.mocked(getUserId).mockResolvedValue("user-1");
+    vi.mocked(prisma.userTrack.count).mockResolvedValueOnce(4).mockResolvedValueOnce(2);
+    vi.mocked(prisma.userPlaylist.count).mockResolvedValue(0);
+    vi.mocked(prisma.userTrack.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.userPlaylist.findMany).mockResolvedValue([]);
+    vi.mocked(getRecentlyPlayedTracks).mockResolvedValue(recentlyPlayed);
+    vi.mocked(prisma.service.findUnique).mockResolvedValue(null);
+
+    const result = unwrapHomeData(await loadHomeData(new Request("http://localhost/")));
+
+    expect(result).toMatchObject({
+      mode: "listening",
+      recentlyPlayed,
+    });
+    expect(getRecentlyPlayedTracks).toHaveBeenCalledWith({ userId: "user-1" });
   });
 
   test("attaches full playlist duration while keeping cover preview tracks", async () => {

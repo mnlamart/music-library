@@ -32,6 +32,20 @@ vi.mock("#app/components/home/home-recent-track-row.tsx", () => ({
   HomeRecentTrackRow: () => <div>Recent tracks row</div>,
 }));
 
+vi.mock("#app/components/home/home-recent-playlist-row.tsx", () => ({
+  HomeRecentPlaylistRow: () => <div>Recent playlists row</div>,
+}));
+
+vi.mock("#app/components/home/recently-played-strip.tsx", () => ({
+  RecentlyPlayedStrip: ({ tracks }: { tracks: Array<{ track: { title: string } }> }) =>
+    tracks.length === 0 ? null : (
+      <section>
+        <h2>Recently played</h2>
+        <div>{tracks.map((t) => t.track.title).join(", ")}</div>
+      </section>
+    ),
+}));
+
 const baseListeningData: HomeListeningData = {
   mode: "listening",
   totalTracks: 4,
@@ -42,6 +56,7 @@ const baseListeningData: HomeListeningData = {
     totalPlaylists: 1,
   },
   recentTracks: [],
+  recentlyPlayed: [],
   recentPlaylists: [],
   weeklyWrap: null,
   youtubeData: Promise.resolve({
@@ -123,4 +138,40 @@ test("omits weekly wrap when summary is null", async () => {
 
   await screen.findByRole("button", { name: /play library/i });
   expect(screen.queryByTestId("weekly-wrap")).not.toBeInTheDocument();
+});
+
+test("omits Recently played strip when recentlyPlayed is empty", async () => {
+  renderListening({ showArchivingBanner: false, recentlyPlayed: [] });
+
+  await screen.findByRole("heading", { name: /^home$/i });
+  expect(screen.queryByRole("heading", { name: /recently played/i })).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /recent playlists/i })).toBeInTheDocument();
+});
+
+test("places Recently played strip above recent playlists when non-empty", async () => {
+  renderListening({
+    showArchivingBanner: false,
+    recentlyPlayed: [
+      {
+        playedAt: new Date("2026-09-23T12:00:00.000Z"),
+        track: {
+          id: "track-1",
+          title: "Finished Song",
+          duration: 180,
+          serviceUrl: null,
+          artist: { id: "a1", name: "Artist" },
+          coverImage: null,
+          service: null,
+          audioFiles: [{ id: "af-1", format: "mp3", objectKey: "a.mp3" }],
+        },
+      },
+    ],
+  });
+
+  const recentlyPlayed = await screen.findByRole("heading", { name: /recently played/i });
+  const recentPlaylists = screen.getByRole("heading", { name: /recent playlists/i });
+  expect(
+    recentlyPlayed.compareDocumentPosition(recentPlaylists) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(screen.getByText("Finished Song")).toBeInTheDocument();
 });
