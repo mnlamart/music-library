@@ -36,6 +36,7 @@ export type LibraryOfflineLoaderData = {
   pagination: { limit: number; hasNext: false; nextCursor: null };
   hasAudioOnly: false;
   sort: "dateAdded";
+  direction: "desc";
   playlists: [];
 };
 
@@ -162,6 +163,7 @@ export const OFFLINE_ROUTE_POLICIES: Record<string, StubEntry> = {
       pagination: { limit: LIBRARY_TRACKS_PAGE_SIZE, hasNext: false, nextCursor: null },
       hasAudioOnly: false,
       sort: "dateAdded" as const,
+      direction: "desc" as const,
       playlists: [],
     } satisfies LibraryOfflineLoaderData;
   }),

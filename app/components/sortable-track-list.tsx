@@ -80,6 +80,7 @@ interface SortableTrackItemProps {
   showSelection: boolean;
   playlistId: string;
   trackSort: PlaylistTrackSortOption;
+  sortDirection?: "asc" | "desc";
   /** Render prop for custom per-track action buttons (e.g., library toggle). */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
   allowReorder?: boolean;
@@ -95,6 +96,7 @@ function SortableTrackItem({
   showSelection,
   playlistId,
   trackSort,
+  sortDirection,
   itemActions,
   allowReorder = true,
 }: SortableTrackItemProps) {
@@ -170,7 +172,12 @@ function SortableTrackItem({
           track={track.track}
           userTrack={{ createdAt: track.track.createdAt }}
           index={index}
-          playlistContext={{ type: "playlist", playlistId, sort: trackSort }}
+          playlistContext={{
+            type: "playlist",
+            playlistId,
+            sort: trackSort,
+            sortDirection,
+          }}
           playlists={playlists}
           showPlaylistActions={true}
           onRemoveFromPlaylist={() => onRemove(track.id)}
@@ -200,6 +207,7 @@ interface SortableTrackListProps {
   className?: string;
   playlistId: string;
   trackSort?: PlaylistTrackSortOption;
+  sortDirection?: "asc" | "desc";
   /** Render prop for custom per-track action buttons (e.g., library toggle). */
   itemActions?: (props: { trackId: string; isInLibrary: boolean; isDeleted: boolean }) => ReactNode;
   /** When false, drag-and-drop reordering is disabled (e.g. while a non-custom sort is active). */
@@ -220,6 +228,7 @@ export function SortableTrackList({
   className,
   playlistId,
   trackSort = "custom",
+  sortDirection,
   itemActions,
   allowReorder = true,
 }: SortableTrackListProps) {
@@ -467,6 +476,7 @@ export function SortableTrackList({
                 showSelection={showSelection}
                 playlistId={playlistId}
                 trackSort={trackSort}
+                sortDirection={sortDirection}
                 itemActions={itemActions}
                 allowReorder={allowReorder}
               />

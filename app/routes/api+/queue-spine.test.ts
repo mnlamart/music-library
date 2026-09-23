@@ -42,7 +42,12 @@ describe("queue-spine API loader", () => {
   test("returns library spine", async () => {
     vi.mocked(parseQueueSpineParams).mockReturnValue({
       ok: true,
-      value: { context: "library", hasAudioOnly: true, sort: "dateAdded" },
+      value: {
+        context: "library",
+        hasAudioOnly: true,
+        sort: "dateAdded",
+        direction: "desc",
+      },
     });
     vi.mocked(fetchQueueSpine).mockResolvedValue({
       tracks: [
@@ -64,6 +69,7 @@ describe("queue-spine API loader", () => {
       context: "library",
       hasAudioOnly: true,
       sort: "dateAdded",
+      direction: "desc",
     });
     const body = (await response.json()) as {
       tracks: Array<Record<string, unknown>>;
@@ -85,7 +91,12 @@ describe("queue-spine API loader", () => {
   test("returns empty library spine", async () => {
     vi.mocked(parseQueueSpineParams).mockReturnValue({
       ok: true,
-      value: { context: "library", hasAudioOnly: true, sort: "dateAdded" },
+      value: {
+        context: "library",
+        hasAudioOnly: true,
+        sort: "dateAdded",
+        direction: "desc",
+      },
     });
     vi.mocked(fetchQueueSpine).mockResolvedValue({
       tracks: [],
@@ -114,7 +125,12 @@ describe("queue-spine API loader", () => {
   test("returns playlist spine", async () => {
     vi.mocked(parseQueueSpineParams).mockReturnValue({
       ok: true,
-      value: { context: "playlist", playlistId: "pl-1", sort: "custom" },
+      value: {
+        context: "playlist",
+        playlistId: "pl-1",
+        sort: "custom",
+        direction: "asc",
+      },
     });
     vi.mocked(fetchQueueSpine).mockResolvedValue({
       tracks: [
@@ -136,6 +152,7 @@ describe("queue-spine API loader", () => {
       context: "playlist",
       playlistId: "pl-1",
       sort: "custom",
+      direction: "asc",
     });
     const body = (await response.json()) as {
       tracks: Array<Record<string, unknown>>;

@@ -3,6 +3,7 @@ import { data, NavLink, useFetcher, useSearchParams } from "react-router";
 import { InfiniteScrollSentinel } from "#app/components/infinite-scroll-sentinel.tsx";
 import { OfflinePlaylistsIndexView } from "#app/components/offline/offline-playlists-index-view.tsx";
 import { PlaylistCard } from "#app/components/playlist-card";
+import { SortDirectionToggle } from "#app/components/sort-direction-toggle.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { Input } from "#app/components/ui/input.tsx";
@@ -17,27 +18,53 @@ import { type PlaylistsIndexOfflineLoaderData } from "#app/features/offline-app/
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { cn } from "#app/utils/misc.tsx";
+import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
 import { type Prisma } from "#prisma/client.js";
 import { type Route } from "./+types/playlists.index.ts";
 
 const SORT_OPTIONS = ["name", "created", "updated", "tracks"] as const;
 type SortOption = (typeof SORT_OPTIONS)[number];
 
-const SORT_ORDER: Record<SortOption, Prisma.UserPlaylistOrderByWithRelationInput[]> = {
-  updated: [{ updatedAt: "desc" }, { id: "desc" }],
-  created: [{ createdAt: "desc" }, { id: "desc" }],
-  name: [{ title: "asc" }, { id: "asc" }],
-  tracks: [{ tracks: { _count: "desc" } }, { id: "desc" }],
+const SORT_DEFAULT_DIRECTION: Record<SortOption, SortDirection> = {
+  updated: "desc",
+  created: "desc",
+  name: "asc",
+  tracks: "desc",
 };
 
 function parseSort(raw: string | null): SortOption {
   return SORT_OPTIONS.includes(raw as SortOption) ? (raw as SortOption) : "updated";
 }
 
+function defaultDirectionForSort(sort: SortOption): SortDirection {
+  return SORT_DEFAULT_DIRECTION[sort];
+}
+
+function resolveDirection(sort: SortOption, raw: string | null): SortDirection {
+  return parseSortDirection(raw, defaultDirectionForSort(sort));
+}
+
+function sortOrder(
+  sort: SortOption,
+  direction: SortDirection,
+): Prisma.UserPlaylistOrderByWithRelationInput[] {
+  switch (sort) {
+    case "updated":
+      return [{ updatedAt: direction }, { id: direction }];
+    case "created":
+      return [{ createdAt: direction }, { id: direction }];
+    case "name":
+      return [{ title: direction }, { id: direction }];
+    case "tracks":
+      return [{ tracks: { _count: direction } }, { id: direction }];
+  }
+}
+
 export async function loader({ request, url }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
 
   const sort = parseSort(url.searchParams.get("sort"));
+  const direction = resolveDirection(sort, url.searchParams.get("dir"));
   const q = (url.searchParams.get("q") ?? "").trim();
   const cursor = url.searchParams.get("cursor") || undefined;
 
@@ -90,7 +117,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
         orderBy: { position: "asc" },
       },
     },
-    orderBy: SORT_ORDER[sort],
+    orderBy: sortOrder(sort, direction),
     take: limit + 1,
     cursor: cursor ? { id: cursor } : undefined,
     skip: cursor ? 1 : undefined,
@@ -108,6 +135,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
       nextCursor,
     },
     sort,
+    direction,
     q,
   });
 }
@@ -130,6 +158,7 @@ export default function PlaylistsIndexRoute({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const sort = parseSort(searchParams.get("sort"));
+  const direction = resolveDirection(sort, searchParams.get("dir"));
   const q = searchParams.get("q") ?? "";
 
   const initialPlaylists = loaderData.playlists;
@@ -152,13 +181,13 @@ export default function PlaylistsIndexRoute({
   // Append the next page once the fetcher finishes (skip stale responses).
   useEffect(() => {
     const next = fetcher.data;
-    if (!next || next.sort !== sort || next.q !== q) return;
+    if (!next || next.sort !== sort || next.direction !== direction || next.q !== q) return;
     setItems((prev) => {
       const seen = new Set(prev.map((playlist) => playlist.id));
       return [...prev, ...next.playlists.filter((playlist) => !seen.has(playlist.id))];
     });
     setPagination(next.pagination);
-  }, [fetcher.data, sort, q]);
+  }, [fetcher.data, sort, direction, q]);
 
   // Keep the search box in sync with the URL (e.g. back/forward navigation).
   useEffect(() => {
@@ -195,6 +224,9 @@ export default function PlaylistsIndexRoute({
       limit: String(pagination.limit),
       sort,
     });
+    if (direction !== defaultDirectionForSort(sort)) {
+      params.set("dir", direction);
+    }
     if (q) params.set("q", q);
     fetcher.load(`/playlists?${params.toString()}`);
   };
@@ -213,7 +245,20 @@ export default function PlaylistsIndexRoute({
   };
 
   const handleSortChange = (value: SortOption) => {
-    resetToFirstPage((params) => params.set("sort", value));
+    resetToFirstPage((params) => {
+      params.set("sort", value);
+      params.delete("dir");
+    });
+  };
+
+  const handleDirectionChange = (next: SortDirection) => {
+    resetToFirstPage((params) => {
+      if (next === defaultDirectionForSort(sort)) {
+        params.delete("dir");
+      } else {
+        params.set("dir", next);
+      }
+    });
   };
 
   const handleSearchChange = (value: string) => {
@@ -268,17 +313,24 @@ export default function PlaylistsIndexRoute({
         </div>
 
         {/* Sort */}
-        <Select value={sort} onValueChange={(value: SortOption) => handleSortChange(value)}>
-          <SelectTrigger className="w-full sm:w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="updated">Recently Updated</SelectItem>
-            <SelectItem value="created">Recently Created</SelectItem>
-            <SelectItem value="name">Name</SelectItem>
-            <SelectItem value="tracks">Track Count</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={sort} onValueChange={(value: SortOption) => handleSortChange(value)}>
+            <SelectTrigger className="w-full sm:w-40" aria-label="Sort playlists">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="updated">Recently Updated</SelectItem>
+              <SelectItem value="created">Recently Created</SelectItem>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="tracks">Track Count</SelectItem>
+            </SelectContent>
+          </Select>
+          <SortDirectionToggle
+            value={direction}
+            onValueChange={handleDirectionChange}
+            aria-label="Playlist sort direction"
+          />
+        </div>
 
         {/* View Toggle */}
         <div className="flex rounded-lg border p-1">
