@@ -857,15 +857,17 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
       <div className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-2xl font-bold">Tracks</h2>
-          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <Icon name="file-text" className="h-4 w-4" />
-            <span>
-              {optimisticTracks.length} track{optimisticTracks.length !== 1 ? "s" : ""}
-            </span>
-            {(reorderFetcher.state === "submitting" ||
-              removeTrackFetcher.state === "submitting") && (
-              <Icon name="update" className="h-3 w-3 animate-spin text-primary" />
-            )}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Icon name="file-text" className="h-4 w-4" />
+              <span>
+                {optimisticTracks.length} track{optimisticTracks.length !== 1 ? "s" : ""}
+              </span>
+              {(reorderFetcher.state === "submitting" ||
+                removeTrackFetcher.state === "submitting") && (
+                <Icon name="update" className="h-3 w-3 animate-spin text-primary" />
+              )}
+            </div>
             <Select
               value={trackSort}
               onValueChange={(value) => {
@@ -885,12 +887,13 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
                 <SelectItem value="dateAdded">Date added</SelectItem>
               </SelectContent>
             </Select>
-            <SortDirectionToggle
-              value={trackSortDirection}
-              onValueChange={setTrackSortDirection}
-              disabled={trackSort === "custom"}
-              aria-label="Track sort direction"
-            />
+            {trackSort !== "custom" ? (
+              <SortDirectionToggle
+                value={trackSortDirection}
+                onValueChange={setTrackSortDirection}
+                aria-label="Track sort direction"
+              />
+            ) : null}
           </div>
         </div>
 
@@ -909,6 +912,7 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
           </div>
         ) : (
           <SortableTrackList
+            key={`${trackSort}-${trackSortDirection}`}
             tracks={displayedTracks.map((pt) =>
               Object.assign({}, pt, {
                 track: Object.assign({}, pt.track, {

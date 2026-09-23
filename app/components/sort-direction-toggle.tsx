@@ -30,7 +30,7 @@ export function SortDirectionToggle({
       type="button"
       variant="outline"
       size="icon"
-      className={cn("shrink-0", className)}
+      className={cn("shrink-0 text-foreground", className)}
       disabled={disabled}
       aria-label={`${ariaLabel}: ${label}. Click for ${next === "asc" ? "ascending" : "descending"}`}
       title={label}
