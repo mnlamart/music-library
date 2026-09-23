@@ -73,6 +73,9 @@ describe("generateOfflineShellHtml", () => {
     expect(html).toContain("streamController.enqueue");
     expect(html).toContain("/assets/manifest-8c19c2c9.js");
     expect(html).toContain('import("/assets/entry.client-DfG4YbEa.js")');
+    // clip (not hidden): avoid making <html> a scroll container that breaks position:fixed
+    expect(html).toContain("overflow-x-clip");
+    expect(html).not.toContain("overflow-x-hidden");
   });
 
   test("includes a visible splash before client JS loads", async () => {

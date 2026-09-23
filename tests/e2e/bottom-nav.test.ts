@@ -97,4 +97,36 @@ test.describe("Bottom Navigation", () => {
     // The search bar (searchbox) should NOT be in the header
     await expect(header.getByRole("searchbox")).not.toBeVisible();
   });
+
+  test("bottom nav stays fixed to the viewport while scrolling", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto("/");
+    await dismissInstallBanner(page);
+
+    // overflow-x: hidden on <html> creates a scroll container that re-anchors
+    // position:fixed chrome to the document (especially on mobile WebKit).
+    // clip clips horizontal overflow without that containing-block side effect.
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).overflowX))
+      .toBe("clip");
+
+    const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
+    await expect(bottomNav).toBeVisible();
+
+    const distanceFromViewportBottom = async () =>
+      page.evaluate(
+        (nav) => {
+          const rect = (nav as HTMLElement).getBoundingClientRect();
+          return Math.abs(window.innerHeight - rect.bottom);
+        },
+        await bottomNav.elementHandle(),
+      );
+
+    expect(await distanceFromViewportBottom()).toBeLessThan(2);
+
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(200);
+
+    expect(await distanceFromViewportBottom()).toBeLessThan(2);
+  });
 });

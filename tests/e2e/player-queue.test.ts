@@ -663,4 +663,69 @@ test.describe("Player / Queue", () => {
     await expect(page.getByText("Add to Queue")).toBeVisible();
     await expect(page.getByText("Track Details")).toBeVisible();
   });
+
+  // ─────────────────────────────────────────────────
+  // Mini-player stays viewport-fixed while scrolling
+  // ─────────────────────────────────────────────────
+  test("mini player and bottom nav stay fixed while scrolling on mobile", async ({
+    page,
+    login,
+    insertNewTrack,
+  }) => {
+    const user = await login();
+    const track = await insertNewTrack({ title: "Sticky Player Track" }, user.id);
+    await testPrisma.trackAudioFile.create({
+      data: {
+        trackId: track.id,
+        objectKey: "audio/test-sticky-player.mp3",
+        format: "mp3",
+        mimeType: "audio/mpeg",
+      },
+    });
+
+    await page.setViewportSize({ width: 375, height: 667 });
+    await playTrackFromLibrary(page, "Sticky Player Track");
+    await dismissOverlays(page);
+
+    const miniBar = page.getByTestId("player-mini-bar");
+    await expect(miniBar).toBeVisible({ timeout: 10000 });
+
+    const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
+    await expect(bottomNav).toBeVisible();
+
+    // Fixed chrome is anchored to the viewport, not the document scroll position.
+    // Measure the fixed player wrapper (parent of the mini-bar) and the nav.
+    const chromeBottomGaps = async () =>
+      page.evaluate(() => {
+        const mini = document.querySelector('[data-testid="player-mini-bar"]');
+        const player = mini?.parentElement;
+        const nav = document.querySelector('[role="navigation"][aria-label="Main navigation"]');
+        if (!player || !nav) return null;
+        const playerRect = player.getBoundingClientRect();
+        const navRect = nav.getBoundingClientRect();
+        return {
+          playerGap: Math.abs(window.innerHeight - playerRect.bottom),
+          navGap: Math.abs(window.innerHeight - navRect.bottom),
+          scrollY: window.scrollY,
+        };
+      });
+
+    const before = await chromeBottomGaps();
+    expect(before).not.toBeNull();
+    expect(before!.navGap).toBeLessThan(2);
+    // Player sits above the nav (bottom-16); its bottom should still be near the viewport.
+    expect(before!.playerGap).toBeLessThan(80);
+
+    await page.evaluate(() => window.scrollBy(0, 600));
+    await page.waitForTimeout(200);
+
+    const after = await chromeBottomGaps();
+    expect(after).not.toBeNull();
+    expect(after!.scrollY).toBeGreaterThan(100);
+    expect(after!.navGap).toBeLessThan(2);
+    expect(after!.playerGap).toBeLessThan(80);
+    // Gaps must not grow as the page scrolls (would mean chrome scrolled with content).
+    expect(Math.abs(after!.navGap - before!.navGap)).toBeLessThan(2);
+    expect(Math.abs(after!.playerGap - before!.playerGap)).toBeLessThan(2);
+  });
 });
