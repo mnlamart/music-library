@@ -1,4 +1,5 @@
 import { type FullTrack, type QueueTrack } from "#app/types/frontend/shared.ts";
+import { type PlaylistTrackSortOption } from "#app/utils/playlist-track-sort.ts";
 
 export class AuthExpiredError extends Error {
   constructor() {
@@ -9,7 +10,7 @@ export class AuthExpiredError extends Error {
 
 export type QueueSpineContext =
   | { type: "library" }
-  | { type: "playlist"; playlistId: string }
+  | { type: "playlist"; playlistId: string; sort?: PlaylistTrackSortOption }
   | { type: "artist"; artistId: string }
   | { type: "album"; albumId: string }
   | { type: "track"; trackId: string }
@@ -26,7 +27,14 @@ export async function fetchQueueSpine(context: QueueSpineContext): Promise<Queue
   if (context.type === "library") {
     url = "/api/queue-spine?context=library&hasAudio=1";
   } else if (context.type === "playlist") {
-    url = `/api/queue-spine?context=playlist&playlistId=${encodeURIComponent(context.playlistId)}`;
+    const params = new URLSearchParams({
+      context: "playlist",
+      playlistId: context.playlistId,
+    });
+    if (context.sort && context.sort !== "custom") {
+      params.set("sort", context.sort);
+    }
+    url = `/api/queue-spine?${params.toString()}`;
   } else if (context.type === "artist") {
     url = `/api/queue-spine?context=artist&artistId=${encodeURIComponent(context.artistId)}`;
   } else if (context.type === "album") {

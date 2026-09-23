@@ -60,6 +60,22 @@ describe("fetchQueueSpine", () => {
 
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("context=playlist");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("playlistId=pl-1");
+    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("sort=");
+  });
+
+  test("requests playlist spine with sort when not custom", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ tracks: [], total: 0 }),
+    } as Response);
+
+    await fetchQueueSpine({ type: "playlist", playlistId: "pl-1", sort: "title" });
+
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    expect(url).toContain("context=playlist");
+    expect(url).toContain("playlistId=pl-1");
+    expect(url).toContain("sort=title");
   });
 
   test("throws AuthExpiredError on redirect (302) response", async () => {

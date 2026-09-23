@@ -8,7 +8,12 @@ import { type LoopMode } from "#app/features/queue/queue-navigation.ts";
  */
 export type PlayContextJson =
   | { type: "library" }
-  | { type: "playlist"; playlistId: string }
+  | {
+      type: "playlist";
+      playlistId: string;
+      /** Omitted or `custom` means playlist position order. */
+      sort?: "custom" | "title" | "artist" | "duration" | "dateAdded";
+    }
   | { type: "artist"; artistId: string }
   | { type: "album"; albumId: string }
   | { type: "track"; trackId: string }

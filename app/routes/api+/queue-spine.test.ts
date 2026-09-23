@@ -113,7 +113,7 @@ describe("queue-spine API loader", () => {
   test("returns playlist spine", async () => {
     vi.mocked(parseQueueSpineParams).mockReturnValue({
       ok: true,
-      value: { context: "playlist", playlistId: "pl-1" },
+      value: { context: "playlist", playlistId: "pl-1", sort: "custom" },
     });
     vi.mocked(fetchQueueSpine).mockResolvedValue({
       tracks: [
@@ -134,6 +134,7 @@ describe("queue-spine API loader", () => {
     expect(fetchQueueSpine).toHaveBeenCalledWith("user-1", {
       context: "playlist",
       playlistId: "pl-1",
+      sort: "custom",
     });
     const body = (await response.json()) as {
       tracks: Array<Record<string, unknown>>;

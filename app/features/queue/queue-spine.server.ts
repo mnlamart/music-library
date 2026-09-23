@@ -1,6 +1,11 @@
 import { type QueueTrack } from "#app/types/frontend/shared.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { buildLibraryUserTracksWhere } from "#app/utils/library-user-tracks.server.ts";
+import {
+  parsePlaylistTrackSort,
+  sortPlaylistTracks,
+  type PlaylistTrackSortOption,
+} from "#app/utils/playlist-track-sort.ts";
 
 export const QUEUE_TRACK_SELECT = {
   id: true,
@@ -21,6 +26,7 @@ type LibrarySpineParams = {
 type PlaylistSpineParams = {
   context: "playlist";
   playlistId: string;
+  sort: PlaylistTrackSortOption;
 };
 
 type ArtistSpineParams = {
@@ -75,7 +81,11 @@ export function parseQueueSpineParams(searchParams: URLSearchParams): ParseResul
 
     return {
       ok: true,
-      value: { context: "playlist", playlistId },
+      value: {
+        context: "playlist",
+        playlistId,
+        sort: parsePlaylistTrackSort(searchParams.get("sort")),
+      },
     };
   }
 
@@ -159,14 +169,24 @@ export async function fetchQueueSpine(
         playlist: { ownerId: userId },
       },
       select: {
+        position: true,
+        createdAt: true,
         track: {
-          select: QUEUE_TRACK_SELECT,
+          select: {
+            ...QUEUE_TRACK_SELECT,
+            duration: true,
+          },
         },
       },
       orderBy: { position: "asc" },
     });
 
-    const tracks = playlistTracks.map((playlistTrack) => playlistTrack.track);
+    const sorted = sortPlaylistTracks(playlistTracks, params.sort);
+    const tracks = sorted.map((playlistTrack) => ({
+      id: playlistTrack.track.id,
+      title: playlistTrack.track.title,
+      artist: playlistTrack.track.artist,
+    }));
     return { tracks, total: tracks.length };
   }
 

@@ -4,6 +4,7 @@ import {
   type HeavyRotationTrack,
   type LibrarySortOption,
 } from "#app/features/listening-insights/index.ts";
+import { isPlayableTrack } from "#app/utils/playable-track.ts";
 
 type HeavyRotationStripProps = {
   title: string;
@@ -18,6 +19,8 @@ type HeavyRotationStripProps = {
  */
 export function HeavyRotationStrip({ title, tracks, librarySort }: HeavyRotationStripProps) {
   if (tracks.length === 0) return null;
+
+  const playableTracks = tracks.map((item) => item.track).filter(isPlayableTrack);
 
   return (
     <section className="mb-10">
@@ -40,6 +43,7 @@ export function HeavyRotationStrip({ title, tracks, librarySort }: HeavyRotation
                 track: item.track,
               }}
               index={index}
+              playableTracks={playableTracks}
             />
           </div>
         ))}

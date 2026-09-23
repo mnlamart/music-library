@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { HomeRecentTrackCard } from "#app/components/home/home-recent-track-card.tsx";
 import { type RecentlyPlayedTrack } from "#app/features/recently-played/recently-played.server.ts";
+import { isPlayableTrack } from "#app/utils/playable-track.ts";
 
 type RecentlyPlayedStripProps = {
   tracks: RecentlyPlayedTrack[];
@@ -12,6 +13,8 @@ type RecentlyPlayedStripProps = {
  */
 export function RecentlyPlayedStrip({ tracks }: RecentlyPlayedStripProps) {
   if (tracks.length === 0) return null;
+
+  const playableTracks = tracks.map((item) => item.track).filter(isPlayableTrack);
 
   return (
     <section className="mb-10" aria-labelledby="recently-played-heading">
@@ -33,6 +36,7 @@ export function RecentlyPlayedStrip({ tracks }: RecentlyPlayedStripProps) {
                 track: item.track,
               }}
               index={index}
+              playableTracks={playableTracks}
             />
           </div>
         ))}

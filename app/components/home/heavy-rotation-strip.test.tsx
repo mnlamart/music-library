@@ -11,7 +11,7 @@ vi.mock("#app/components/audio-player-provider.tsx", () => ({
   useAudioPlayer: () => ({
     currentTrack: null,
     currentIndex: 0,
-    playTrack: vi.fn(),
+    playPlaylist: vi.fn(),
   }),
 }));
 
