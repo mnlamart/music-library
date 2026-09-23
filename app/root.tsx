@@ -183,8 +183,12 @@ function Document({
   env?: Record<string, string | undefined>;
 }) {
   const allowIndexing = ENV.ALLOW_INDEXING !== "false";
+  // overflow-x-clip (not hidden): hidden on <html> makes it a scroll container,
+  // which re-anchors position:fixed chrome (player, bottom nav) to the document
+  // so they scroll mid-page on mobile WebKit. clip still prevents horizontal
+  // overflow without that containing-block side effect.
   return (
-    <html lang="en" className={`${theme} h-full overflow-x-hidden`}>
+    <html lang="en" className={`${theme} h-full overflow-x-clip`}>
       <head>
         <ClientHintCheck nonce={nonce} />
         <Meta />
