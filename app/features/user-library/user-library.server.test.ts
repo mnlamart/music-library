@@ -115,11 +115,12 @@ describe("user-library", () => {
   describe("addTracksToUserLibrary", () => {
     test("creates many UserTracks in one transaction", async () => {
       vi.mocked(prisma.userTrack.findMany).mockResolvedValue([]);
+      const createMany = vi.fn().mockResolvedValue({ count: 3 });
       vi.mocked(prisma.$transaction).mockImplementation(async (fn) =>
         (fn as (tx: unknown) => Promise<unknown>)({
           userTrack: {
             updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-            createMany: vi.fn().mockResolvedValue({ count: 3 }),
+            createMany,
           },
         }),
       );
@@ -131,6 +132,14 @@ describe("user-library", () => {
       expect(prisma.userTrack.findMany).toHaveBeenCalledWith({
         where: { userId, trackId: { in: ["track1", "track2", "track3"] } },
       });
+      // Library sorts by createdAt desc — first playlist track must get the newest stamp
+      const created = createMany.mock.calls[0]?.[0]?.data as Array<{
+        trackId: string;
+        createdAt: Date;
+      }>;
+      expect(created.map((row) => row.trackId)).toEqual(["track1", "track2", "track3"]);
+      expect(created[0]!.createdAt.getTime()).toBeGreaterThan(created[1]!.createdAt.getTime());
+      expect(created[1]!.createdAt.getTime()).toBeGreaterThan(created[2]!.createdAt.getTime());
     });
 
     test("reactivates inactive tracks and creates only missing ones", async () => {
@@ -155,7 +164,13 @@ describe("user-library", () => {
         data: { isActive: true, deletedAt: null },
       });
       expect(createMany).toHaveBeenCalledWith({
-        data: [{ userId, trackId: "track3" }],
+        data: [
+          {
+            userId,
+            trackId: "track3",
+            createdAt: expect.any(Date),
+          },
+        ],
       });
     });
 
