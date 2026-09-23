@@ -64,9 +64,7 @@ function submitsToOwnAction(source: string): boolean {
 describe("clientAction audit", () => {
   const routeFiles = walkFiles(ROUTES_DIR).filter(
     (path) =>
-      !path.endsWith(".test.ts") &&
-      !path.endsWith(".test.tsx") &&
-      !path.includes(".server."),
+      !path.endsWith(".test.ts") && !path.endsWith(".test.tsx") && !path.includes(".server."),
   );
 
   test("routes using useFetcher to submit to their own action export clientAction", () => {

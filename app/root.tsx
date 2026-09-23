@@ -27,6 +27,7 @@ import { EpicProgress } from "./components/progress-bar.tsx";
 import { RouteHydrateFallback } from "./components/route-hydrate-fallback.tsx";
 import { href as iconsHref } from "./components/ui/icon.tsx";
 import { Icon } from "./components/ui/icon.tsx";
+import { DuplicatePlaylistDialogProvider } from "./components/duplicate-playlist-dialog.tsx";
 import { Toaster } from "./components/ui/toaster.tsx";
 import { offlineClientMiddleware } from "./middleware/offline-client.middleware.client.ts";
 import { ThemeSwitch, useOptionalTheme } from "./routes/resources+/theme-switch.tsx";
@@ -368,10 +369,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <OpenImgContextProvider optimizerEndpoint="/resources/images" getSrc={getImgSrc}>
         <AudioPlayerProvider userId={loaderData.user?.id ?? null}>
-          <ShellLayout />
-          <Toaster />
-          <AutoplayGuideDialog />
-          <EpicProgress />
+          <DuplicatePlaylistDialogProvider>
+            <ShellLayout />
+            <Toaster />
+            <AutoplayGuideDialog />
+            <EpicProgress />
+          </DuplicatePlaylistDialogProvider>
         </AudioPlayerProvider>
       </OpenImgContextProvider>
     </QueryClientProvider>

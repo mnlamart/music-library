@@ -224,3 +224,46 @@ export async function addTrackToUserPlaylist({
 
   return { status: "success", playlistTitle: playlist.title };
 }
+
+export type RemoveTrackFromUserPlaylistInput = {
+  userId: string;
+  playlistId: string;
+  trackId: string;
+};
+
+export type RemoveTrackFromUserPlaylistResult =
+  | { status: "success"; playlistTitle: string; removedCount: number }
+  | { status: "not_found" }
+  | { status: "not_in_playlist"; playlistTitle: string };
+
+/**
+ * Removes every occurrence of a track from a user-owned playlist.
+ * Used by AddToPlaylistMenu when the track is already present and the user
+ * chooses to delete it rather than add a duplicate.
+ */
+export async function removeTrackFromUserPlaylist({
+  userId,
+  playlistId,
+  trackId,
+}: RemoveTrackFromUserPlaylistInput): Promise<RemoveTrackFromUserPlaylistResult> {
+  const playlist = await prisma.userPlaylist.findFirst({
+    where: { id: playlistId, ownerId: userId },
+    select: { id: true, title: true },
+  });
+
+  if (!playlist) {
+    return { status: "not_found" };
+  }
+
+  const { count } = await prisma.userPlaylistTrack.deleteMany({
+    where: { playlistId, trackId },
+  });
+
+  if (count === 0) {
+    return { status: "not_in_playlist", playlistTitle: playlist.title };
+  }
+
+  await bumpUserPlaylistUpdatedAt({ playlistId, userId });
+
+  return { status: "success", playlistTitle: playlist.title, removedCount: count };
+}
