@@ -70,6 +70,24 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 - **UserTrack** — A user's membership in their personal library: an active link between a user and a `Track`. Adding or removing a `UserTrack` is always an explicit user action; playlist sync never creates one.
 
+### Listening Insights
+
+- **On-Repeat Snapshot** — A frozen, system-generated, read-only playlist of the user's top tracks by `play_completed` **UsageEvent** count over the **previous calendar month** (UTC, matching **DailyUsageStat** day boundaries). Generated on a fixed cadence: **1st of each month**. Capped at **30 tracks**, ranked by completed-play count (tie-break TBD at implementation). Each row shows that track's completed-listen count for that month. **Skip generation** when the month has zero `play_completed` events; if 1–29 tracks qualify, still create a short snapshot. Snapshots are dated (by the month they cover) and retained historically with **no retention prune in v1** — not a single replace-in-place playlist. Distinct from **UserPlaylist** (user-curated, editable).
+
+- **Snapshot Shelf** — UI that shows the **latest 3** On-Repeat Snapshots, plus a control to open the full snapshot history page (all snapshots for the user).
+
+- **Promote Snapshot** — From an On-Repeat Snapshot, the user can copy all of its tracks into a **new or existing UserPlaylist** in one action. The snapshot itself stays read-only; promotion is the only edit path.
+
+- **Recently Played Strip** — Listening-hub row of the user's most recently finished tracks, ranked by latest `play_completed` **UsageEvent**. **Distinct tracks only** (collapse repeats — one row per `trackId`, ordered by most recent completion). Cap **20** tiles. Placed **above** the recent-playlists section on `/` (does not replace **recently added**). Distinct from `/history`, which remains a per-play chronological list (ADR-017).
+
+- **Heavy Rotation** — Live ranking of distinct tracks by `play_completed` count. Two windows: **this month** (current UTC calendar month) and **ever** (lifetime). Complements frozen **On-Repeat Snapshot**s (previous month). Surfaces: (1) **two** listening-hub strips — one per window — each capped at **50** and hidden when empty; (2) two mutually exclusive **Personal Library** (`/library`) sort options (“Most played · this month” / “Most played · ever”) that reorder the full library list by the chosen signal with **no 50 cap** (the sorted list is the whole library, searchable/pageable as today). Not dated snapshots — recomputed on read.
+
+- **Weekly Wrap** — Quiet listening-hub summary for the **current UTC calendar week (Monday–Sunday)**. Shows `play_completed` **finishes** count and **unique tracks** count; if the user has a **day streak** > 1 (consecutive UTC days with ≥1 `play_completed` ending today), also show that streak. Home only; **hide when empty** (zero finishes in the week). Not a playlist or strip of tracks — stats copy only. Distinct from admin **DailyUsageStat** charts.
+
+- **Personal Play Boost** — Soft re-ranking of **global FTS** search results using the **current user's lifetime** `play_completed` counts. Affects only that user (not global popularity). Relevance still wins; plays nudge familiar tracks upward among already-matching hits. Does **not** change ServicePlaylist browse or replace **Heavy Rotation** library sorts in v1.
+
+Implementation tickets: [On-Repeat Snapshots #198](https://github.com/mnlamart/music-library/issues/198) · [Recently Played Strip #199](https://github.com/mnlamart/music-library/issues/199) · [Heavy Rotation #200](https://github.com/mnlamart/music-library/issues/200) · [Weekly Wrap #201](https://github.com/mnlamart/music-library/issues/201) · [Personal Play Boost #202](https://github.com/mnlamart/music-library/issues/202).
+
 ### Audio Player & Queue
 
 - **Queue Spine** — Ordered playable tracks for the active play context (library or playlist). Loaded in one request as lightweight `QueueTrack` rows (id, title, artist). The spine is the automatic continuation after **Up Next** is drained; shuffle permutes spine play order client-side.
@@ -92,7 +110,7 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 - **MOCKS** — Environment variable (`MOCKS=true`) enabling server-side mocking of all external services (YouTube API, yt-dlp, Tigris uploads, Telegram). Used in development and CI.
 
-- **UsageEvent** — Append-only product analytics row (`signup`, `login`, `library_add`, `play_started`, `play_completed`). Written via `recordUsageEvent`; powers the admin user activity feed.
+- **UsageEvent** — Append-only product analytics row (`signup`, `login`, `library_add`, `play_started`, `play_completed`). Written via `recordUsageEvent`; powers the admin user activity feed, `/history`, **On-Repeat Snapshot** / **Heavy Rotation** / **Weekly Wrap** / **Recently Played Strip** ranking, and **Personal Play Boost** (`play_completed` where noted).
 
 - **DailyUsageStat** — Per-UTC-day counter for admin time-series charts (`signups`, `logins`, `library_adds`, `plays_*`, `dau`). Incremented when usage events are recorded.
 
@@ -277,3 +295,15 @@ Home page redesign decisions (implemented). Route: `app/routes/_marketing+/index
 59. **Mobile player sheet — Add to Playlist self-fetching** — `AddToPlaylistMenu`'s `playlists` prop becomes optional. When omitted, the component self-fetches the user's playlists from a new `GET /resources/playlists` route on mount. This avoids passing playlist data through the audio player component tree.
 
 60. **Mobile player sheet — Track details dialog with lazy fetch** — Tapping "Track Details" in the overflow sheet opens a dialog modal. Track detail data (service name, source URL, added date) is fetched on-demand from a new `GET /resources/track-details?trackId=...` route. `FullTrack` is not enriched — the player stays lightweight.
+
+### Listening Insights
+
+61. **On-Repeat Snapshot from `play_completed` only** — Rank by `play_completed` **UsageEvent**s (not `play_started`). **Cadence:** generate on the **1st of each month**. **Window:** the **previous calendar month** (UTC). Persist dated **snapshots** (not a single replace-in-place list). Cap at **30 tracks**; each row shows the completed-listen count for that month. **Empty month:** skip snapshot creation when there are zero `play_completed` events; **thin month:** still create when 1–29 tracks qualify. **Retention:** keep all snapshots in v1 (no prune; history page pages as needed). UI: **Snapshot Shelf** (latest 3) + full history page. Snapshots are **read-only**; the only mutation path is **Promote Snapshot** (add all tracks to a new or existing **UserPlaylist**). See [ADR-024](./decisions/024-on-repeat-snapshots.md).
+
+62. **Recently Played Strip on listening hub** — On logged-in `/` (listening hub), show a **Recently Played Strip** **above** recent playlists. Source: `play_completed` only. **Collapse to distinct tracks** (one tile per `trackId`, ordered by most recent completion). Cap **20**. Does not replace recently added; does not change `/history` per-play semantics (ADR-017). See [ADR-025](./decisions/025-recently-played-strip.md).
+
+63. **Heavy Rotation (this month + ever)** — Rank distinct tracks by `play_completed` count for **this UTC month** and for **lifetime (ever)**. Home: **two strips**, each cap **50**, **hide** when empty. Library: **two mutually exclusive sort options** (cannot combine); sorts apply to the **full** library list with **no 50 cap**. Complements **On-Repeat Snapshot** (frozen previous month) — Heavy Rotation is live, not persisted. See [ADR-026](./decisions/026-heavy-rotation.md).
+
+64. **Weekly Wrap on listening hub** — Quiet home-only summary for the **current UTC week (Mon–Sun)**: finishes + unique tracks from `play_completed`; show day streak only when > 1. **Hide when empty**. See [ADR-027](./decisions/027-weekly-wrap.md).
+
+65. **Personal Play Boost on global FTS** — Soft-boost global search results by the **current user's lifetime** `play_completed` counts. Personal only; relevance remains primary. No ServicePlaylist browse change in v1. See [ADR-028](./decisions/028-personal-play-boost.md).
