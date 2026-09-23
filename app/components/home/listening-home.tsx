@@ -4,6 +4,7 @@ import { useAudioPlayer } from "#app/components/audio-player-provider.tsx";
 import { ArchivingBanner } from "#app/components/home/archiving-banner.tsx";
 import { HomeRecentPlaylistRow } from "#app/components/home/home-recent-playlist-row.tsx";
 import { HomeRecentTrackRow } from "#app/components/home/home-recent-track-row.tsx";
+import { WeeklyWrap } from "#app/components/home/weekly-wrap.tsx";
 import { InstallAppHomePrompt } from "#app/components/pwa/install-app-home-prompt.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import {
@@ -28,6 +29,7 @@ export function ListeningHome({
   stats,
   recentTracks,
   recentPlaylists,
+  weeklyWrap,
   youtubeData,
 }: ListeningHomeProps) {
   const { playLibrary, isLoadingNext } = useAudioPlayer();
@@ -61,6 +63,8 @@ export function ListeningHome({
           {isLoadingNext ? "Loading…" : "Play library"}
         </Button>
       </div>
+
+      <WeeklyWrap wrap={weeklyWrap} />
 
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between">

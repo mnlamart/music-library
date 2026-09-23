@@ -2,6 +2,10 @@ import { data } from "react-router";
 import { YOUTUBE_SERVICE } from "#app/constants/services";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { createServicePlaylistService } from "#app/features/service-playlist/service-playlist.server.ts";
+import {
+  getWeeklyWrap,
+  type WeeklyWrapSummary,
+} from "#app/features/weekly-wrap/weekly-wrap.server.ts";
 import { getUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { buildLibraryUserTracksWhere } from "#app/utils/library-user-tracks.server.ts";
@@ -76,6 +80,8 @@ export type HomeListeningData = {
   };
   recentTracks: HomeRecentTrack[];
   recentPlaylists: HomeRecentPlaylist[];
+  /** Quiet weekly wrap; null when the current UTC week has zero finishes. */
+  weeklyWrap: WeeklyWrapSummary | null;
   youtubeData: Promise<HomeYoutubeData>;
 };
 
@@ -211,7 +217,7 @@ export async function loadHomeData(request: Request) {
     });
   }
 
-  const [totalPlaylists, recentTracks, recentPlaylists] = await Promise.all([
+  const [totalPlaylists, recentTracks, recentPlaylists, weeklyWrap] = await Promise.all([
     prisma.userPlaylist.count({ where: { ownerId: userId } }),
     prisma.userTrack.findMany({
       where: baseWhere,
@@ -259,6 +265,7 @@ export async function loadHomeData(request: Request) {
       orderBy: { updatedAt: "desc" },
       take: 5,
     }),
+    getWeeklyWrap(userId),
   ]);
 
   const playlistIds = recentPlaylists.map((playlist) => playlist.id);
@@ -296,6 +303,7 @@ export async function loadHomeData(request: Request) {
     },
     recentTracks,
     recentPlaylists: recentPlaylistsWithCount,
+    weeklyWrap,
     // YouTube data is only needed for the listening-hub view (not gray zone)
     youtubeData:
       mode === "listening"
