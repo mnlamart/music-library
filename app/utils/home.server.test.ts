@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { getHeavyRotationTracks } from "#app/features/listening-insights/index.server.ts";
 import { getRecentlyPlayedTracks } from "#app/features/recently-played/recently-played.server.ts";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { getWeeklyWrap } from "#app/features/weekly-wrap/weekly-wrap.server.ts";
@@ -13,6 +14,10 @@ import {
 
 vi.mock("#app/utils/auth.server.ts", () => ({
   getUserId: vi.fn(),
+}));
+
+vi.mock("#app/features/listening-insights/index.server.ts", () => ({
+  getHeavyRotationTracks: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("#app/utils/db.server.ts", () => ({
@@ -183,9 +188,13 @@ describe("loadHomeData", () => {
       playableTracks: 2,
       archivingCount: 2,
       recentlyPlayed: [],
+      heavyRotationMonth: [],
+      heavyRotationEver: [],
       weeklyWrap: { finishes: 5, uniqueTracks: 3, dayStreak: 2 },
     });
     expect(getRecentlyPlayedTracks).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(getHeavyRotationTracks).toHaveBeenCalledWith({ userId: "user-1", window: "month" });
+    expect(getHeavyRotationTracks).toHaveBeenCalledWith({ userId: "user-1", window: "ever" });
     expect(getWeeklyWrap).toHaveBeenCalledWith("user-1");
   });
 

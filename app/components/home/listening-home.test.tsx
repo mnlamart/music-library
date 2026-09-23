@@ -36,6 +36,11 @@ vi.mock("#app/components/home/home-recent-playlist-row.tsx", () => ({
   HomeRecentPlaylistRow: () => <div>Recent playlists row</div>,
 }));
 
+vi.mock("#app/components/home/heavy-rotation-strip.tsx", () => ({
+  HeavyRotationStrip: ({ title, tracks }: { title: string; tracks: Array<unknown> }) =>
+    tracks.length === 0 ? null : <div>{title}</div>,
+}));
+
 vi.mock("#app/components/home/recently-played-strip.tsx", () => ({
   RecentlyPlayedStrip: ({ tracks }: { tracks: Array<{ track: { title: string } }> }) =>
     tracks.length === 0 ? null : (
@@ -57,6 +62,8 @@ const baseListeningData: HomeListeningData = {
   },
   recentTracks: [],
   recentlyPlayed: [],
+  heavyRotationMonth: [],
+  heavyRotationEver: [],
   recentPlaylists: [],
   weeklyWrap: null,
   youtubeData: Promise.resolve({
@@ -119,6 +126,39 @@ test("enables Play library when tracks are playable", async () => {
   await waitFor(async () => {
     expect(await screen.findByRole("button", { name: /play library/i })).toBeEnabled();
   });
+});
+
+test("hides Heavy Rotation strips when both windows are empty", async () => {
+  renderListening({ showArchivingBanner: false });
+
+  await screen.findByRole("button", { name: /play library/i });
+  expect(screen.queryByText(/heavy rotation · this month/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/heavy rotation · ever/i)).not.toBeInTheDocument();
+});
+
+test("shows Heavy Rotation strips independently when non-empty", async () => {
+  const track = {
+    completedCount: 2,
+    track: {
+      id: "t1",
+      title: "Song",
+      duration: 100,
+      serviceUrl: null,
+      artist: { id: "a1", name: "Artist" },
+      coverImage: null,
+      service: null,
+      audioFiles: [],
+    },
+  };
+
+  renderListening({
+    showArchivingBanner: false,
+    heavyRotationMonth: [track],
+    heavyRotationEver: [],
+  });
+
+  expect(await screen.findByText(/heavy rotation · this month/i)).toBeInTheDocument();
+  expect(screen.queryByText(/heavy rotation · ever/i)).not.toBeInTheDocument();
 });
 
 test("shows weekly wrap when loader provides summary data", async () => {

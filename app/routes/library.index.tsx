@@ -8,15 +8,24 @@ import { Checkbox } from "#app/components/ui/checkbox.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { Label } from "#app/components/ui/label.tsx";
 import { ScrollArea } from "#app/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#app/components/ui/select.tsx";
 import { TrackListSkeleton } from "#app/components/ui/track-list-skeleton";
+import {
+  parseLibrarySort,
+  type LibrarySortOption,
+} from "#app/features/listening-insights/index.ts";
+import { listLibraryUserTracks } from "#app/features/listening-insights/library-tracks.server.ts";
 import { type LibraryOfflineLoaderData } from "#app/features/offline-app/offline-route-policies.client.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
-import {
-  buildLibraryUserTracksWhere,
-  parseHasAudioOnlyParam,
-} from "#app/utils/library-user-tracks.server.ts";
+import { parseHasAudioOnlyParam } from "#app/utils/library-user-tracks.server.ts";
 import { type Route } from "./+types/library.index.ts";
 
 // Define the track type
@@ -83,62 +92,15 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     Math.max(1, parseInt(url.searchParams.get("limit") || String(LIBRARY_TRACKS_PAGE_SIZE))),
   );
   const hasAudioOnly = parseHasAudioOnlyParam(url.searchParams);
+  const sort = parseLibrarySort(url.searchParams.get("sort"));
 
-  // Get user's tracks with cursor-based pagination
-  const userTracksRaw = await prisma.userTrack.findMany({
-    where: buildLibraryUserTracksWhere({ userId, hasAudioOnly }),
-    select: {
-      id: true,
-      createdAt: true,
-      track: {
-        select: {
-          id: true,
-          title: true,
-          artist: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          createdAt: true,
-          updatedAt: true,
-          releaseDate: true,
-          originalDate: true,
-          service: {
-            select: {
-              name: true,
-              displayName: true,
-              logoUrl: true,
-            },
-          },
-          serviceUrl: true,
-          coverImage: {
-            select: {
-              objectKey: true,
-            },
-          },
-          duration: true,
-          audioFiles: {
-            select: {
-              id: true,
-              format: true,
-              objectKey: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    cursor: cursor ? { id: cursor } : undefined,
-    skip: cursor ? 1 : undefined,
+  const { userTracks, pagination } = await listLibraryUserTracks({
+    userId,
+    sort,
+    hasAudioOnly,
+    cursor,
+    limit,
   });
-
-  // Return tracks with relations (no transformations needed)
-  const userTracks = userTracksRaw;
-
-  // Get next cursor for pagination
-  const nextCursor = userTracks.length === limit ? userTracks[userTracks.length - 1]?.id : null;
 
   // Add playlists to loader
   const playlists = await prisma.userPlaylist.findMany({
@@ -156,12 +118,9 @@ export async function loader({ request, url }: Route.LoaderArgs) {
 
   return data({
     userTracks,
-    pagination: {
-      limit,
-      hasNext: !!nextCursor,
-      nextCursor,
-    },
+    pagination,
     hasAudioOnly,
+    sort,
     playlists,
   });
 }
@@ -171,16 +130,22 @@ export default function LibraryIndexRoute({
 }: {
   loaderData: Route.ComponentProps["loaderData"] | LibraryOfflineLoaderData | undefined;
 }) {
-  // Ensure we have valid data structure
   const safeLoaderData = loaderData || {
     offline: false as const,
     offlineTracks: [],
     userTracks: [],
     pagination: { hasNext: false, nextCursor: null, limit: LIBRARY_TRACKS_PAGE_SIZE },
     hasAudioOnly: false,
+    sort: "dateAdded" as LibrarySortOption,
     playlists: [],
   };
-  const { userTracks, pagination, playlists, hasAudioOnly = false } = safeLoaderData;
+  const {
+    userTracks,
+    pagination,
+    playlists,
+    hasAudioOnly = false,
+    sort: loaderSort = "dateAdded",
+  } = safeLoaderData;
   const offline = "offline" in safeLoaderData && safeLoaderData.offline;
   const offlineTracks =
     "offlineTracks" in safeLoaderData && Array.isArray(safeLoaderData.offlineTracks)
@@ -188,6 +153,7 @@ export default function LibraryIndexRoute({
       : [];
   const pageSize = pagination?.limit ?? LIBRARY_TRACKS_PAGE_SIZE;
   const [searchParams, setSearchParams] = useSearchParams();
+  const sort = parseLibrarySort(searchParams.get("sort") ?? loaderSort);
   const parentRef = useRef<HTMLDivElement>(null);
 
   const scrollLibraryToTop = useCallback(() => {
@@ -211,6 +177,21 @@ export default function LibraryIndexRoute({
     [searchParams, setSearchParams, scrollLibraryToTop],
   );
 
+  const handleSortChange = useCallback(
+    (value: string) => {
+      const nextSort = parseLibrarySort(value);
+      const nextParams = new URLSearchParams(searchParams);
+      if (nextSort === "dateAdded") {
+        nextParams.delete("sort");
+      } else {
+        nextParams.set("sort", nextSort);
+      }
+      setSearchParams(nextParams, { preventScrollReset: true });
+      scrollLibraryToTop();
+    },
+    [searchParams, setSearchParams, scrollLibraryToTop],
+  );
+
   // Use useInfiniteQuery for data fetching
   const {
     data: queryData,
@@ -222,7 +203,7 @@ export default function LibraryIndexRoute({
     isPending,
     status,
   } = useInfiniteQuery({
-    queryKey: ["user-tracks", { pageSize, hasAudioOnly }],
+    queryKey: ["user-tracks", { pageSize, hasAudioOnly, sort }],
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       params.set("limit", String(pageSize));
@@ -231,6 +212,9 @@ export default function LibraryIndexRoute({
       }
       if (hasAudioOnly) {
         params.set("hasAudio", "1");
+      }
+      if (sort !== "dateAdded") {
+        params.set("sort", sort);
       }
       const res = await fetch(`/api/user-tracks?${params}`);
       const json = (await res.json()) as {
@@ -241,18 +225,21 @@ export default function LibraryIndexRoute({
     },
     getNextPageParam: (lastPage) => lastPage.pagination.nextCursor || undefined,
     initialPageParam: undefined as string | undefined,
-    initialData: {
-      pages: [
-        {
-          userTracks: userTracks || [],
-          pagination: {
-            hasNext: pagination?.hasNext || false,
-            nextCursor: pagination?.nextCursor || null,
-          },
-        },
-      ],
-      pageParams: [undefined],
-    },
+    initialData:
+      sort === loaderSort
+        ? {
+            pages: [
+              {
+                userTracks: userTracks || [],
+                pagination: {
+                  hasNext: pagination?.hasNext || false,
+                  nextCursor: pagination?.nextCursor || null,
+                },
+              },
+            ],
+            pageParams: [undefined],
+          }
+        : undefined,
     enabled: !offline,
   });
 
@@ -329,15 +316,27 @@ export default function LibraryIndexRoute({
     <div className="py-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-bold">Music Library</h1>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="has-audio-only"
-            checked={hasAudioOnly}
-            onCheckedChange={handleHasAudioOnlyChange}
-          />
-          <Label htmlFor="has-audio-only" className="text-sm font-normal cursor-pointer">
-            Only tracks with audio
-          </Label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Select value={sort} onValueChange={handleSortChange}>
+            <SelectTrigger className="w-full sm:w-56" aria-label="Sort library">
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="dateAdded">Recently added</SelectItem>
+              <SelectItem value="mostPlayedMonth">Most played · this month</SelectItem>
+              <SelectItem value="mostPlayedEver">Most played · ever</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="has-audio-only"
+              checked={hasAudioOnly}
+              onCheckedChange={handleHasAudioOnlyChange}
+            />
+            <Label htmlFor="has-audio-only" className="text-sm font-normal cursor-pointer">
+              Only tracks with audio
+            </Label>
+          </div>
         </div>
       </div>
 
