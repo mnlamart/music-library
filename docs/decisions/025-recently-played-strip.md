@@ -32,7 +32,7 @@ ADR-017 shipped `/history` as a per-play chronological list from `play_started`,
 
 - Changing `/history` list semantics or data source.
 - Replacing or merging with recently added.
-- Weekly wrap, search play-boost, or On-Repeat Snapshot shelf placement (sibling ideas). **Heavy Rotation** is settled in ADR-026.
+- Search play-boost or On-Repeat Snapshot shelf placement (sibling ideas). **Heavy Rotation** is settled in ADR-026. **Weekly Wrap** is settled in ADR-027.
 
 ## Consequences
 

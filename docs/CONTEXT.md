@@ -82,6 +82,8 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 - **Heavy Rotation** — Live ranking of distinct tracks by `play_completed` count. Two windows: **this month** (current UTC calendar month) and **ever** (lifetime). Complements frozen **On-Repeat Snapshot**s (previous month). Surfaces: (1) **two** listening-hub strips — one per window — each capped at **50** and hidden when empty; (2) two mutually exclusive **Personal Library** (`/library`) sort options (“Most played · this month” / “Most played · ever”) that reorder the full library list by the chosen signal with **no 50 cap** (the sorted list is the whole library, searchable/pageable as today). Not dated snapshots — recomputed on read.
 
+- **Weekly Wrap** — Quiet listening-hub summary for the **current UTC calendar week (Monday–Sunday)**. Shows `play_completed` **finishes** count and **unique tracks** count; if the user has a **day streak** > 1 (consecutive UTC days with ≥1 `play_completed` ending today), also show that streak. Home only; **hide when empty** (zero finishes in the week). Not a playlist or strip of tracks — stats copy only. Distinct from admin **DailyUsageStat** charts.
+
 ### Audio Player & Queue
 
 - **Queue Spine** — Ordered playable tracks for the active play context (library or playlist). Loaded in one request as lightweight `QueueTrack` rows (id, title, artist). The spine is the automatic continuation after **Up Next** is drained; shuffle permutes spine play order client-side.
@@ -297,3 +299,5 @@ Home page redesign decisions (implemented). Route: `app/routes/_marketing+/index
 62. **Recently Played Strip on listening hub** — On logged-in `/` (listening hub), show a **Recently Played Strip** **above** recent playlists. Source: `play_completed` only. **Collapse to distinct tracks** (one tile per `trackId`, ordered by most recent completion). Cap **20**. Does not replace recently added; does not change `/history` per-play semantics (ADR-017). See [ADR-025](./decisions/025-recently-played-strip.md).
 
 63. **Heavy Rotation (this month + ever)** — Rank distinct tracks by `play_completed` count for **this UTC month** and for **lifetime (ever)**. Home: **two strips**, each cap **50**, **hide** when empty. Library: **two mutually exclusive sort options** (cannot combine); sorts apply to the **full** library list with **no 50 cap**. Complements **On-Repeat Snapshot** (frozen previous month) — Heavy Rotation is live, not persisted. See [ADR-026](./decisions/026-heavy-rotation.md).
+
+64. **Weekly Wrap on listening hub** — Quiet home-only summary for the **current UTC week (Mon–Sun)**: finishes + unique tracks from `play_completed`; show day streak only when > 1. **Hide when empty**. See [ADR-027](./decisions/027-weekly-wrap.md).

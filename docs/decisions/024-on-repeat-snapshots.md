@@ -12,7 +12,7 @@ Accepted (product decisions from `/grill-with-docs`; implementation not started)
 
 `UsageEvent` already records `play_started` and `play_completed` (with `playId` correlation; ADR-016 / ADR-017). `/history` lists per-play rows. The product wants a durable “what I actually finished lately” artifact — not only a live aggregation — that users can revisit and optionally copy into a normal playlist.
 
-Related shortlist (not decided here): **Weekly wrap**, personal play-boost in search/browse. **Recently Played Strip** is settled in ADR-025. **Heavy Rotation** is settled in ADR-026.
+Related shortlist (not decided here): personal play-boost in search/browse. **Recently Played Strip** is settled in ADR-025. **Heavy Rotation** is settled in ADR-026. **Weekly Wrap** is settled in ADR-027.
 
 Early grilling said “30 day,” which was ambiguous between generation cadence and ranking window. Settled: monthly generation on the 1st; ranking covers the previous calendar month (not a rolling 30-day lookback).
 
