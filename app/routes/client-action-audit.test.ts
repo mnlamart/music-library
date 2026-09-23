@@ -15,8 +15,6 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/extract-metadata.tsx",
   "_auth+/webauthn+/registration.ts",
   "_auth+/webauthn+/authentication.ts",
-  // Temporary agent debug ingest (raw fetch from browser instrumentation)
-  "resources+/debug-log.tsx",
 ]);
 
 function walkFiles(dir: string): string[] {

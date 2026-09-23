@@ -431,25 +431,7 @@ export const TrackListItem = memo(function TrackListItem({
             </Button>
           ) : (
             /* Desktop: Dropdown Menu */
-            <DropdownMenu
-              onOpenChange={(open) => {
-                // #region agent log
-                if (import.meta.env.MODE !== "test") {
-                  fetch("/resources/debug-log", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      hypothesisId: "A",
-                      location: "track-list-item.tsx:DropdownMenu.onOpenChange",
-                      message: "Desktop actions dropdown open change",
-                      data: { open, trackId: track.id },
-                      timestamp: Date.now(),
-                    }),
-                  }).catch(() => {});
-                }
-                // #endregion
-              }}
-            >
+            <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label="More actions">
                   <Icon name="dots-horizontal" className="h-4 w-4" />
