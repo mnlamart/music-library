@@ -43,7 +43,7 @@ export function OnboardingHome({ youtubeConnected, isAdmin }: OnboardingHomeProp
                 </Button>
               </div>
               <p className="text-muted-foreground mt-6 text-sm">
-                You can also search for tracks using the search bar above.
+                You can also search for tracks from Search.
               </p>
             </div>
           ) : null}

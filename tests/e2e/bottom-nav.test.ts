@@ -89,12 +89,17 @@ test.describe("Bottom Navigation", () => {
     await expect(bottomNav).toBeVisible();
   });
 
-  test("search bar is not in the header", { tag: "@smoke" }, async ({ page }) => {
+  test("search is not in the header on mobile", { tag: "@smoke" }, async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/");
 
     const header = page.getByRole("banner");
-    // The search bar (searchbox) should NOT be in the header
+    // Header search is desktop-only; mobile uses the bottom nav Search tab
     await expect(header.getByRole("searchbox")).not.toBeVisible();
+    await expect(header.getByRole("link", { name: /^search$/i })).not.toBeVisible();
+    await expect(header.locator('a[href="/search"]')).not.toBeVisible();
+
+    const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
+    await expect(bottomNav.getByRole("link", { name: /search/i })).toBeVisible();
   });
 });

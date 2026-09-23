@@ -289,7 +289,7 @@ function ShellLayout() {
         Skip to content
       </a>
       <header className="container py-6" role="banner">
-        <nav className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap sm:gap-4 md:gap-8">
+        <nav className="flex items-center justify-between gap-4 md:gap-8">
           <Logo />
           <div className="ml-auto hidden max-w-sm flex-1 sm:block">
             <Link
@@ -315,15 +315,6 @@ function ShellLayout() {
                 <LazyUserDropdown />
               </Suspense>
             ) : null}
-          </div>
-          <div className="block w-full sm:hidden">
-            <Link
-              to="/search"
-              className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm text-muted-foreground hover:border-foreground/50 hover:text-foreground transition-colors"
-            >
-              <Icon name="magnifying-glass" className="h-4 w-4" />
-              <span>Search</span>
-            </Link>
           </div>
         </nav>
       </header>
