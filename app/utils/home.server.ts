@@ -4,8 +4,16 @@ import {
   getHeavyRotationTracks,
   type HeavyRotationTrack,
 } from "#app/features/listening-insights/index.server.ts";
+import {
+  getRecentlyPlayedTracks,
+  type RecentlyPlayedTrack,
+} from "#app/features/recently-played/recently-played.server.ts";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { createServicePlaylistService } from "#app/features/service-playlist/service-playlist.server.ts";
+import {
+  getWeeklyWrap,
+  type WeeklyWrapSummary,
+} from "#app/features/weekly-wrap/weekly-wrap.server.ts";
 import { getUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { buildLibraryUserTracksWhere } from "#app/utils/library-user-tracks.server.ts";
@@ -79,11 +87,15 @@ export type HomeListeningData = {
     totalPlaylists: number;
   };
   recentTracks: HomeRecentTrack[];
+  /** Distinct tracks by latest `play_completed` (ADR-025). Empty → strip hidden. */
+  recentlyPlayed: RecentlyPlayedTrack[];
   /** Live Heavy Rotation · this UTC month (empty → strip hidden). */
   heavyRotationMonth: HeavyRotationTrack[];
   /** Live Heavy Rotation · ever (empty → strip hidden). */
   heavyRotationEver: HeavyRotationTrack[];
   recentPlaylists: HomeRecentPlaylist[];
+  /** Quiet weekly wrap; null when the current UTC week has zero finishes. */
+  weeklyWrap: WeeklyWrapSummary | null;
   youtubeData: Promise<HomeYoutubeData>;
 };
 
@@ -219,58 +231,67 @@ export async function loadHomeData(request: Request) {
     });
   }
 
-  const [totalPlaylists, recentTracks, heavyRotationMonth, heavyRotationEver, recentPlaylists] =
-    await Promise.all([
-      prisma.userPlaylist.count({ where: { ownerId: userId } }),
-      prisma.userTrack.findMany({
-        where: baseWhere,
-        include: recentTrackInclude,
-        orderBy: { createdAt: "desc" },
-        take: 8,
-      }),
-      getHeavyRotationTracks({ userId, window: "month" }),
-      getHeavyRotationTracks({ userId, window: "ever" }),
-      prisma.userPlaylist.findMany({
-        where: { ownerId: userId },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          createdAt: true,
-          updatedAt: true,
-          _count: {
-            select: { tracks: true },
-          },
-          tracks: {
-            select: {
-              id: true,
-              track: {
-                select: {
-                  id: true,
-                  title: true,
-                  artist: {
-                    select: {
-                      id: true,
-                      name: true,
-                    },
+  const [
+    totalPlaylists,
+    recentTracks,
+    recentlyPlayed,
+    heavyRotationMonth,
+    heavyRotationEver,
+    recentPlaylists,
+    weeklyWrap,
+  ] = await Promise.all([
+    prisma.userPlaylist.count({ where: { ownerId: userId } }),
+    prisma.userTrack.findMany({
+      where: baseWhere,
+      include: recentTrackInclude,
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    }),
+    getRecentlyPlayedTracks({ userId }),
+    getHeavyRotationTracks({ userId, window: "month" }),
+    getHeavyRotationTracks({ userId, window: "ever" }),
+    prisma.userPlaylist.findMany({
+      where: { ownerId: userId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: { tracks: true },
+        },
+        tracks: {
+          select: {
+            id: true,
+            track: {
+              select: {
+                id: true,
+                title: true,
+                artist: {
+                  select: {
+                    id: true,
+                    name: true,
                   },
-                  duration: true,
-                  coverImage: {
-                    select: {
-                      objectKey: true,
-                    },
+                },
+                duration: true,
+                coverImage: {
+                  select: {
+                    objectKey: true,
                   },
                 },
               },
             },
-            orderBy: { position: "asc" },
-            take: 5,
           },
+          orderBy: { position: "asc" },
+          take: 5,
         },
-        orderBy: { updatedAt: "desc" },
-        take: 5,
-      }),
-    ]);
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+    }),
+    getWeeklyWrap(userId),
+  ]);
 
   const playlistIds = recentPlaylists.map((playlist) => playlist.id);
   const durationRows =
@@ -306,9 +327,11 @@ export async function loadHomeData(request: Request) {
       totalPlaylists,
     },
     recentTracks,
+    recentlyPlayed,
     heavyRotationMonth,
     heavyRotationEver,
     recentPlaylists: recentPlaylistsWithCount,
+    weeklyWrap,
     // YouTube data is only needed for the listening-hub view (not gray zone)
     youtubeData:
       mode === "listening"
