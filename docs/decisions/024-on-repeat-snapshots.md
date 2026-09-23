@@ -6,7 +6,7 @@ Accepted (product decisions from `/grill-with-docs`; implementation not started)
 
 **Date:** 2026-09-21
 
-**Updated:** 2026-09-23 — cadence vs window clarified (1st-of-month generation; previous calendar month ranking).
+**Updated:** 2026-09-23 — cadence vs window clarified; empty/thin months and retention settled.
 
 ## Context
 
@@ -22,7 +22,7 @@ Early grilling said “30 day,” which was ambiguous between generation cadence
 
 These are separate knobs:
 
-- **Cadence** — when a new snapshot is created: **1st of each month** (one new **On-Repeat Snapshot** per user per run).
+- **Cadence** — when a new snapshot is created: **1st of each month** (one new **On-Repeat Snapshot** per user per run, subject to empty-month skip below).
 - **Window** — which plays count for that snapshot: the **previous calendar month** in **UTC** (aligned with **DailyUsageStat** UTC day boundaries). Example: on 1 Oct → rank `play_completed` events with `createdAt` in September (UTC).
 
 Rejected: rolling “last 30 days from generation time.”
@@ -31,6 +31,17 @@ Rejected: rolling “last 30 days from generation time.”
 
 - Include only **`play_completed`** events. Do **not** count `play_started` (skips would inflate the list).
 - Rank tracks by completed-play count descending within the window; take the top **30**. Tie-break (e.g. most recent `play_completed`, then `trackId`) is an implementation detail and may be fixed in the PRD/impl ADR addendum.
+
+### Empty and thin months
+
+- **Empty month (0 qualifying `play_completed` events):** **skip** — do not create a snapshot. Keeps the **Snapshot Shelf** free of hollow “0 tracks” months.
+- **Thin month (1–29 qualifying tracks):** **still create** a short snapshot with whatever qualifies. A real listening month deserves an artifact even below the cap.
+
+### Retention
+
+- **Keep all snapshots in v1** — no automatic prune. The shelf shows the latest 3; the history page lists the rest (paginate as needed).
+- Matches ADR-016’s deferral of UsageEvent retention; revisit prune (e.g. last 12/24 months) only if history storage becomes a problem.
+- Rejected for v1: hard-delete older than N months; soft-archive with hidden rows.
 
 ### Persistence model — dated snapshots
 
@@ -50,9 +61,9 @@ Rejected: rolling “last 30 days from generation time.”
 
 ## Non-goals (this ADR)
 
-- Retention/pruning of old snapshots beyond “keep history + shelf of 3”.
 - Using `play_started`, non-calendar windows, or caps other than 30.
 - Per-user local timezone for month boundaries (UTC only for v1).
+- Retention/pruning policies beyond “keep forever in v1.”
 - Recently played strip, Heavy rotation, Weekly wrap, or search ranking boosts (sibling ideas).
 - Mid-track resume or changing ADR-017 history semantics.
 
@@ -60,4 +71,4 @@ Rejected: rolling “last 30 days from generation time.”
 
 - New glossary terms: **On-Repeat Snapshot**, **Snapshot Shelf**, **Promote Snapshot** (`docs/CONTEXT.md`).
 - Needs a monthly generation job (1st of month), storage for snapshot header + ranked members with counts, shelf + history + detail routes, and Promote actions wired to **UserPlaylist** helpers.
-- Empty/partial months (fewer than 30 qualifying tracks) should still produce a snapshot with whatever qualifies (or skip generation — open).
+- Generation must be idempotent per `(userId, year-month)` so a retry on the 1st does not duplicate snapshots; empty months leave a gap in the series (by design).
