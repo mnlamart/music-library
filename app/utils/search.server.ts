@@ -13,6 +13,10 @@ import {
 } from "#app/types/search.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { escapeLikeLiterals, toLiteralFts5Query } from "#app/utils/fts5-query.server.ts";
+import {
+  getLifetimePlayCompletedCounts,
+  personalPlayBoostCaseSql,
+} from "#app/utils/personal-play-boost.server.ts";
 
 // ── Cursor pagination helpers ──
 
@@ -178,6 +182,10 @@ async function enrichTrackSearchResults(
  * Security: All parameters must be pre-validated using validation functions
  * from search-validation.server.ts to prevent SQL injection and DoS attacks.
  *
+ * Personal Play Boost (ADR-028): when `userId` is set, lifetime `play_completed`
+ * counts for that user soft-adjust FTS ranking (relevance_rank stays primary;
+ * see `computePersonalPlayBoost`). Logged-out / no-userId paths stay relevance-only.
+ *
  * @param query - Pre-validated search query
  * @param limit - Pre-validated limit (1-100)
  * @param cursor - Pre-validated cursor (optional)
@@ -208,9 +216,16 @@ export async function searchTracks(
   const prefixPattern = `${escapeLikeLiterals(normalizedQuery)}%`;
   const sqlEscapedFtsQuery = ftsQuery.replace(/'/g, "''");
 
-  const userTrackJoin = userId
-    ? `JOIN "UserTrack" ut ON ut."trackId" = t.id AND ut."userId" = '${userId.replace(/'/g, "''")}' AND ut."isActive" = true`
+  const escapedUserId = userId ? userId.replace(/'/g, "''") : null;
+  const userTrackJoin = escapedUserId
+    ? `JOIN "UserTrack" ut ON ut."trackId" = t.id AND ut."userId" = '${escapedUserId}' AND ut."isActive" = true`
     : "";
+
+  // Personal Play Boost (ADR-028): load/cache lifetime play_completed counts for
+  // the current user, then subtract a bounded boost from FTS rank (lower = better).
+  // Logged-out path skips this — relevance-only ordering.
+  const playCounts = userId ? await getLifetimePlayCompletedCounts(userId) : null;
+  const playBoostExpr = playCounts ? personalPlayBoostCaseSql(playCounts) : "0";
 
   const cursorFilter = curT
     ? cursorClause(curT, "relevance_rank", "fts_rank", "t.title", "t.id")
@@ -248,7 +263,7 @@ export async function searchTracks(
 				WHEN LOWER(t.title) LIKE ? ESCAPE '\\' THEN 2
 				ELSE 3
 			END as relevance_rank,
-			tracks_fts.rank as fts_rank
+			(tracks_fts.rank - (${playBoostExpr})) as fts_rank
 		FROM tracks_fts
 		JOIN "Track" t ON tracks_fts.track_id = t.id
 		JOIN "Artist" a ON t."artistId" = a.id

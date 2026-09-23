@@ -46,6 +46,12 @@ describe("getSpineSectionLabel", () => {
     expect(getSpineSectionLabel({ type: "track" })).toBe("from track");
   });
 
+  test("uses on-repeat label for snapshot context", () => {
+    expect(getSpineSectionLabel({ type: "onRepeatSnapshot", snapshotId: "s1" })).toBe(
+      "from on-repeat",
+    );
+  });
+
   test("falls back when context is unknown", () => {
     expect(getSpineSectionLabel(null)).toBe("from queue");
   });
@@ -70,5 +76,11 @@ describe("getSpineSectionHeading", () => {
 
   test("uses track heading for track context", () => {
     expect(getSpineSectionHeading({ type: "track" })).toBe("From Track");
+  });
+
+  test("uses on-repeat heading for snapshot context", () => {
+    expect(getSpineSectionHeading({ type: "onRepeatSnapshot", snapshotId: "s1" })).toBe(
+      "From On-Repeat",
+    );
   });
 });

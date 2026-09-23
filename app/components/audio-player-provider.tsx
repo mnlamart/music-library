@@ -70,7 +70,14 @@ import { InstallAppBanner } from "./pwa/install-app-banner";
 
 type Track = FullTrack;
 
-type PlayContext = "library" | "playlist" | "artist" | "album" | "track" | "music";
+type PlayContext =
+  | "library"
+  | "playlist"
+  | "artist"
+  | "album"
+  | "track"
+  | "music"
+  | "onRepeatSnapshot";
 
 interface PlaylistContext {
   type: PlayContext;
@@ -78,6 +85,7 @@ interface PlaylistContext {
   artistId?: string;
   albumId?: string;
   trackId?: string;
+  snapshotId?: string;
   cursor?: string;
   /** Active playlist track sort; only meaningful for playlist context. */
   sort?: PlaylistTrackSortOption;
@@ -123,6 +131,14 @@ interface AudioPlayerContextType {
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
 
+const EMPTY_PLAYER_STATE: PlayerStateData = {
+  playContext: null,
+  currentTrackId: null,
+  upNextIds: [],
+  shuffleSeed: null,
+  loopMode: "off",
+};
+
 interface AudioPlayerProviderProps {
   children: ReactNode;
   /** The authenticated user's id, or `null` when signed out. Drives queue persistence + restore. */
@@ -139,6 +155,7 @@ function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boole
   if (a.artistId !== b.artistId) return false;
   if (a.albumId !== b.albumId) return false;
   if (a.trackId !== b.trackId) return false;
+  if (a.snapshotId !== b.snapshotId) return false;
   if (a.type === "playlist") {
     return playlistSortOrCustom(a.sort) === playlistSortOrCustom(b.sort);
   }
@@ -175,6 +192,9 @@ function toQueueSpineContext(context: PlaylistContext): QueueSpineContext | null
   if (context.type === "track" && context.trackId) {
     return { type: "track", trackId: context.trackId };
   }
+  if (context.type === "onRepeatSnapshot" && context.snapshotId) {
+    return { type: "onRepeatSnapshot", snapshotId: context.snapshotId };
+  }
   return null;
 }
 
@@ -197,7 +217,25 @@ function playContextToJson(context: PlaylistContext | null): PlayContextJson | n
   if (context.type === "track" && context.trackId) {
     return { type: "track", trackId: context.trackId };
   }
+  if (context.type === "onRepeatSnapshot" && context.snapshotId) {
+    return { type: "onRepeatSnapshot", snapshotId: context.snapshotId };
+  }
   return null; // "music" has no spine
+}
+
+function hasPersistableQueue(state: PlayerStateData): boolean {
+  return Boolean(state.currentTrackId || state.upNextIds.length > 0 || state.playContext);
+}
+
+/** Persist after a successful online restore, or after the user starts a real queue. */
+function shouldPersistPlayerState(
+  userId: string,
+  restoredForUserId: string | null,
+  userMutatedQueue: boolean,
+  state: PlayerStateData,
+): boolean {
+  if (restoredForUserId === userId) return true;
+  return userMutatedQueue && hasPersistableQueue(state);
 }
 
 export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderProps) {
@@ -252,18 +290,52 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // at most once.
   const offlineRestoreDoneRef = useRef(false);
   const onlineRestoreDoneRef = useRef(false);
+  // Set immediately before the online restore writes queue state. A slower
+  // offline partial restore must not apply after this — it would wipe the
+  // spine and persist a truncated Up Next (only downloaded ids).
+  const onlineRestoreAppliedRef = useRef(false);
   // Set when the user starts or edits a queue before (or instead of) restore.
   // In-flight restore must not overwrite that session.
   const userMutatedQueueRef = useRef(false);
-  const lastUserIdRef = useRef(userId);
-  if (lastUserIdRef.current !== userId) {
-    lastUserIdRef.current = userId;
+  // Logout/login are client-side actions, so this provider stays mounted in
+  // `root.tsx`. Drop the previous account's in-memory queue immediately — a
+  // later 204 restore would otherwise enable persist while the old tracks are
+  // still in state and write them onto the next user's PlayerState row.
+  const [sessionUserId, setSessionUserId] = useState(userId);
+  if (sessionUserId !== userId) {
+    setSessionUserId(userId);
     restoreEpochRef.current += 1;
-    if (userId && userId !== onlineRestoredForUserIdRef.current) {
-      onlineRestoreDoneRef.current = false;
-      offlineRestoreDoneRef.current = false;
-      userMutatedQueueRef.current = false;
+    playlistFetchEpochRef.current += 1;
+    onlineRestoreDoneRef.current = false;
+    offlineRestoreDoneRef.current = false;
+    onlineRestoreAppliedRef.current = false;
+    userMutatedQueueRef.current = false;
+    onlineRestoredForUserIdRef.current = null;
+    wantsAutoPlayRef.current = false;
+    upNextPlayNextCountRef.current = 0;
+    playbackCacheRef.current.clear();
+    pendingHydrationIdsRef.current.clear();
+    if (hydrationTimerRef.current) {
+      clearTimeout(hydrationTimerRef.current);
+      hydrationTimerRef.current = null;
     }
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    playerStateRef.current = EMPTY_PLAYER_STATE;
+    setCurrentTrack(null);
+    setIsPlayerVisible(false);
+    setUpNext([]);
+    setUpNextPlayNextCount(0);
+    setSpine([]);
+    setSpineTotal(0);
+    setSpineOrder([]);
+    setSpinePosition(0);
+    setPlayContext(null);
+    setLoopMode("off");
+    setShuffleSeed(null);
+    setIsLoadingNext(false);
   }
 
   const [persistEpoch, setPersistEpoch] = useState(0);
@@ -1144,6 +1216,12 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // player paused (restore-and-wait — no autoplay).
   const restoreQueueFromServer = useCallback(
     async (saved: PlayerStateData) => {
+      const epoch = restoreEpochRef.current;
+      const shouldAbortRestore = () =>
+        userMutatedQueueRef.current || epoch !== restoreEpochRef.current;
+
+      if (shouldAbortRestore()) return;
+
       const context = playlistContextFromJson(saved.playContext);
 
       // Resolve the current track + Up Next ids to full tracks via the playback
@@ -1162,6 +1240,8 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
           resolvedTracks = [];
         }
       }
+      if (shouldAbortRestore()) return;
+
       const byId = new Map(resolvedTracks.map((track) => [track.id, track]));
       for (const track of resolvedTracks) {
         playbackCacheRef.current.set(track);
@@ -1175,6 +1255,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         spineTracks = loaded.tracks;
         total = loaded.total;
       }
+      if (shouldAbortRestore()) return;
 
       const resolvedUpNext = saved.upNextIds
         .map((id) => byId.get(id))
@@ -1186,6 +1267,10 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         saved.shuffleSeed !== null,
         saved.shuffleSeed ?? undefined,
       );
+
+      // Claim the queue before writing so a concurrent offline restore cannot
+      // apply a truncated snapshot after these setStates.
+      onlineRestoreAppliedRef.current = true;
 
       setPlayContext(context);
       setLoopMode(saved.loopMode);
@@ -1236,11 +1321,14 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // round-trips); it backfills via a full online restore once the network
   // returns. A client-side spine snapshot is never cached.
   const restoreQueueOffline = useCallback(async (restoreUserId: string) => {
+    const epoch = restoreEpochRef.current;
     const saved = readCachedPlayerState(restoreUserId);
     if (!saved) return;
+    if (userMutatedQueueRef.current || epoch !== restoreEpochRef.current) return;
 
     const storage = getOfflineStorage();
     const downloaded = await storage.listDownloaded();
+    if (userMutatedQueueRef.current || epoch !== restoreEpochRef.current) return;
     const byId = new Map(downloaded.map((summary) => [summary.trackId, summary]));
 
     const toFullTrack = (id: string): FullTrack | null => {
@@ -1256,6 +1344,12 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     for (const track of [currentFullTrack, ...resolvedUpNext]) {
       if (track) playbackCacheRef.current.set(track);
     }
+
+    // Online restore already applied the full queue (or persist is unlocked
+    // after a successful fetch). Applying now would drop undownloaded Up Next
+    // ids and wipe the backfilled spine.
+    if (onlineRestoreAppliedRef.current || onlineRestoreDoneRef.current) return;
+
     setCacheVersion((version) => version + 1);
 
     setPlayContext(playlistContextFromJson(saved.playContext));
@@ -1292,15 +1386,35 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     };
   }, [playContext, currentTrack?.id, upNext, shuffleSeed, loopMode]);
 
-  // Debounced write: ~1s after the last queue mutation. Gated on a successful
-  // online restore for *this* user so the initial empty snapshot, a previous
-  // user's queue, or an offline-truncated Up Next can never overwrite the
-  // saved row.
+  // Debounced write: ~1s after the last queue mutation. Gated so the initial
+  // empty snapshot, a previous user's queue, or an offline-truncated Up Next
+  // can never overwrite the saved row. A user-started queue may persist even
+  // when the online restore GET failed — otherwise the session is silently lost.
   useEffect(() => {
-    if (!userId || onlineRestoredForUserIdRef.current !== userId) return;
+    if (
+      !userId ||
+      !shouldPersistPlayerState(
+        userId,
+        onlineRestoredForUserIdRef.current,
+        userMutatedQueueRef.current,
+        playerStateRef.current,
+      )
+    ) {
+      return;
+    }
 
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
+      if (
+        !shouldPersistPlayerState(
+          userId,
+          onlineRestoredForUserIdRef.current,
+          userMutatedQueueRef.current,
+          playerStateRef.current,
+        )
+      ) {
+        return;
+      }
       writeCachedPlayerState(userId, playerStateRef.current);
       persistPlayerState(playerStateRef.current);
     }, 1000);
@@ -1315,7 +1429,16 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     if (!userId) return;
 
     const flush = () => {
-      if (onlineRestoredForUserIdRef.current !== userId) return;
+      if (
+        !shouldPersistPlayerState(
+          userId,
+          onlineRestoredForUserIdRef.current,
+          userMutatedQueueRef.current,
+          playerStateRef.current,
+        )
+      ) {
+        return;
+      }
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
       writeCachedPlayerState(userId, playerStateRef.current);
       persistPlayerState(playerStateRef.current, { keepalive: true });
@@ -1361,7 +1484,13 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   // most once, only when the app loads offline (a full online restore has not
   // yet happened).
   useEffect(() => {
-    if (!userId || isOnline || offlineRestoreDoneRef.current || onlineRestoreDoneRef.current) {
+    if (
+      !userId ||
+      isOnline ||
+      offlineRestoreDoneRef.current ||
+      onlineRestoreDoneRef.current ||
+      onlineRestoreAppliedRef.current
+    ) {
       return;
     }
 

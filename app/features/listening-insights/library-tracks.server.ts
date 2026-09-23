@@ -1,0 +1,174 @@
+import { prisma } from "#app/utils/db.server.ts";
+import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
+import { buildLibraryUserTracksWhere } from "#app/utils/library-user-tracks.server.ts";
+import {
+  librarySortToWindow,
+  sortByPlayCompletedCount,
+  type LibrarySortOption,
+} from "./heavy-rotation.ts";
+import { getPlayCompletedCountsByTrack } from "./play-completed-counts.server.ts";
+
+const FULL_TRACK_INCLUDE = {
+  artist: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  coverImage: {
+    select: {
+      objectKey: true,
+    },
+  },
+  service: {
+    select: {
+      name: true,
+      displayName: true,
+      logoUrl: true,
+    },
+  },
+  audioFiles: {
+    select: {
+      id: true,
+      format: true,
+      objectKey: true,
+    },
+  },
+} as const;
+
+const LIBRARY_TRACK_SELECT = {
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  releaseDate: true,
+  originalDate: true,
+  title: true,
+  duration: true,
+  serviceUrl: true,
+  ...FULL_TRACK_INCLUDE,
+} as const;
+
+export type ListLibraryUserTracksResult = {
+  userTracks: Array<{
+    id: string;
+    createdAt: Date;
+    track: {
+      id: string;
+      title: string;
+      artist: { id: string; name: string };
+      duration: number | null;
+      coverImage: { objectKey: string } | null;
+      serviceUrl: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      releaseDate: Date | null;
+      originalDate: Date | null;
+      service: { name: string; displayName: string; logoUrl: string | null } | null;
+      audioFiles: Array<{ id: string; format: string | null; objectKey: string }>;
+    };
+  }>;
+  pagination: {
+    limit: number;
+    hasNext: boolean;
+    nextCursor: string | null;
+  };
+};
+
+/**
+ * Personal library page with optional Heavy Rotation sorts (ADR-026).
+ * Most-played sorts reorder the **full** library (no 50 cap); pagination only.
+ */
+export async function listLibraryUserTracks({
+  userId,
+  sort,
+  hasAudioOnly = false,
+  cursor,
+  limit = LIBRARY_TRACKS_PAGE_SIZE,
+  now = new Date(),
+}: {
+  userId: string;
+  sort: LibrarySortOption;
+  hasAudioOnly?: boolean;
+  cursor?: string | null;
+  limit?: number;
+  now?: Date;
+}): Promise<ListLibraryUserTracksResult> {
+  const where = buildLibraryUserTracksWhere({ userId, hasAudioOnly });
+  const window = librarySortToWindow(sort);
+
+  if (!window) {
+    const userTracksRaw = await prisma.userTrack.findMany({
+      where,
+      select: {
+        id: true,
+        createdAt: true,
+        track: { select: LIBRARY_TRACK_SELECT },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      cursor: cursor ? { id: cursor } : undefined,
+      skip: cursor ? 1 : undefined,
+    });
+
+    const nextCursor =
+      userTracksRaw.length === limit ? (userTracksRaw[userTracksRaw.length - 1]?.id ?? null) : null;
+
+    return {
+      userTracks: userTracksRaw,
+      pagination: {
+        limit,
+        hasNext: !!nextCursor,
+        nextCursor,
+      },
+    };
+  }
+
+  const counts = await getPlayCompletedCountsByTrack({ userId, window, now });
+
+  const sortable = await prisma.userTrack.findMany({
+    where,
+    select: { id: true, trackId: true, createdAt: true },
+  });
+
+  const ordered = sortByPlayCompletedCount(sortable, counts);
+
+  let start = 0;
+  if (cursor) {
+    const idx = ordered.findIndex((row) => row.id === cursor);
+    start = idx >= 0 ? idx + 1 : 0;
+  }
+
+  const page = ordered.slice(start, start + limit);
+  const hasNext = start + limit < ordered.length;
+  const nextCursor = hasNext ? (page[page.length - 1]?.id ?? null) : null;
+
+  if (page.length === 0) {
+    return {
+      userTracks: [],
+      pagination: { limit, hasNext: false, nextCursor: null },
+    };
+  }
+
+  const pageIds = page.map((row) => row.id);
+  const hydrated = await prisma.userTrack.findMany({
+    where: { id: { in: pageIds } },
+    select: {
+      id: true,
+      createdAt: true,
+      track: { select: LIBRARY_TRACK_SELECT },
+    },
+  });
+  const byId = new Map(hydrated.map((row) => [row.id, row]));
+  const userTracks = pageIds
+    .map((id) => byId.get(id))
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  return {
+    userTracks,
+    pagination: {
+      limit,
+      hasNext,
+      nextCursor,
+    },
+  };
+}

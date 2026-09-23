@@ -38,6 +38,8 @@ function isPlayContextJson(value: unknown): value is PlayContextJson {
       return typeof context.albumId === "string" && context.albumId.length > 0;
     case "track":
       return typeof context.trackId === "string" && context.trackId.length > 0;
+    case "onRepeatSnapshot":
+      return typeof context.snapshotId === "string" && context.snapshotId.length > 0;
     default:
       return false;
   }

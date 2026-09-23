@@ -13,7 +13,8 @@ export type QueueSpineContext =
   | { type: "playlist"; playlistId: string; sort?: PlaylistTrackSortOption }
   | { type: "artist"; artistId: string }
   | { type: "album"; albumId: string }
-  | { type: "track"; trackId: string };
+  | { type: "track"; trackId: string }
+  | { type: "onRepeatSnapshot"; snapshotId: string };
 
 export type QueueSpineResponse = {
   tracks: QueueTrack[];
@@ -38,6 +39,8 @@ export async function fetchQueueSpine(context: QueueSpineContext): Promise<Queue
     url = `/api/queue-spine?context=artist&artistId=${encodeURIComponent(context.artistId)}`;
   } else if (context.type === "album") {
     url = `/api/queue-spine?context=album&albumId=${encodeURIComponent(context.albumId)}`;
+  } else if (context.type === "onRepeatSnapshot") {
+    url = `/api/queue-spine?context=onRepeatSnapshot&snapshotId=${encodeURIComponent(context.snapshotId)}`;
   } else {
     url = `/api/queue-spine?context=track&trackId=${encodeURIComponent(context.trackId)}`;
   }
