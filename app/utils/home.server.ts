@@ -1,11 +1,23 @@
 import { data } from "react-router";
 import { YOUTUBE_SERVICE } from "#app/constants/services";
+import {
+  getHeavyRotationTracks,
+  type HeavyRotationTrack,
+} from "#app/features/listening-insights/index.server.ts";
+import {
+  getRecentlyPlayedTracks,
+  type RecentlyPlayedTrack,
+} from "#app/features/recently-played/recently-played.server.ts";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { createServicePlaylistService } from "#app/features/service-playlist/service-playlist.server.ts";
 import {
   listOnRepeatSnapshotShelf,
   type OnRepeatSnapshotSummary,
 } from "#app/features/on-repeat-snapshots/queries.server.ts";
+import {
+  getWeeklyWrap,
+  type WeeklyWrapSummary,
+} from "#app/features/weekly-wrap/weekly-wrap.server.ts";
 import { getUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { buildLibraryUserTracksWhere } from "#app/utils/library-user-tracks.server.ts";
@@ -79,8 +91,17 @@ export type HomeListeningData = {
     totalPlaylists: number;
   };
   recentTracks: HomeRecentTrack[];
+  /** Distinct tracks by latest `play_completed` (ADR-025). Empty → strip hidden. */
+  recentlyPlayed: RecentlyPlayedTrack[];
+  /** Live Heavy Rotation · this UTC month (empty → strip hidden). */
+  heavyRotationMonth: HeavyRotationTrack[];
+  /** Live Heavy Rotation · ever (empty → strip hidden). */
+  heavyRotationEver: HeavyRotationTrack[];
   recentPlaylists: HomeRecentPlaylist[];
+  /** Latest On-Repeat Snapshots for the Snapshot Shelf (ADR-024). */
   onRepeatSnapshots: OnRepeatSnapshotSummary[];
+  /** Quiet weekly wrap; null when the current UTC week has zero finishes. */
+  weeklyWrap: WeeklyWrapSummary | null;
   youtubeData: Promise<HomeYoutubeData>;
 };
 
@@ -216,7 +237,16 @@ export async function loadHomeData(request: Request) {
     });
   }
 
-  const [totalPlaylists, recentTracks, recentPlaylists, onRepeatSnapshots] = await Promise.all([
+  const [
+    totalPlaylists,
+    recentTracks,
+    recentlyPlayed,
+    heavyRotationMonth,
+    heavyRotationEver,
+    recentPlaylists,
+    weeklyWrap,
+    onRepeatSnapshots,
+  ] = await Promise.all([
     prisma.userPlaylist.count({ where: { ownerId: userId } }),
     prisma.userTrack.findMany({
       where: baseWhere,
@@ -224,6 +254,9 @@ export async function loadHomeData(request: Request) {
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
+    getRecentlyPlayedTracks({ userId }),
+    getHeavyRotationTracks({ userId, window: "month" }),
+    getHeavyRotationTracks({ userId, window: "ever" }),
     prisma.userPlaylist.findMany({
       where: { ownerId: userId },
       select: {
@@ -264,6 +297,7 @@ export async function loadHomeData(request: Request) {
       orderBy: { updatedAt: "desc" },
       take: 5,
     }),
+    getWeeklyWrap(userId),
     listOnRepeatSnapshotShelf(userId),
   ]);
 
@@ -301,8 +335,12 @@ export async function loadHomeData(request: Request) {
       totalPlaylists,
     },
     recentTracks,
+    recentlyPlayed,
+    heavyRotationMonth,
+    heavyRotationEver,
     recentPlaylists: recentPlaylistsWithCount,
     onRepeatSnapshots,
+    weeklyWrap,
     // YouTube data is only needed for the listening-hub view (not gray zone)
     youtubeData:
       mode === "listening"

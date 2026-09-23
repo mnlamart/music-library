@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (product decisions from `/grill-with-docs`; implementation not started)
+Accepted — implemented for global FTS track search (#202)
 
 **Tracking:** [#202](https://github.com/mnlamart/music-library/issues/202)
 

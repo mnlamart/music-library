@@ -2,9 +2,12 @@ import { formatDistanceToNow } from "date-fns";
 import { Await, Link } from "react-router";
 import { useAudioPlayer } from "#app/components/audio-player-provider.tsx";
 import { ArchivingBanner } from "#app/components/home/archiving-banner.tsx";
+import { HeavyRotationStrip } from "#app/components/home/heavy-rotation-strip.tsx";
 import { HomeRecentPlaylistRow } from "#app/components/home/home-recent-playlist-row.tsx";
 import { HomeRecentTrackRow } from "#app/components/home/home-recent-track-row.tsx";
 import { SnapshotShelf } from "#app/components/home/snapshot-shelf.tsx";
+import { RecentlyPlayedStrip } from "#app/components/home/recently-played-strip.tsx";
+import { WeeklyWrap } from "#app/components/home/weekly-wrap.tsx";
 import { InstallAppHomePrompt } from "#app/components/pwa/install-app-home-prompt.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import {
@@ -28,8 +31,12 @@ export function ListeningHome({
   archivingCount,
   stats,
   recentTracks,
+  recentlyPlayed,
+  heavyRotationMonth,
+  heavyRotationEver,
   recentPlaylists,
   onRepeatSnapshots,
+  weeklyWrap,
   youtubeData,
 }: ListeningHomeProps) {
   const { playLibrary, isLoadingNext } = useAudioPlayer();
@@ -64,6 +71,8 @@ export function ListeningHome({
         </Button>
       </div>
 
+      <WeeklyWrap wrap={weeklyWrap} />
+
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Recently added</h2>
@@ -73,6 +82,21 @@ export function ListeningHome({
         </div>
         <HomeRecentTrackRow recentTracks={recentTracks} />
       </section>
+
+      {/* Above recent playlists; independent of sibling hub strips (ADR-025 / ADR-026 / ADR-024). */}
+      <RecentlyPlayedStrip tracks={recentlyPlayed} />
+
+      <HeavyRotationStrip
+        title="Heavy Rotation · this month"
+        tracks={heavyRotationMonth}
+        librarySort="mostPlayedMonth"
+      />
+
+      <HeavyRotationStrip
+        title="Heavy Rotation · ever"
+        tracks={heavyRotationEver}
+        librarySort="mostPlayedEver"
+      />
 
       <SnapshotShelf snapshots={onRepeatSnapshots} hideWhenEmpty />
 
