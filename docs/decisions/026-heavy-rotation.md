@@ -42,7 +42,7 @@ Home strip placement relative to **Recently Played Strip** / Snapshot Shelf is a
 - Rolling windows other than “this UTC month” / lifetime.
 - Combining both library sorts at once.
 - Changing `/history` semantics.
-- Search play-boost (sibling idea). **Weekly Wrap** is settled in ADR-027.
+- **Weekly Wrap** is settled in ADR-027. **Personal Play Boost** is settled in ADR-028.
 
 ## Consequences
 

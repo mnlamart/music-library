@@ -37,7 +37,7 @@ No top-track / top-artist hero in v1 (keeps tone quiet; home already has track s
 - Frozen weekly archives or email/push digests.
 - Unique-artists metric or loud “wrapped” storytelling UI in v1.
 - `/history` header placement.
-- Search play-boost (sibling idea).
+- **Personal Play Boost** is settled in ADR-028.
 
 ## Consequences
 
