@@ -40,6 +40,9 @@ const baseTrack = {
   coverImage: { objectKey: "covers/midnight-city.jpg" },
 };
 
+const updatedAt = "2024-06-01T00:00:00.000Z";
+const updatedLabel = `Updated ${new Date(updatedAt).toLocaleDateString()}`;
+
 function renderCard(props: Partial<ComponentProps<typeof PlaylistCard>> = {}) {
   const router = createMemoryRouter(
     [
@@ -52,7 +55,7 @@ function renderCard(props: Partial<ComponentProps<typeof PlaylistCard>> = {}) {
             description="Late night listening"
             tracks={[baseTrack]}
             createdAt="2024-01-01T00:00:00.000Z"
-            updatedAt="2024-06-01T00:00:00.000Z"
+            updatedAt={updatedAt}
             {...props}
           />
         ),
@@ -97,27 +100,46 @@ test("uses trackCount when preview tracks are truncated", () => {
     trackCount: 12,
   });
 
-  expect(screen.getByText("12 tracks")).toBeInTheDocument();
+  expect(screen.getByText(`12 tracks · ${updatedLabel}`)).toBeInTheDocument();
 });
 
 test("falls back to tracks.length when trackCount is omitted", () => {
   renderCard({ tracks: [baseTrack] });
 
-  expect(screen.getByText("1 track")).toBeInTheDocument();
+  expect(screen.getByText(`1 track · ${updatedLabel}`)).toBeInTheDocument();
 });
 
-test("uses totalDuration when preview tracks are truncated", () => {
+test("shows description when present", () => {
+  renderCard();
+
+  expect(screen.getByText("Late night listening")).toBeInTheDocument();
+});
+
+test("omits description when null", () => {
+  renderCard({ description: null });
+
+  expect(screen.queryByText("Late night listening")).not.toBeInTheDocument();
+});
+
+test("does not show playlist duration", () => {
   renderCard({
     tracks: [baseTrack],
     trackCount: 12,
     totalDuration: 3600,
   });
 
-  expect(screen.getByText("1:00:00")).toBeInTheDocument();
+  expect(screen.queryByText("1:00:00")).not.toBeInTheDocument();
+  expect(screen.queryByText("4:05")).not.toBeInTheDocument();
 });
 
-test("falls back to summing preview tracks when totalDuration is omitted", () => {
-  renderCard({ tracks: [baseTrack] });
+test("list variant uses a horizontal row layout", () => {
+  renderCard({ variant: "list" });
 
-  expect(screen.getByText("4:05")).toBeInTheDocument();
+  expect(screen.getByTestId("playlist-card")).toHaveAttribute("data-variant", "list");
+});
+
+test("grid variant uses a stacked tile layout", () => {
+  renderCard({ variant: "grid" });
+
+  expect(screen.getByTestId("playlist-card")).toHaveAttribute("data-variant", "grid");
 });

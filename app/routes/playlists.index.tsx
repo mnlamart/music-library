@@ -126,7 +126,7 @@ export default function PlaylistsIndexRoute({
       ? loaderData.offlinePlaylists
       : [];
 
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [searchParams, setSearchParams] = useSearchParams();
 
   const sort = parseSort(searchParams.get("sort"));
@@ -328,16 +328,16 @@ export default function PlaylistsIndexRoute({
           {/* Playlists Grid/List */}
           <div
             className={cn(
-              "grid gap-6",
               viewMode === "grid"
-                ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                : "grid-cols-1",
+                ? "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5"
+                : "flex flex-col gap-0.5",
             )}
           >
             {items.map((playlist) => (
               <PlaylistCard
                 key={playlist.id}
                 id={playlist.id}
+                variant={viewMode}
                 title={playlist.title}
                 description={playlist.description}
                 tracks={playlist.tracks.map((pt) => pt.track)}
