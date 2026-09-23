@@ -1,3 +1,4 @@
+import { type QueueTrack } from "#app/types/frontend/shared.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
 import { buildLibraryUserTracksWhere } from "#app/utils/library-user-tracks.server.ts";
@@ -7,6 +8,17 @@ import {
   type LibrarySortOption,
 } from "./heavy-rotation.ts";
 import { getPlayCompletedCountsByTrack } from "./play-completed-counts.server.ts";
+
+const QUEUE_TRACK_SELECT = {
+  id: true,
+  title: true,
+  artist: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+} as const;
 
 const FULL_TRACK_INCLUDE = {
   artist: {
@@ -73,6 +85,49 @@ export type ListLibraryUserTracksResult = {
     nextCursor: string | null;
   };
 };
+
+/**
+ * Full library spine for the audio queue (ADR-015 + ADR-026).
+ * Same ordering as the library page for the chosen sort; playable-only by default.
+ */
+export async function listLibraryQueueSpineTracks({
+  userId,
+  sort,
+  hasAudioOnly = true,
+  now = new Date(),
+}: {
+  userId: string;
+  sort: LibrarySortOption;
+  hasAudioOnly?: boolean;
+  now?: Date;
+}): Promise<QueueTrack[]> {
+  const where = buildLibraryUserTracksWhere({ userId, hasAudioOnly });
+  const window = librarySortToWindow(sort);
+
+  if (!window) {
+    const userTracks = await prisma.userTrack.findMany({
+      where,
+      select: {
+        track: { select: QUEUE_TRACK_SELECT },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return userTracks.map((userTrack) => userTrack.track);
+  }
+
+  const counts = await getPlayCompletedCountsByTrack({ userId, window, now });
+  const sortable = await prisma.userTrack.findMany({
+    where,
+    select: {
+      id: true,
+      trackId: true,
+      createdAt: true,
+      track: { select: QUEUE_TRACK_SELECT },
+    },
+  });
+
+  return sortByPlayCompletedCount(sortable, counts).map((row) => row.track);
+}
 
 /**
  * Personal library page with optional Heavy Rotation sorts (ADR-026).

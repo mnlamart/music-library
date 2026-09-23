@@ -20,7 +20,12 @@ function isPlayContextJson(value: unknown): value is PlayContextJson {
 
   switch (context.type) {
     case "library":
-      return true;
+      return (
+        context.sort === undefined ||
+        context.sort === "dateAdded" ||
+        context.sort === "mostPlayedMonth" ||
+        context.sort === "mostPlayedEver"
+      );
     case "playlist":
       return (
         typeof context.playlistId === "string" &&

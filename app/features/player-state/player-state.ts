@@ -7,7 +7,11 @@ import { type LoopMode } from "#app/features/queue/queue-navigation.ts";
  * spine and only add staleness.
  */
 export type PlayContextJson =
-  | { type: "library" }
+  | {
+      type: "library";
+      /** Omitted or `dateAdded` means newest-added library order. */
+      sort?: "dateAdded" | "mostPlayedMonth" | "mostPlayedEver";
+    }
   | {
       type: "playlist";
       playlistId: string;

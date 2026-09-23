@@ -26,7 +26,23 @@ describe("parseQueueSpineParams", () => {
     const params = new URLSearchParams("context=library&hasAudio=1");
     expect(parseQueueSpineParams(params)).toEqual({
       ok: true,
-      value: { context: "library", hasAudioOnly: true },
+      value: { context: "library", hasAudioOnly: true, sort: "dateAdded" },
+    });
+  });
+
+  test("accepts library context with mostPlayedMonth sort", () => {
+    const params = new URLSearchParams("context=library&hasAudio=1&sort=mostPlayedMonth");
+    expect(parseQueueSpineParams(params)).toEqual({
+      ok: true,
+      value: { context: "library", hasAudioOnly: true, sort: "mostPlayedMonth" },
+    });
+  });
+
+  test("defaults unknown library sort to dateAdded", () => {
+    const params = new URLSearchParams("context=library&hasAudio=1&sort=nope");
+    expect(parseQueueSpineParams(params)).toEqual({
+      ok: true,
+      value: { context: "library", hasAudioOnly: true, sort: "dateAdded" },
     });
   });
 
@@ -162,6 +178,7 @@ describe("fetchQueueSpine", () => {
     const result = await fetchQueueSpine("user-1", {
       context: "library",
       hasAudioOnly: true,
+      sort: "dateAdded",
     });
 
     expect(prisma.userTrack.findMany).toHaveBeenCalledWith(
@@ -188,6 +205,7 @@ describe("fetchQueueSpine", () => {
     const result = await fetchQueueSpine("user-1", {
       context: "library",
       hasAudioOnly: true,
+      sort: "dateAdded",
     });
 
     expect(result).toEqual({ tracks: [], total: 0 });

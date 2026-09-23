@@ -42,7 +42,7 @@ describe("queue-spine API loader", () => {
   test("returns library spine", async () => {
     vi.mocked(parseQueueSpineParams).mockReturnValue({
       ok: true,
-      value: { context: "library", hasAudioOnly: true },
+      value: { context: "library", hasAudioOnly: true, sort: "dateAdded" },
     });
     vi.mocked(fetchQueueSpine).mockResolvedValue({
       tracks: [
@@ -63,6 +63,7 @@ describe("queue-spine API loader", () => {
     expect(fetchQueueSpine).toHaveBeenCalledWith("user-1", {
       context: "library",
       hasAudioOnly: true,
+      sort: "dateAdded",
     });
     const body = (await response.json()) as {
       tracks: Array<Record<string, unknown>>;
@@ -84,7 +85,7 @@ describe("queue-spine API loader", () => {
   test("returns empty library spine", async () => {
     vi.mocked(parseQueueSpineParams).mockReturnValue({
       ok: true,
-      value: { context: "library", hasAudioOnly: true },
+      value: { context: "library", hasAudioOnly: true, sort: "dateAdded" },
     });
     vi.mocked(fetchQueueSpine).mockResolvedValue({
       tracks: [],
