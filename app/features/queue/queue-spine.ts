@@ -1,4 +1,5 @@
 import { type FullTrack, type QueueTrack } from "#app/types/frontend/shared.ts";
+import { type LibrarySortOption } from "#app/features/listening-insights/heavy-rotation.ts";
 import { type PlaylistTrackSortOption } from "#app/utils/playlist-track-sort.ts";
 
 export class AuthExpiredError extends Error {
@@ -9,7 +10,7 @@ export class AuthExpiredError extends Error {
 }
 
 export type QueueSpineContext =
-  | { type: "library" }
+  | { type: "library"; sort?: LibrarySortOption }
   | { type: "playlist"; playlistId: string; sort?: PlaylistTrackSortOption }
   | { type: "artist"; artistId: string }
   | { type: "album"; albumId: string }
@@ -25,7 +26,14 @@ export async function fetchQueueSpine(context: QueueSpineContext): Promise<Queue
   let url: string;
 
   if (context.type === "library") {
-    url = "/api/queue-spine?context=library&hasAudio=1";
+    const params = new URLSearchParams({
+      context: "library",
+      hasAudio: "1",
+    });
+    if (context.sort && context.sort !== "dateAdded") {
+      params.set("sort", context.sort);
+    }
+    url = `/api/queue-spine?${params.toString()}`;
   } else if (context.type === "playlist") {
     const params = new URLSearchParams({
       context: "playlist",

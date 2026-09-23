@@ -47,6 +47,22 @@ describe("fetchQueueSpine", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/api/queue-spine?context=library&hasAudio=1",
     );
+    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("sort=");
+  });
+
+  test("requests library spine with mostPlayed sort", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ tracks: [], total: 0 }),
+    } as Response);
+
+    await fetchQueueSpine({ type: "library", sort: "mostPlayedEver" });
+
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    expect(url).toContain("context=library");
+    expect(url).toContain("hasAudio=1");
+    expect(url).toContain("sort=mostPlayedEver");
   });
 
   test("requests playlist spine with playlistId", async () => {
