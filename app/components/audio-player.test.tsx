@@ -601,6 +601,32 @@ test("shows controls in the now playing sheet", async () => {
   expect(within(sheet).getByLabelText("More actions")).toBeTruthy();
 });
 
+test("keeps the now-playing cover warm while the player is mounted", async () => {
+  const user = userEvent.setup();
+  await renderPlayer();
+
+  const warmCover = screen.getByTestId("player-warm-cover");
+  expect(warmCover).toHaveAttribute(
+    "src",
+    "/resources/images?src=covers%2Ftest.jpg&w=320&h=320&fit=cover&format=webp",
+  );
+  expect(warmCover).toHaveAttribute("loading", "eager");
+
+  await user.click(screen.getByLabelText("Open now playing"));
+  const sheet = await screen.findByTestId("player-now-playing-sheet");
+  const sheetCover = within(sheet).getByRole("img", { name: "Test Song" });
+  expect(sheetCover).toHaveAttribute("src", warmCover.getAttribute("src"));
+  expect(sheetCover).toHaveAttribute("loading", "eager");
+
+  // Closing the sheet unmounts the sheet cover, but the warm preload stays mounted
+  // so the browser memory/HTTP cache is still hot on reopen.
+  await user.click(screen.getByRole("button", { name: "Close" }));
+  await waitFor(() => {
+    expect(screen.queryByTestId("player-now-playing-sheet")).toBeNull();
+  });
+  expect(screen.getByTestId("player-warm-cover")).toBeTruthy();
+});
+
 test("overflow sheet opens with all action buttons", async () => {
   const user = userEvent.setup();
   await renderPlayer();

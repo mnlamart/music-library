@@ -25,3 +25,10 @@ export const playlistCoverPixelSizes = {
   md: 192,
   lg: 256,
 } as const;
+
+/**
+ * Retina size for the mobile now-playing sheet cover (h-40 / 160px CSS → 320px).
+ * Kept as a shared constant so the player can warm this URL while the mini bar
+ * is visible — the sheet remounts on each open and would otherwise refetch.
+ */
+export const nowPlayingCoverPixelSize = 320;

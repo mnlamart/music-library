@@ -4,6 +4,7 @@ import { TrackThumbnail } from "#app/components/track-thumbnail.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { type FullTrack } from "#app/types/frontend/shared.ts";
 import { type HomeRecentTrack } from "#app/utils/home.server.ts";
+import { nowPlayingCoverPixelSize } from "#app/utils/cover-image-url.ts";
 import { cn } from "#app/utils/misc.tsx";
 
 type HomeRecentTrackCardProps = {
@@ -45,7 +46,7 @@ export function HomeRecentTrackCard({
           coverImage={track.coverImage}
           alt={track.title}
           size="lg"
-          pixelSize={320}
+          pixelSize={nowPlayingCoverPixelSize}
           className="h-full w-full rounded-lg"
         />
 
