@@ -1,5 +1,6 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useFetcher, useRevalidator } from "react-router";
+import { useDuplicatePlaylistDialog } from "./duplicate-playlist-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,22 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Skeleton } from "./ui/skeleton";
 
 const PLAYLIST_SKELETON_KEYS = ["playlist-skel-0", "playlist-skel-1", "playlist-skel-2"] as const;
+
+// #region agent log
+function agentLog(
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+) {
+  if (import.meta.env.MODE === "test") return;
+  fetch("/resources/debug-log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hypothesisId, location, message, data, timestamp: Date.now() }),
+  }).catch(() => {});
+}
+// #endregion
 
 /**
  * Playlist data structure for the add-to-playlist menu
@@ -74,6 +91,40 @@ export function AddToPlaylistMenu({
   }>();
   const createFetcher = useFetcher<CreatePlaylistResponse>();
   const { revalidate } = useRevalidator();
+  // Prefer host outside dropdown/sheet so AlertDialog survives menu unmount on desktop.
+  const duplicateDialog = useDuplicatePlaylistDialog();
+
+  // #region agent log
+  const duplicateRef = useRef(duplicatePlaylist);
+  duplicateRef.current = duplicatePlaylist;
+  useEffect(() => {
+    const instanceId = `${trackId}:${Date.now()}`;
+    agentLog("A", "add-to-playlist-menu.tsx:mount", "AddToPlaylistMenu mounted", {
+      trackId,
+      trackTitle,
+      hasPlaylistsProp: playlists !== undefined,
+      instanceId,
+    });
+    return () => {
+      agentLog("A", "add-to-playlist-menu.tsx:unmount", "AddToPlaylistMenu unmounting", {
+        trackId,
+        instanceId,
+        duplicatePlaylistId: duplicateRef.current?.id ?? null,
+        duplicatePlaylistTitle: duplicateRef.current?.title ?? null,
+        hadOpenDialog: !!duplicateRef.current,
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/unmount probe only
+  }, []);
+  useEffect(() => {
+    agentLog("A", "add-to-playlist-menu.tsx:duplicate-state", "duplicatePlaylist changed", {
+      trackId,
+      dialogOpen: !!duplicatePlaylist,
+      duplicatePlaylistId: duplicatePlaylist?.id ?? null,
+      duplicatePlaylistTitle: duplicatePlaylist?.title ?? null,
+    });
+  }, [duplicatePlaylist, trackId]);
+  // #endregion
 
   // Self-fetch playlists from resource route when not provided as prop
   const playlistsFetcher = useFetcher<{ playlists: Playlist[] }>();
@@ -168,6 +219,14 @@ export function AddToPlaylistMenu({
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
+      // #region agent log
+      agentLog("B", "add-to-playlist-menu.tsx:fetcher-effect", "Fetcher idle with data", {
+        status: fetcher.data.status,
+        playlistId: fetcher.data.playlistId ?? null,
+        localPlaylistCount: localPlaylists.length,
+        foundInLocal: !!localPlaylists.find((p) => p.id === fetcher.data?.playlistId),
+      });
+      // #endregion
       if (fetcher.data.status === "success") {
         const removedCount = fetcher.data.removedCount;
         const playlistId = fetcher.data.playlistId;
@@ -192,12 +251,39 @@ export function AddToPlaylistMenu({
         }
       } else if (fetcher.data.status === "duplicate") {
         const playlist = localPlaylists.find((p) => p.id === fetcher.data?.playlistId);
+        // #region agent log
+        agentLog("B", "add-to-playlist-menu.tsx:duplicate-branch", "Duplicate status received", {
+          playlistId: fetcher.data.playlistId ?? null,
+          willSetDuplicate: !!playlist,
+          playlistTitle: playlist?.title ?? null,
+          usingProvider: !!duplicateDialog,
+          runId: "post-fix",
+        });
+        // #endregion
         if (playlist) {
-          setDuplicatePlaylist(playlist);
+          if (duplicateDialog) {
+            duplicateDialog.requestConfirm({
+              trackId,
+              trackTitle,
+              playlist,
+              onSuccess,
+            });
+          } else {
+            setDuplicatePlaylist(playlist);
+          }
         }
       }
     }
-  }, [fetcher.state, fetcher.data, localPlaylists, onSuccess, revalidate]);
+  }, [
+    duplicateDialog,
+    fetcher.state,
+    fetcher.data,
+    localPlaylists,
+    onSuccess,
+    revalidate,
+    trackId,
+    trackTitle,
+  ]);
 
   useEffect(() => {
     if (createFetcher.state === "idle" && createFetcher.data) {
@@ -371,7 +457,25 @@ export function AddToPlaylistMenu({
         )}
       </div>
 
-      <AlertDialog open={!!duplicatePlaylist} onOpenChange={() => setDuplicatePlaylist(null)}>
+      <AlertDialog
+        open={!!duplicatePlaylist}
+        onOpenChange={(open) => {
+          // #region agent log
+          agentLog(
+            "C",
+            "add-to-playlist-menu.tsx:AlertDialog.onOpenChange",
+            "AlertDialog onOpenChange",
+            {
+              open,
+              trackId,
+              previousDuplicateId: duplicatePlaylist?.id ?? null,
+            },
+          );
+          // #endregion
+          // Preserve original behavior: always clear (even when open=true)
+          setDuplicatePlaylist(null);
+        }}
+      >
         <AlertDialogContent className="z-[9999]">
           <AlertDialogHeader>
             <AlertDialogTitle>Track already in playlist</AlertDialogTitle>

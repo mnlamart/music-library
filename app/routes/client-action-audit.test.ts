@@ -15,6 +15,8 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/extract-metadata.tsx",
   "_auth+/webauthn+/registration.ts",
   "_auth+/webauthn+/authentication.ts",
+  // Temporary agent debug ingest (raw fetch from browser instrumentation)
+  "resources+/debug-log.tsx",
 ]);
 
 function walkFiles(dir: string): string[] {
@@ -64,9 +66,7 @@ function submitsToOwnAction(source: string): boolean {
 describe("clientAction audit", () => {
   const routeFiles = walkFiles(ROUTES_DIR).filter(
     (path) =>
-      !path.endsWith(".test.ts") &&
-      !path.endsWith(".test.tsx") &&
-      !path.includes(".server."),
+      !path.endsWith(".test.ts") && !path.endsWith(".test.tsx") && !path.includes(".server."),
   );
 
   test("routes using useFetcher to submit to their own action export clientAction", () => {
