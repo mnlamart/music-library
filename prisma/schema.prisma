@@ -25,10 +25,11 @@ model User {
   playlists        UserPlaylist[]
   userTracks       UserTrack[]
   notifications    UserNotification[]
-  usageEvents      UsageEvent[]
-  dailyActiveUsers DailyActiveUser[]
-  roles            Role[]            @relation("RoleToUser")
-  playerState      PlayerState?
+  usageEvents         UsageEvent[]
+  dailyActiveUsers    DailyActiveUser[]
+  onRepeatSnapshots   OnRepeatSnapshot[]
+  roles               Role[]            @relation("RoleToUser")
+  playerState         PlayerState?
 }
 
 model PlayerState {
@@ -287,11 +288,12 @@ model Track {
   updatedAt             DateTime               @updatedAt
   servicePlaylistTracks ServicePlaylistTrack[]
   service               Service                @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  playlists             UserPlaylistTrack[]
-  userTracks            UserTrack[]
-  audioFiles            TrackAudioFile[]
-  archiveJob            ArchiveJob?
-  
+  playlists               UserPlaylistTrack[]
+  userTracks              UserTrack[]
+  audioFiles              TrackAudioFile[]
+  archiveJob              ArchiveJob?
+  onRepeatSnapshotTracks  OnRepeatSnapshotTrack[]
+
   @@unique([serviceId, externalId])
   @@index([serviceId, externalId])
   @@index([updatedAt])
@@ -313,6 +315,36 @@ model UserPlaylist {
 
   @@index([ownerId])
   @@index([ownerId, updatedAt])
+}
+
+/// Frozen monthly top tracks by play_completed (ADR-024). Not a UserPlaylist.
+model OnRepeatSnapshot {
+  id          String                   @id @default(cuid())
+  userId      String
+  user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Calendar month covered, UTC, as `YYYY-MM` (e.g. "2026-09").
+  yearMonth   String
+  generatedAt DateTime                 @default(now())
+  createdAt   DateTime                 @default(now())
+  tracks      OnRepeatSnapshotTrack[]
+
+  @@unique([userId, yearMonth])
+  @@index([userId, yearMonth])
+}
+
+model OnRepeatSnapshotTrack {
+  id          String           @id @default(cuid())
+  snapshotId  String
+  snapshot    OnRepeatSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  trackId     String
+  track       Track            @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  /// 0-based rank within the snapshot (0 = most listened).
+  position    Int
+  listenCount Int
+  createdAt   DateTime         @default(now())
+
+  @@unique([snapshotId, trackId])
+  @@index([snapshotId, position])
 }
 
 model UserPlaylistTrack {

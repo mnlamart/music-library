@@ -11,6 +11,10 @@ import {
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { createServicePlaylistService } from "#app/features/service-playlist/service-playlist.server.ts";
 import {
+  listOnRepeatSnapshotShelf,
+  type OnRepeatSnapshotSummary,
+} from "#app/features/on-repeat-snapshots/queries.server.ts";
+import {
   getWeeklyWrap,
   type WeeklyWrapSummary,
 } from "#app/features/weekly-wrap/weekly-wrap.server.ts";
@@ -94,6 +98,8 @@ export type HomeListeningData = {
   /** Live Heavy Rotation · ever (empty → strip hidden). */
   heavyRotationEver: HeavyRotationTrack[];
   recentPlaylists: HomeRecentPlaylist[];
+  /** Latest On-Repeat Snapshots for the Snapshot Shelf (ADR-024). */
+  onRepeatSnapshots: OnRepeatSnapshotSummary[];
   /** Quiet weekly wrap; null when the current UTC week has zero finishes. */
   weeklyWrap: WeeklyWrapSummary | null;
   youtubeData: Promise<HomeYoutubeData>;
@@ -239,6 +245,7 @@ export async function loadHomeData(request: Request) {
     heavyRotationEver,
     recentPlaylists,
     weeklyWrap,
+    onRepeatSnapshots,
   ] = await Promise.all([
     prisma.userPlaylist.count({ where: { ownerId: userId } }),
     prisma.userTrack.findMany({
@@ -291,6 +298,7 @@ export async function loadHomeData(request: Request) {
       take: 5,
     }),
     getWeeklyWrap(userId),
+    listOnRepeatSnapshotShelf(userId),
   ]);
 
   const playlistIds = recentPlaylists.map((playlist) => playlist.id);
@@ -331,6 +339,7 @@ export async function loadHomeData(request: Request) {
     heavyRotationMonth,
     heavyRotationEver,
     recentPlaylists: recentPlaylistsWithCount,
+    onRepeatSnapshots,
     weeklyWrap,
     // YouTube data is only needed for the listening-hub view (not gray zone)
     youtubeData:

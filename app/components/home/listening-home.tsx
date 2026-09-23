@@ -5,6 +5,7 @@ import { ArchivingBanner } from "#app/components/home/archiving-banner.tsx";
 import { HeavyRotationStrip } from "#app/components/home/heavy-rotation-strip.tsx";
 import { HomeRecentPlaylistRow } from "#app/components/home/home-recent-playlist-row.tsx";
 import { HomeRecentTrackRow } from "#app/components/home/home-recent-track-row.tsx";
+import { SnapshotShelf } from "#app/components/home/snapshot-shelf.tsx";
 import { RecentlyPlayedStrip } from "#app/components/home/recently-played-strip.tsx";
 import { WeeklyWrap } from "#app/components/home/weekly-wrap.tsx";
 import { InstallAppHomePrompt } from "#app/components/pwa/install-app-home-prompt.tsx";
@@ -34,6 +35,7 @@ export function ListeningHome({
   heavyRotationMonth,
   heavyRotationEver,
   recentPlaylists,
+  onRepeatSnapshots,
   weeklyWrap,
   youtubeData,
 }: ListeningHomeProps) {
@@ -81,7 +83,7 @@ export function ListeningHome({
         <HomeRecentTrackRow recentTracks={recentTracks} />
       </section>
 
-      {/* Above recent playlists; independent of sibling hub strips (ADR-025 / ADR-026). */}
+      {/* Above recent playlists; independent of sibling hub strips (ADR-025 / ADR-026 / ADR-024). */}
       <RecentlyPlayedStrip tracks={recentlyPlayed} />
 
       <HeavyRotationStrip
@@ -95,6 +97,8 @@ export function ListeningHome({
         tracks={heavyRotationEver}
         librarySort="mostPlayedEver"
       />
+
+      <SnapshotShelf snapshots={onRepeatSnapshots} hideWhenEmpty />
 
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between">

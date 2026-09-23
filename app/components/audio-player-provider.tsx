@@ -66,7 +66,14 @@ import { InstallAppBanner } from "./pwa/install-app-banner";
 
 type Track = FullTrack;
 
-type PlayContext = "library" | "playlist" | "artist" | "album" | "track" | "music";
+type PlayContext =
+  | "library"
+  | "playlist"
+  | "artist"
+  | "album"
+  | "track"
+  | "music"
+  | "onRepeatSnapshot";
 
 interface PlaylistContext {
   type: PlayContext;
@@ -74,6 +81,7 @@ interface PlaylistContext {
   artistId?: string;
   albumId?: string;
   trackId?: string;
+  snapshotId?: string;
   cursor?: string;
 }
 
@@ -145,6 +153,9 @@ function toQueueSpineContext(context: PlaylistContext): QueueSpineContext | null
   if (context.type === "track" && context.trackId) {
     return { type: "track", trackId: context.trackId };
   }
+  if (context.type === "onRepeatSnapshot" && context.snapshotId) {
+    return { type: "onRepeatSnapshot", snapshotId: context.snapshotId };
+  }
   return null;
 }
 
@@ -163,6 +174,9 @@ function playContextToJson(context: PlaylistContext | null): PlayContextJson | n
   }
   if (context.type === "track" && context.trackId) {
     return { type: "track", trackId: context.trackId };
+  }
+  if (context.type === "onRepeatSnapshot" && context.snapshotId) {
+    return { type: "onRepeatSnapshot", snapshotId: context.snapshotId };
   }
   return null; // "music" has no spine
 }

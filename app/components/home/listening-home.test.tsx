@@ -65,6 +65,7 @@ const baseListeningData: HomeListeningData = {
   heavyRotationMonth: [],
   heavyRotationEver: [],
   recentPlaylists: [],
+  onRepeatSnapshots: [],
   weeklyWrap: null,
   youtubeData: Promise.resolve({
     hasYouTubeConnection: true,

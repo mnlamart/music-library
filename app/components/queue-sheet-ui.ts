@@ -1,6 +1,7 @@
 type PlayContext = {
-  type: "library" | "playlist" | "artist" | "album" | "track" | "music";
+  type: "library" | "playlist" | "artist" | "album" | "track" | "music" | "onRepeatSnapshot";
   playlistId?: string;
+  snapshotId?: string;
 } | null;
 
 export function getSpineSectionLabel(playContext: PlayContext): string {
@@ -9,6 +10,7 @@ export function getSpineSectionLabel(playContext: PlayContext): string {
   if (playContext?.type === "artist") return "from artist";
   if (playContext?.type === "album") return "from album";
   if (playContext?.type === "track") return "from track";
+  if (playContext?.type === "onRepeatSnapshot") return "from on-repeat";
   return "from queue";
 }
 
@@ -37,5 +39,6 @@ export function getSpineSectionHeading(playContext: PlayContext): string {
   if (playContext?.type === "artist") return "From Artist";
   if (playContext?.type === "album") return "From Album";
   if (playContext?.type === "track") return "From Track";
+  if (playContext?.type === "onRepeatSnapshot") return "From On-Repeat";
   return "From Queue";
 }

@@ -11,7 +11,8 @@ export type PlayContextJson =
   | { type: "playlist"; playlistId: string }
   | { type: "artist"; artistId: string }
   | { type: "album"; albumId: string }
-  | { type: "track"; trackId: string };
+  | { type: "track"; trackId: string }
+  | { type: "onRepeatSnapshot"; snapshotId: string };
 
 /** Serializable player state, as stored in the `PlayerState` row and sent over the wire. */
 export type PlayerStateData = {

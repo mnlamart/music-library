@@ -52,6 +52,10 @@ vi.mock("#app/features/service-playlist/service-playlist.server.ts", () => ({
   })),
 }));
 
+vi.mock("#app/features/on-repeat-snapshots/queries.server.ts", () => ({
+  listOnRepeatSnapshotShelf: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("#app/features/recently-played/recently-played.server.ts", () => ({
   getRecentlyPlayedTracks: vi.fn(),
 }));
@@ -190,6 +194,7 @@ describe("loadHomeData", () => {
       recentlyPlayed: [],
       heavyRotationMonth: [],
       heavyRotationEver: [],
+      onRepeatSnapshots: [],
       weeklyWrap: { finishes: 5, uniqueTracks: 3, dayStreak: 2 },
     });
     expect(getRecentlyPlayedTracks).toHaveBeenCalledWith({ userId: "user-1" });
