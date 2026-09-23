@@ -4,6 +4,7 @@ import { useAudioPlayer } from "#app/components/audio-player-provider.tsx";
 import { ArchivingBanner } from "#app/components/home/archiving-banner.tsx";
 import { HomeRecentPlaylistRow } from "#app/components/home/home-recent-playlist-row.tsx";
 import { HomeRecentTrackRow } from "#app/components/home/home-recent-track-row.tsx";
+import { RecentlyPlayedStrip } from "#app/components/home/recently-played-strip.tsx";
 import { InstallAppHomePrompt } from "#app/components/pwa/install-app-home-prompt.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import {
@@ -27,6 +28,7 @@ export function ListeningHome({
   archivingCount,
   stats,
   recentTracks,
+  recentlyPlayed,
   recentPlaylists,
   youtubeData,
 }: ListeningHomeProps) {
@@ -71,6 +73,9 @@ export function ListeningHome({
         </div>
         <HomeRecentTrackRow recentTracks={recentTracks} />
       </section>
+
+      {/* Above recent playlists; independent of sibling hub strips (ADR-025). */}
+      <RecentlyPlayedStrip tracks={recentlyPlayed} />
 
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between">

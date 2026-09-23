@@ -1,5 +1,9 @@
 import { data } from "react-router";
 import { YOUTUBE_SERVICE } from "#app/constants/services";
+import {
+  getRecentlyPlayedTracks,
+  type RecentlyPlayedTrack,
+} from "#app/features/recently-played/recently-played.server.ts";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { createServicePlaylistService } from "#app/features/service-playlist/service-playlist.server.ts";
 import { getUserId } from "#app/utils/auth.server.ts";
@@ -75,6 +79,8 @@ export type HomeListeningData = {
     totalPlaylists: number;
   };
   recentTracks: HomeRecentTrack[];
+  /** Distinct tracks by latest `play_completed` (ADR-025). Empty → strip hidden. */
+  recentlyPlayed: RecentlyPlayedTrack[];
   recentPlaylists: HomeRecentPlaylist[];
   youtubeData: Promise<HomeYoutubeData>;
 };
@@ -211,7 +217,7 @@ export async function loadHomeData(request: Request) {
     });
   }
 
-  const [totalPlaylists, recentTracks, recentPlaylists] = await Promise.all([
+  const [totalPlaylists, recentTracks, recentlyPlayed, recentPlaylists] = await Promise.all([
     prisma.userPlaylist.count({ where: { ownerId: userId } }),
     prisma.userTrack.findMany({
       where: baseWhere,
@@ -219,6 +225,7 @@ export async function loadHomeData(request: Request) {
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
+    getRecentlyPlayedTracks({ userId }),
     prisma.userPlaylist.findMany({
       where: { ownerId: userId },
       select: {
@@ -295,6 +302,7 @@ export async function loadHomeData(request: Request) {
       totalPlaylists,
     },
     recentTracks,
+    recentlyPlayed,
     recentPlaylists: recentPlaylistsWithCount,
     // YouTube data is only needed for the listening-hub view (not gray zone)
     youtubeData:
