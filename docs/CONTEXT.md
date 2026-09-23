@@ -86,6 +86,8 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 - **Personal Play Boost** — Soft re-ranking of **global FTS** search results using the **current user's lifetime** `play_completed` counts. Affects only that user (not global popularity). Relevance still wins; plays nudge familiar tracks upward among already-matching hits. Does **not** change ServicePlaylist browse or replace **Heavy Rotation** library sorts in v1.
 
+Implementation tickets: [On-Repeat Snapshots #198](https://github.com/mnlamart/music-library/issues/198) · [Recently Played Strip #199](https://github.com/mnlamart/music-library/issues/199) · [Heavy Rotation #200](https://github.com/mnlamart/music-library/issues/200) · [Weekly Wrap #201](https://github.com/mnlamart/music-library/issues/201) · [Personal Play Boost #202](https://github.com/mnlamart/music-library/issues/202).
+
 ### Audio Player & Queue
 
 - **Queue Spine** — Ordered playable tracks for the active play context (library or playlist). Loaded in one request as lightweight `QueueTrack` rows (id, title, artist). The spine is the automatic continuation after **Up Next** is drained; shuffle permutes spine play order client-side.

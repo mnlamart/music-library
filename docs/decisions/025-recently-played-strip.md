@@ -4,6 +4,8 @@
 
 Accepted (product decisions from `/grill-with-docs`; implementation not started)
 
+**Tracking:** [#199](https://github.com/mnlamart/music-library/issues/199)
+
 **Date:** 2026-09-23
 
 ## Context

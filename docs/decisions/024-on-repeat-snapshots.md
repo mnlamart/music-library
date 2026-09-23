@@ -4,6 +4,8 @@
 
 Accepted (product decisions from `/grill-with-docs`; implementation not started)
 
+**Tracking:** [#198](https://github.com/mnlamart/music-library/issues/198)
+
 **Date:** 2026-09-21
 
 **Updated:** 2026-09-23 — cadence vs window clarified; empty/thin months and retention settled.

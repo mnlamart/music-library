@@ -4,6 +4,8 @@
 
 Accepted (product decisions from `/grill-with-docs`; implementation not started)
 
+**Tracking:** [#200](https://github.com/mnlamart/music-library/issues/200)
+
 **Date:** 2026-09-23
 
 **Updated:** 2026-09-23 — add lifetime (“ever”) window; dual home strips; library sorts uncapped and mutually exclusive.
