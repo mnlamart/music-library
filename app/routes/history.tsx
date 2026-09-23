@@ -1,10 +1,13 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { data } from "react-router";
 import { useAudioPlayer } from "#app/components/audio-player-provider";
 import { TrackThumbnail } from "#app/components/track-thumbnail";
 import { Button } from "#app/components/ui/button";
+import { Checkbox } from "#app/components/ui/checkbox.tsx";
 import { Icon } from "#app/components/ui/icon";
+import { Label } from "#app/components/ui/label.tsx";
+import { collapsePlayHistoryByTrack } from "#app/features/play-history/collapse-history.ts";
 import {
   getPlayHistory,
   parseHistoryCursor,
@@ -101,6 +104,7 @@ export default function HistoryPage({ loaderData }: Route.ComponentProps) {
   const initialItems = (loaderData.items ?? []) as HistoryItem[];
   const initialNextCursor = loaderData.nextCursor ?? null;
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const [collapseTracks, setCollapseTracks] = useState(false);
 
   const {
     data: queryData,
@@ -126,6 +130,7 @@ export default function HistoryPage({ loaderData }: Route.ComponentProps) {
   });
 
   const items = queryData?.pages.flatMap((page) => page.items) ?? [];
+  const visibleItems = collapseTracks ? collapsePlayHistoryByTrack(items) : items;
 
   useEffect(() => {
     const el = loadMoreRef.current;
@@ -145,11 +150,23 @@ export default function HistoryPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Play History</h1>
-        <p className="text-muted-foreground mt-2">
-          Tracks you've recently played, most recent first.
-        </p>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Play History</h1>
+          <p className="text-muted-foreground mt-2">
+            Tracks you've recently played, most recent first.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 sm:pt-1">
+          <Checkbox
+            id="collapse-tracks"
+            checked={collapseTracks}
+            onCheckedChange={(checked) => setCollapseTracks(checked === true)}
+          />
+          <Label htmlFor="collapse-tracks" className="text-sm font-normal cursor-pointer">
+            Collapse tracks
+          </Label>
+        </div>
       </div>
 
       {isPending ? (
@@ -166,7 +183,7 @@ export default function HistoryPage({ loaderData }: Route.ComponentProps) {
         </div>
       ) : (
         <ul className="divide-y divide-border rounded-lg border">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <HistoryRow key={item.id} item={item} />
           ))}
         </ul>
