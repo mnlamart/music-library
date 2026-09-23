@@ -1,6 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
 import { Await, Link } from "react-router";
-import { useAudioPlayer } from "#app/components/audio-player-provider.tsx";
 import { ArchivingBanner } from "#app/components/home/archiving-banner.tsx";
 import { HeavyRotationStrip } from "#app/components/home/heavy-rotation-strip.tsx";
 import { HomeRecentPlaylistRow } from "#app/components/home/home-recent-playlist-row.tsx";
@@ -39,9 +38,6 @@ export function ListeningHome({
   weeklyWrap,
   youtubeData,
 }: ListeningHomeProps) {
-  const { playLibrary, isLoadingNext } = useAudioPlayer();
-  const canPlayLibrary = playableTracks > 0;
-
   return (
     <main className="py-8">
       <InstallAppHomePrompt />
@@ -52,24 +48,6 @@ export function ListeningHome({
           archivingCount={archivingCount}
         />
       ) : null}
-
-      <div className="mb-10 text-center">
-        <h1 className="text-3xl font-bold">Home</h1>
-        <p className="text-muted-foreground mt-2">
-          {canPlayLibrary
-            ? "Pick up where you left off or play your whole library."
-            : "Tracks are still archiving — check back soon."}
-        </p>
-        <Button
-          size="lg"
-          className="mt-6"
-          disabled={!canPlayLibrary || isLoadingNext}
-          onClick={() => void playLibrary()}
-        >
-          <Icon name="play" className="mr-2 h-5 w-5" />
-          {isLoadingNext ? "Loading…" : "Play library"}
-        </Button>
-      </div>
 
       <WeeklyWrap wrap={weeklyWrap} />
 
