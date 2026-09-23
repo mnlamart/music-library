@@ -72,7 +72,7 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 ### Listening Insights
 
-- **On-Repeat Snapshot** — A frozen, system-generated, read-only playlist of the user's top tracks by `play_completed` **UsageEvent** count over a rolling **30-day** window ending at generation time. Capped at **30 tracks**, ranked by completed-play count (tie-break TBD at implementation). Each row shows that track's completed-listen count for the window. Snapshots are dated and retained historically — not a single replace-in-place playlist. Distinct from **UserPlaylist** (user-curated, editable).
+- **On-Repeat Snapshot** — A frozen, system-generated, read-only playlist of the user's top tracks by `play_completed` **UsageEvent** count over the **previous calendar month** (UTC, matching **DailyUsageStat** day boundaries). Generated on a fixed cadence: **1st of each month**. Capped at **30 tracks**, ranked by completed-play count (tie-break TBD at implementation). Each row shows that track's completed-listen count for that month. Snapshots are dated (by the month they cover) and retained historically — not a single replace-in-place playlist. Distinct from **UserPlaylist** (user-curated, editable).
 
 - **Snapshot Shelf** — UI that shows the **latest 3** On-Repeat Snapshots, plus a control to open the full snapshot history page (all snapshots for the user).
 
@@ -288,4 +288,4 @@ Home page redesign decisions (implemented). Route: `app/routes/_marketing+/index
 
 ### Listening Insights
 
-61. **On-Repeat Snapshot from `play_completed` only** — Rank by `play_completed` **UsageEvent**s (not `play_started`). Rolling **30-day** window at generation time. Persist dated **snapshots** (not a single replace-in-place list). Cap at **30 tracks**; each row shows the completed-listen count for that window. UI: **Snapshot Shelf** (latest 3) + full history page. Snapshots are **read-only**; the only mutation path is **Promote Snapshot** (add all tracks to a new or existing **UserPlaylist**). See [ADR-024](./decisions/024-on-repeat-snapshots.md).
+61. **On-Repeat Snapshot from `play_completed` only** — Rank by `play_completed` **UsageEvent**s (not `play_started`). **Cadence:** generate on the **1st of each month**. **Window:** the **previous calendar month** (UTC). Persist dated **snapshots** (not a single replace-in-place list). Cap at **30 tracks**; each row shows the completed-listen count for that month. UI: **Snapshot Shelf** (latest 3) + full history page. Snapshots are **read-only**; the only mutation path is **Promote Snapshot** (add all tracks to a new or existing **UserPlaylist**). See [ADR-024](./decisions/024-on-repeat-snapshots.md).
