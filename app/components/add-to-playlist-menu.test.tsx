@@ -231,3 +231,54 @@ test("shows empty state only after the self-fetch settles with no results", () =
   expect(screen.getByText("No playlists yet")).toBeDefined();
   expect(screen.queryByRole("status", { name: "Loading playlists" })).toBeNull();
 });
+
+test("duplicate dialog offers remove from playlist alongside add duplicate", () => {
+  mockFetcher.data = {
+    status: "duplicate",
+    playlistId: "playlist-1",
+  };
+
+  renderMenu([
+    {
+      id: "playlist-1",
+      title: "Favorites",
+      description: null,
+      _count: { tracks: 3 },
+    },
+  ]);
+
+  expect(screen.getByRole("heading", { name: "Track already in playlist" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Remove from Playlist" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Add Duplicate" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined();
+});
+
+test("remove from playlist submits to remove-track-from-playlist", async () => {
+  const user = userEvent.setup();
+  mockFetcher.data = {
+    status: "duplicate",
+    playlistId: "playlist-1",
+  };
+
+  renderMenu([
+    {
+      id: "playlist-1",
+      title: "Favorites",
+      description: null,
+      _count: { tracks: 3 },
+    },
+  ]);
+
+  await user.click(screen.getByRole("button", { name: "Remove from Playlist" }));
+
+  expect(mockSubmit).toHaveBeenCalledWith(
+    {
+      trackId: "track-1",
+      playlistId: "playlist-1",
+    },
+    {
+      method: "POST",
+      action: "/resources/remove-track-from-playlist",
+    },
+  );
+});

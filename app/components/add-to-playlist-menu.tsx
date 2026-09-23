@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog";
-import { Button } from "./ui/button";
+import { Button, buttonVariants } from "./ui/button";
 import { Icon } from "./ui/icon";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
@@ -66,7 +66,12 @@ export function AddToPlaylistMenu({
   const [newPlaylistTitle, setNewPlaylistTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [localPlaylists, setLocalPlaylists] = useState(playlists ?? []);
-  const fetcher = useFetcher<{ status: string; message?: string; playlistId?: string }>();
+  const fetcher = useFetcher<{
+    status: string;
+    message?: string;
+    playlistId?: string;
+    removedCount?: number;
+  }>();
   const createFetcher = useFetcher<CreatePlaylistResponse>();
   const { revalidate } = useRevalidator();
 
@@ -116,6 +121,22 @@ export function AddToPlaylistMenu({
     [fetcher, trackId],
   );
 
+  const handleRemoveFromPlaylist = useCallback(
+    (playlist: Playlist) => {
+      void fetcher.submit(
+        {
+          trackId,
+          playlistId: playlist.id,
+        },
+        {
+          method: "POST",
+          action: "/resources/remove-track-from-playlist",
+        },
+      );
+    },
+    [fetcher, trackId],
+  );
+
   const handleStartCreate = useCallback(() => {
     setIsCreating(true);
     setCreateError(null);
@@ -148,6 +169,23 @@ export function AddToPlaylistMenu({
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
       if (fetcher.data.status === "success") {
+        const removedCount = fetcher.data.removedCount;
+        const playlistId = fetcher.data.playlistId;
+        if (typeof removedCount === "number" && playlistId) {
+          setLocalPlaylists((current) =>
+            current.map((playlist) =>
+              playlist.id === playlistId
+                ? {
+                    ...playlist,
+                    _count: {
+                      tracks: Math.max(0, playlist._count.tracks - removedCount),
+                    },
+                  }
+                : playlist,
+            ),
+          );
+          void revalidate();
+        }
         setDuplicatePlaylist(null);
         if (onSuccess) {
           onSuccess();
@@ -159,7 +197,7 @@ export function AddToPlaylistMenu({
         }
       }
     }
-  }, [fetcher.state, fetcher.data, localPlaylists, onSuccess]);
+  }, [fetcher.state, fetcher.data, localPlaylists, onSuccess, revalidate]);
 
   useEffect(() => {
     if (createFetcher.state === "idle" && createFetcher.data) {
@@ -328,9 +366,7 @@ export function AddToPlaylistMenu({
 
         {isBusy && (
           <div className="sr-only" role="status" aria-live="assertive">
-            {createFetcher.state !== "idle"
-              ? "Creating playlist..."
-              : "Adding track to playlist..."}
+            {createFetcher.state !== "idle" ? "Creating playlist..." : "Updating playlist..."}
           </div>
         )}
       </div>
@@ -340,12 +376,22 @@ export function AddToPlaylistMenu({
           <AlertDialogHeader>
             <AlertDialogTitle>Track already in playlist</AlertDialogTitle>
             <AlertDialogDescription>
-              The track "{trackTitle}" is already in the playlist "{duplicatePlaylist?.title}". Do
-              you want to add it again as a duplicate?
+              The track "{trackTitle}" is already in the playlist "{duplicatePlaylist?.title}". You
+              can add it again as a duplicate, or remove it from the playlist.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={() => {
+                if (duplicatePlaylist) {
+                  void handleRemoveFromPlaylist(duplicatePlaylist);
+                }
+              }}
+            >
+              Remove from Playlist
+            </AlertDialogAction>
             <AlertDialogAction
               onClick={() => {
                 if (duplicatePlaylist) {
