@@ -8,6 +8,7 @@ export {
   HEAVY_ROTATION_WINDOWS,
   LIBRARY_SORT_OPTIONS,
   compareByPlayCompletedCount,
+  defaultLibrarySortDirection,
   librarySortToWindow,
   parseLibrarySort,
   sortByPlayCompletedCount,

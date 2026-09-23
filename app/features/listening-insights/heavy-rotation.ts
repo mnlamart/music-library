@@ -21,6 +21,13 @@ export type LibrarySortOption = (typeof LIBRARY_SORT_OPTIONS)[number];
 
 export const DEFAULT_LIBRARY_SORT: LibrarySortOption = "dateAdded";
 
+/** All library sorts default to descending (newest / most-played first). */
+export function defaultLibrarySortDirection(
+  _sort: LibrarySortOption = DEFAULT_LIBRARY_SORT,
+): "asc" | "desc" {
+  return "desc";
+}
+
 export function parseLibrarySort(raw: string | null | undefined): LibrarySortOption {
   return LIBRARY_SORT_OPTIONS.includes(raw as LibrarySortOption)
     ? (raw as LibrarySortOption)
@@ -66,8 +73,10 @@ export function compareByPlayCompletedCount(
 export function sortByPlayCompletedCount<T extends PlayCountSortable>(
   items: T[],
   counts: ReadonlyMap<string, number>,
+  direction: "asc" | "desc" = "desc",
 ): T[] {
-  return [...items].sort((a, b) => compareByPlayCompletedCount(a, b, counts));
+  const ordered = [...items].sort((a, b) => compareByPlayCompletedCount(a, b, counts));
+  return direction === "asc" ? ordered.reverse() : ordered;
 }
 
 /** Track tile shape for home Heavy Rotation strips (client-safe). */

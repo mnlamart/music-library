@@ -62,14 +62,17 @@ import { useOnlineStatus } from "#app/hooks/use-online-status.ts";
 import { type FullTrack, type QueueTrack } from "#app/types/frontend/shared";
 import { isPlayableTrack } from "#app/utils/playable-track";
 import {
+  defaultPlaylistTrackSortDirection,
   parsePlaylistTrackSort,
   type PlaylistTrackSortOption,
 } from "#app/utils/playlist-track-sort.ts";
 import {
   DEFAULT_LIBRARY_SORT,
+  defaultLibrarySortDirection,
   parseLibrarySort,
   type LibrarySortOption,
 } from "#app/features/listening-insights/heavy-rotation.ts";
+import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
 import { AudioPlayer } from "./audio-player";
 import { InstallAppBanner } from "./pwa/install-app-banner";
 
@@ -96,6 +99,8 @@ interface PlaylistContext {
   sort?: PlaylistTrackSortOption;
   /** Active library sort; only meaningful for library context. */
   librarySort?: LibrarySortOption;
+  /** Asc/desc for the active library or playlist sort. */
+  sortDirection?: SortDirection;
 }
 
 interface AudioPlayerContextType {
@@ -160,6 +165,23 @@ function librarySortOrDefault(sort: LibrarySortOption | undefined): LibrarySortO
   return sort ?? DEFAULT_LIBRARY_SORT;
 }
 
+function playlistSortDirectionOrDefault(
+  sort: PlaylistTrackSortOption | undefined,
+  direction: SortDirection | undefined,
+): SortDirection {
+  return parseSortDirection(
+    direction,
+    defaultPlaylistTrackSortDirection(playlistSortOrCustom(sort)),
+  );
+}
+
+function librarySortDirectionOrDefault(
+  sort: LibrarySortOption | undefined,
+  direction: SortDirection | undefined,
+): SortDirection {
+  return parseSortDirection(direction, defaultLibrarySortDirection(librarySortOrDefault(sort)));
+}
+
 function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boolean {
   if (!a || a.type !== b.type) return false;
   if (a.playlistId !== b.playlistId) return false;
@@ -168,10 +190,18 @@ function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boole
   if (a.trackId !== b.trackId) return false;
   if (a.snapshotId !== b.snapshotId) return false;
   if (a.type === "playlist") {
-    return playlistSortOrCustom(a.sort) === playlistSortOrCustom(b.sort);
+    return (
+      playlistSortOrCustom(a.sort) === playlistSortOrCustom(b.sort) &&
+      playlistSortDirectionOrDefault(a.sort, a.sortDirection) ===
+        playlistSortDirectionOrDefault(b.sort, b.sortDirection)
+    );
   }
   if (a.type === "library") {
-    return librarySortOrDefault(a.librarySort) === librarySortOrDefault(b.librarySort);
+    return (
+      librarySortOrDefault(a.librarySort) === librarySortOrDefault(b.librarySort) &&
+      librarySortDirectionOrDefault(a.librarySort, a.sortDirection) ===
+        librarySortDirectionOrDefault(b.librarySort, b.sortDirection)
+    );
   }
   return true;
 }
@@ -179,16 +209,23 @@ function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boole
 function playlistContextFromJson(context: PlayContextJson | null): PlaylistContext | null {
   if (!context) return null;
   if (context.type === "playlist") {
+    const sort = parsePlaylistTrackSort(context.sort);
     return {
       type: "playlist",
       playlistId: context.playlistId,
-      sort: parsePlaylistTrackSort(context.sort),
+      sort,
+      sortDirection: parseSortDirection(context.direction, defaultPlaylistTrackSortDirection(sort)),
     };
   }
   if (context.type === "library") {
+    const librarySort = parseLibrarySort(context.sort);
     return {
       type: "library",
-      librarySort: parseLibrarySort(context.sort),
+      librarySort,
+      sortDirection: parseSortDirection(
+        context.direction,
+        defaultLibrarySortDirection(librarySort),
+      ),
     };
   }
   return context;
@@ -196,13 +233,18 @@ function playlistContextFromJson(context: PlayContextJson | null): PlaylistConte
 
 function toQueueSpineContext(context: PlaylistContext): QueueSpineContext | null {
   if (context.type === "library") {
-    return { type: "library", sort: librarySortOrDefault(context.librarySort) };
+    return {
+      type: "library",
+      sort: librarySortOrDefault(context.librarySort),
+      direction: librarySortDirectionOrDefault(context.librarySort, context.sortDirection),
+    };
   }
   if (context.type === "playlist" && context.playlistId) {
     return {
       type: "playlist",
       playlistId: context.playlistId,
       sort: playlistSortOrCustom(context.sort),
+      direction: playlistSortDirectionOrDefault(context.sort, context.sortDirection),
     };
   }
   if (context.type === "artist" && context.artistId) {
@@ -225,13 +267,22 @@ function playContextToJson(context: PlaylistContext | null): PlayContextJson | n
   if (!context) return null;
   if (context.type === "library") {
     const sort = librarySortOrDefault(context.librarySort);
-    return sort === DEFAULT_LIBRARY_SORT ? { type: "library" } : { type: "library", sort };
+    const direction = librarySortDirectionOrDefault(context.librarySort, context.sortDirection);
+    return {
+      type: "library",
+      ...(sort !== DEFAULT_LIBRARY_SORT ? { sort } : {}),
+      ...(direction !== defaultLibrarySortDirection(sort) ? { direction } : {}),
+    };
   }
   if (context.type === "playlist" && context.playlistId) {
     const sort = playlistSortOrCustom(context.sort);
-    return sort === "custom"
-      ? { type: "playlist", playlistId: context.playlistId }
-      : { type: "playlist", playlistId: context.playlistId, sort };
+    const direction = playlistSortDirectionOrDefault(context.sort, context.sortDirection);
+    return {
+      type: "playlist",
+      playlistId: context.playlistId,
+      ...(sort !== "custom" ? { sort } : {}),
+      ...(direction !== defaultPlaylistTrackSortDirection(sort) ? { direction } : {}),
+    };
   }
   if (context.type === "artist" && context.artistId) {
     return { type: "artist", artistId: context.artistId };

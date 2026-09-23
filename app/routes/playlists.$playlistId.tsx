@@ -40,6 +40,7 @@ import { OfflinePlaylistDownloadButton } from "#app/components/offline/offline-p
 import { OfflinePlaylistView } from "#app/components/offline/offline-playlist-view.tsx";
 
 import { PlaylistHero } from "#app/components/playlist-hero";
+import { SortDirectionToggle } from "#app/components/sort-direction-toggle.tsx";
 import { SortableTrackList } from "#app/components/sortable-track-list";
 import {
   AlertDialog,
@@ -69,10 +70,12 @@ import { chunkArray } from "#app/utils/chunk-array.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { filterPlayableTracks } from "#app/utils/playable-track.ts";
 import {
+  defaultPlaylistTrackSortDirection,
   parsePlaylistTrackSort,
   sortPlaylistTracks,
   type PlaylistTrackSortOption,
 } from "#app/utils/playlist-track-sort.ts";
+import { type SortDirection } from "#app/utils/sort-direction.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { createToastHeaders } from "#app/utils/toast.server.ts";
 import {
@@ -568,10 +571,13 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
   const [optimisticTracks, setOptimisticTracks] = useState(playlist.tracks);
   const [optimisticPlaylist, setOptimisticPlaylist] = useState(playlist);
   const [trackSort, setTrackSort] = useState<PlaylistTrackSortOption>("custom");
+  const [trackSortDirection, setTrackSortDirection] = useState<SortDirection>(
+    defaultPlaylistTrackSortDirection("custom"),
+  );
 
   const displayedTracks = useMemo(
-    () => sortPlaylistTracks(optimisticTracks, trackSort),
-    [optimisticTracks, trackSort],
+    () => sortPlaylistTracks(optimisticTracks, trackSort, trackSortDirection),
+    [optimisticTracks, trackSort, trackSortDirection],
   );
 
   // Update optimistic state when loader data changes
@@ -862,7 +868,11 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
             )}
             <Select
               value={trackSort}
-              onValueChange={(value) => setTrackSort(parsePlaylistTrackSort(value))}
+              onValueChange={(value) => {
+                const nextSort = parsePlaylistTrackSort(value);
+                setTrackSort(nextSort);
+                setTrackSortDirection(defaultPlaylistTrackSortDirection(nextSort));
+              }}
             >
               <SelectTrigger className="w-full sm:w-44" aria-label="Sort tracks">
                 <SelectValue placeholder="Sort" />
@@ -875,6 +885,12 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
                 <SelectItem value="dateAdded">Date added</SelectItem>
               </SelectContent>
             </Select>
+            <SortDirectionToggle
+              value={trackSortDirection}
+              onValueChange={setTrackSortDirection}
+              disabled={trackSort === "custom"}
+              aria-label="Track sort direction"
+            />
           </div>
         </div>
 
@@ -913,6 +929,7 @@ function OnlinePlaylistRoute({ loaderData }: { loaderData: OnlinePlaylistLoaderD
             isRemoving={removeTrackFetcher.state === "submitting"}
             playlistId={params.playlistId!}
             trackSort={trackSort}
+            sortDirection={trackSortDirection}
             allowReorder={trackSort === "custom"}
           />
         )}

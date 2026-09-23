@@ -1,3 +1,5 @@
+import { applySortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
+
 export const PLAYLIST_TRACK_SORT_OPTIONS = [
   "custom",
   "title",
@@ -14,6 +16,12 @@ export function parsePlaylistTrackSort(raw: string | null | undefined): Playlist
     : "custom";
 }
 
+/** Default direction preserves pre-direction behavior for each field. */
+export function defaultPlaylistTrackSortDirection(sort: PlaylistTrackSortOption): SortDirection {
+  if (sort === "dateAdded") return "desc";
+  return "asc";
+}
+
 type SortablePlaylistTrack = {
   position: number;
   createdAt?: string | Date | null;
@@ -24,11 +32,15 @@ type SortablePlaylistTrack = {
   };
 };
 
-function compareNullableNumbers(a: number | null, b: number | null): number {
+function compareNullableNumbers(
+  a: number | null,
+  b: number | null,
+  direction: SortDirection,
+): number {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
   if (b == null) return -1;
-  return a - b;
+  return applySortDirection(a - b, direction);
 }
 
 function toTime(value: string | Date | null | undefined): number {
@@ -40,6 +52,7 @@ function toTime(value: string | Date | null | undefined): number {
 export function sortPlaylistTracks<T extends SortablePlaylistTrack>(
   tracks: T[],
   sort: PlaylistTrackSortOption,
+  direction: SortDirection = defaultPlaylistTrackSortDirection(sort),
 ): T[] {
   if (sort === "custom") {
     return [...tracks].sort((a, b) => a.position - b.position);
@@ -48,13 +61,16 @@ export function sortPlaylistTracks<T extends SortablePlaylistTrack>(
   return [...tracks].sort((a, b) => {
     switch (sort) {
       case "title":
-        return a.track.title.localeCompare(b.track.title);
+        return applySortDirection(a.track.title.localeCompare(b.track.title), direction);
       case "artist":
-        return a.track.artist.name.localeCompare(b.track.artist.name);
+        return applySortDirection(
+          a.track.artist.name.localeCompare(b.track.artist.name),
+          direction,
+        );
       case "duration":
-        return compareNullableNumbers(a.track.duration, b.track.duration);
+        return compareNullableNumbers(a.track.duration, b.track.duration, direction);
       case "dateAdded":
-        return toTime(b.createdAt) - toTime(a.createdAt);
+        return applySortDirection(toTime(a.createdAt) - toTime(b.createdAt), direction);
       default:
         return 0;
     }
