@@ -1,4 +1,5 @@
-import { listLibraryUserTracks, parseLibrarySort } from "#app/features/listening-insights/index.ts";
+import { parseLibrarySort } from "#app/features/listening-insights/index.ts";
+import { listLibraryUserTracks } from "#app/features/listening-insights/library-tracks.server.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
 import { parseHasAudioOnlyParam } from "#app/utils/library-user-tracks.server.ts";
@@ -23,8 +24,6 @@ export async function loader({ request, url }: { request: Request; url: URL }) {
 
     const hasAudioOnly = parseHasAudioOnlyParam(url.searchParams);
 
-    // `fields=minimal` is used by some clients; keep selecting full track shape for
-    // Heavy Rotation sorts so list order matches the library page.
     const { userTracks, pagination } = await listLibraryUserTracks({
       userId,
       sort,

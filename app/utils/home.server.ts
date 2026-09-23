@@ -3,7 +3,7 @@ import { YOUTUBE_SERVICE } from "#app/constants/services";
 import {
   getHeavyRotationTracks,
   type HeavyRotationTrack,
-} from "#app/features/listening-insights/index.ts";
+} from "#app/features/listening-insights/index.server.ts";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { createServicePlaylistService } from "#app/features/service-playlist/service-playlist.server.ts";
 import { getUserId } from "#app/utils/auth.server.ts";

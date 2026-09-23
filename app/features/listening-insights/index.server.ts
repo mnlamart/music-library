@@ -1,6 +1,5 @@
 /**
- * Client-safe listening-insights exports (no Prisma / `.server` modules).
- * Server loaders should import from `*.server.ts` or `index.server.ts`.
+ * Server-only listening-insights exports.
  */
 export {
   DEFAULT_LIBRARY_SORT,
@@ -16,4 +15,7 @@ export {
   type LibrarySortOption,
   type PlayCountSortable,
 } from "./heavy-rotation.ts";
+export { getHeavyRotationTracks } from "./heavy-rotation.server.ts";
+export { listLibraryUserTracks } from "./library-tracks.server.ts";
+export { getPlayCompletedCountsByTrack } from "./play-completed-counts.server.ts";
 export { getUtcMonthEndExclusive, getUtcMonthStart } from "./utc-month.ts";

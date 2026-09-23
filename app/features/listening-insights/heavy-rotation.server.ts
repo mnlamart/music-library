@@ -1,6 +1,7 @@
 import { prisma } from "#app/utils/db.server.ts";
 import {
   HEAVY_ROTATION_HOME_CAP,
+  type HeavyRotationTrack,
   type HeavyRotationWindow,
   sortByPlayCompletedCount,
 } from "./heavy-rotation.ts";
@@ -38,19 +39,7 @@ const HEAVY_ROTATION_TRACK_SELECT = {
   },
 } as const;
 
-export type HeavyRotationTrack = {
-  completedCount: number;
-  track: {
-    id: string;
-    title: string;
-    duration: number | null;
-    serviceUrl: string | null;
-    artist: { id: string; name: string };
-    coverImage: { objectKey: string } | null;
-    service: { name: string; displayName: string; logoUrl: string | null } | null;
-    audioFiles: Array<{ id: string; format: string | null; objectKey: string }>;
-  };
-};
+export type { HeavyRotationTrack };
 
 /**
  * Ranked Heavy Rotation tiles for the listening hub.

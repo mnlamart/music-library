@@ -4,7 +4,7 @@
 import { render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test, vi } from "vitest";
-import { type HeavyRotationTrack } from "#app/features/listening-insights/heavy-rotation.server.ts";
+import { type HeavyRotationTrack } from "#app/features/listening-insights/index.ts";
 import { HeavyRotationStrip } from "./heavy-rotation-strip.tsx";
 
 vi.mock("#app/components/audio-player-provider.tsx", () => ({

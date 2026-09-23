@@ -69,3 +69,18 @@ export function sortByPlayCompletedCount<T extends PlayCountSortable>(
 ): T[] {
   return [...items].sort((a, b) => compareByPlayCompletedCount(a, b, counts));
 }
+
+/** Track tile shape for home Heavy Rotation strips (client-safe). */
+export type HeavyRotationTrack = {
+  completedCount: number;
+  track: {
+    id: string;
+    title: string;
+    duration: number | null;
+    serviceUrl: string | null;
+    artist: { id: string; name: string };
+    coverImage: { objectKey: string } | null;
+    service: { name: string; displayName: string; logoUrl: string | null } | null;
+    audioFiles: Array<{ id: string; format: string | null; objectKey: string }>;
+  };
+};
