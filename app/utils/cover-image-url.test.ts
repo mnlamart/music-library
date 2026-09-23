@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   coverImageUrl,
+  nowPlayingCoverPixelSize,
   playlistCoverPixelSizes,
   trackThumbnailPixelSizes,
 } from "./cover-image-url.ts";
@@ -41,5 +42,9 @@ describe("pixel size maps", () => {
       md: 192,
       lg: 256,
     });
+  });
+
+  test("now-playing sheet cover uses a dedicated retina size", () => {
+    expect(nowPlayingCoverPixelSize).toBe(320);
   });
 });

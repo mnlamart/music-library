@@ -51,6 +51,7 @@ import {
   updateMediaSessionPositionState,
 } from "#app/utils/media-session.client.ts";
 import { cn } from "#app/utils/misc";
+import { coverImageUrl, nowPlayingCoverPixelSize } from "#app/utils/cover-image-url.ts";
 import { adjustVolumeStep, getPlayerKeyboardAction } from "#app/utils/player-keyboard-shortcuts.ts";
 import {
   DEFAULT_PLAYER_VOLUME,
@@ -544,7 +545,8 @@ function PlayerNowPlayingSheet({
               coverImage={track.coverImage}
               alt={track.title}
               size="lg"
-              pixelSize={320}
+              pixelSize={nowPlayingCoverPixelSize}
+              loading="eager"
               className="shadow-lg h-40 w-40"
             />
             <div className="w-full text-center">
@@ -1509,6 +1511,20 @@ export function AudioPlayer(props: AudioPlayerProps) {
         <div data-testid="player-playback-error" className="px-4 py-3 text-sm text-destructive">
           <p className="container">{playbackError}</p>
         </div>
+      ) : null}
+      {/* Keep the sheet-sized cover decoded while the player is mounted. The
+          now-playing sheet unmounts on close; without this warm image the 320px
+          URL is fetched again on every reopen (mini bar uses a smaller size). */}
+      {track.coverImage?.objectKey ? (
+        <img
+          data-testid="player-warm-cover"
+          src={coverImageUrl(track.coverImage.objectKey, nowPlayingCoverPixelSize)}
+          alt=""
+          aria-hidden
+          loading="eager"
+          decoding="async"
+          className="pointer-events-none absolute h-0 w-0 opacity-0"
+        />
       ) : null}
       <PlayerMiniBar {...chromeProps} onOpenNowPlaying={() => setIsNowPlayingOpen(true)} />
       <PlayerNowPlayingSheet
