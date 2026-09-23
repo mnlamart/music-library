@@ -2,6 +2,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Await, Link } from "react-router";
 import { useAudioPlayer } from "#app/components/audio-player-provider.tsx";
 import { ArchivingBanner } from "#app/components/home/archiving-banner.tsx";
+import { HeavyRotationStrip } from "#app/components/home/heavy-rotation-strip.tsx";
 import { HomeRecentPlaylistRow } from "#app/components/home/home-recent-playlist-row.tsx";
 import { HomeRecentTrackRow } from "#app/components/home/home-recent-track-row.tsx";
 import { InstallAppHomePrompt } from "#app/components/pwa/install-app-home-prompt.tsx";
@@ -27,6 +28,8 @@ export function ListeningHome({
   archivingCount,
   stats,
   recentTracks,
+  heavyRotationMonth,
+  heavyRotationEver,
   recentPlaylists,
   youtubeData,
 }: ListeningHomeProps) {
@@ -71,6 +74,18 @@ export function ListeningHome({
         </div>
         <HomeRecentTrackRow recentTracks={recentTracks} />
       </section>
+
+      <HeavyRotationStrip
+        title="Heavy Rotation · this month"
+        tracks={heavyRotationMonth}
+        librarySort="mostPlayedMonth"
+      />
+
+      <HeavyRotationStrip
+        title="Heavy Rotation · ever"
+        tracks={heavyRotationEver}
+        librarySort="mostPlayedEver"
+      />
 
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between">

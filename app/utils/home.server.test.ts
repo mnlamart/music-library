@@ -13,6 +13,10 @@ vi.mock("#app/utils/auth.server.ts", () => ({
   getUserId: vi.fn(),
 }));
 
+vi.mock("#app/features/listening-insights/index.ts", () => ({
+  getHeavyRotationTracks: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("#app/utils/db.server.ts", () => ({
   prisma: {
     user: {

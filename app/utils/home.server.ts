@@ -1,5 +1,9 @@
 import { data } from "react-router";
 import { YOUTUBE_SERVICE } from "#app/constants/services";
+import {
+  getHeavyRotationTracks,
+  type HeavyRotationTrack,
+} from "#app/features/listening-insights/index.ts";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
 import { createServicePlaylistService } from "#app/features/service-playlist/service-playlist.server.ts";
 import { getUserId } from "#app/utils/auth.server.ts";
@@ -75,6 +79,10 @@ export type HomeListeningData = {
     totalPlaylists: number;
   };
   recentTracks: HomeRecentTrack[];
+  /** Live Heavy Rotation · this UTC month (empty → strip hidden). */
+  heavyRotationMonth: HeavyRotationTrack[];
+  /** Live Heavy Rotation · ever (empty → strip hidden). */
+  heavyRotationEver: HeavyRotationTrack[];
   recentPlaylists: HomeRecentPlaylist[];
   youtubeData: Promise<HomeYoutubeData>;
 };
@@ -211,55 +219,58 @@ export async function loadHomeData(request: Request) {
     });
   }
 
-  const [totalPlaylists, recentTracks, recentPlaylists] = await Promise.all([
-    prisma.userPlaylist.count({ where: { ownerId: userId } }),
-    prisma.userTrack.findMany({
-      where: baseWhere,
-      include: recentTrackInclude,
-      orderBy: { createdAt: "desc" },
-      take: 8,
-    }),
-    prisma.userPlaylist.findMany({
-      where: { ownerId: userId },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: { tracks: true },
-        },
-        tracks: {
-          select: {
-            id: true,
-            track: {
-              select: {
-                id: true,
-                title: true,
-                artist: {
-                  select: {
-                    id: true,
-                    name: true,
+  const [totalPlaylists, recentTracks, heavyRotationMonth, heavyRotationEver, recentPlaylists] =
+    await Promise.all([
+      prisma.userPlaylist.count({ where: { ownerId: userId } }),
+      prisma.userTrack.findMany({
+        where: baseWhere,
+        include: recentTrackInclude,
+        orderBy: { createdAt: "desc" },
+        take: 8,
+      }),
+      getHeavyRotationTracks({ userId, window: "month" }),
+      getHeavyRotationTracks({ userId, window: "ever" }),
+      prisma.userPlaylist.findMany({
+        where: { ownerId: userId },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: { tracks: true },
+          },
+          tracks: {
+            select: {
+              id: true,
+              track: {
+                select: {
+                  id: true,
+                  title: true,
+                  artist: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
                   },
-                },
-                duration: true,
-                coverImage: {
-                  select: {
-                    objectKey: true,
+                  duration: true,
+                  coverImage: {
+                    select: {
+                      objectKey: true,
+                    },
                   },
                 },
               },
             },
+            orderBy: { position: "asc" },
+            take: 5,
           },
-          orderBy: { position: "asc" },
-          take: 5,
         },
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 5,
-    }),
-  ]);
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+      }),
+    ]);
 
   const playlistIds = recentPlaylists.map((playlist) => playlist.id);
   const durationRows =
@@ -295,6 +306,8 @@ export async function loadHomeData(request: Request) {
       totalPlaylists,
     },
     recentTracks,
+    heavyRotationMonth,
+    heavyRotationEver,
     recentPlaylists: recentPlaylistsWithCount,
     // YouTube data is only needed for the listening-hub view (not gray zone)
     youtubeData:
