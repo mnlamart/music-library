@@ -78,6 +78,8 @@ yt-dlp errors are classified into one of six categories for retry decision-makin
 
 - **Promote Snapshot** — From an On-Repeat Snapshot, the user can copy all of its tracks into a **new or existing UserPlaylist** in one action. The snapshot itself stays read-only; promotion is the only edit path.
 
+- **Recently Played Strip** — Listening-hub row of the user's most recently finished tracks, ranked by latest `play_completed` **UsageEvent**. **Distinct tracks only** (collapse repeats — one row per `trackId`, ordered by most recent completion). Cap **20** tiles. Placed **above** the recent-playlists section on `/` (does not replace **recently added**). Distinct from `/history`, which remains a per-play chronological list (ADR-017).
+
 ### Audio Player & Queue
 
 - **Queue Spine** — Ordered playable tracks for the active play context (library or playlist). Loaded in one request as lightweight `QueueTrack` rows (id, title, artist). The spine is the automatic continuation after **Up Next** is drained; shuffle permutes spine play order client-side.
@@ -289,3 +291,5 @@ Home page redesign decisions (implemented). Route: `app/routes/_marketing+/index
 ### Listening Insights
 
 61. **On-Repeat Snapshot from `play_completed` only** — Rank by `play_completed` **UsageEvent**s (not `play_started`). **Cadence:** generate on the **1st of each month**. **Window:** the **previous calendar month** (UTC). Persist dated **snapshots** (not a single replace-in-place list). Cap at **30 tracks**; each row shows the completed-listen count for that month. **Empty month:** skip snapshot creation when there are zero `play_completed` events; **thin month:** still create when 1–29 tracks qualify. **Retention:** keep all snapshots in v1 (no prune; history page pages as needed). UI: **Snapshot Shelf** (latest 3) + full history page. Snapshots are **read-only**; the only mutation path is **Promote Snapshot** (add all tracks to a new or existing **UserPlaylist**). See [ADR-024](./decisions/024-on-repeat-snapshots.md).
+
+62. **Recently Played Strip on listening hub** — On logged-in `/` (listening hub), show a **Recently Played Strip** **above** recent playlists. Source: `play_completed` only. **Collapse to distinct tracks** (one tile per `trackId`, ordered by most recent completion). Cap **20**. Does not replace recently added; does not change `/history` per-play semantics (ADR-017). See [ADR-025](./decisions/025-recently-played-strip.md).
