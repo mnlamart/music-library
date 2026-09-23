@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { getRecentlyPlayedTracks } from "#app/features/recently-played/recently-played.server.ts";
 import { hasServiceConnection } from "#app/features/service-connection/service-connection.server";
+import { getWeeklyWrap } from "#app/features/weekly-wrap/weekly-wrap.server.ts";
 import { getUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import {
@@ -50,6 +51,10 @@ vi.mock("#app/features/recently-played/recently-played.server.ts", () => ({
   getRecentlyPlayedTracks: vi.fn(),
 }));
 
+vi.mock("#app/features/weekly-wrap/weekly-wrap.server.ts", () => ({
+  getWeeklyWrap: vi.fn(),
+}));
+
 function unwrapHomeData(result: Awaited<ReturnType<typeof loadHomeData>>): HomeData {
   return (result as { data: HomeData }).data;
 }
@@ -97,6 +102,7 @@ describe("loadHomeData", () => {
     vi.clearAllMocks();
     vi.mocked(prisma.userPlaylistTrack.findMany).mockResolvedValue([]);
     vi.mocked(getRecentlyPlayedTracks).mockResolvedValue([]);
+    vi.mocked(getWeeklyWrap).mockResolvedValue(null);
   });
 
   test("returns marketing mode for anonymous users", async () => {
@@ -163,6 +169,11 @@ describe("loadHomeData", () => {
     vi.mocked(prisma.userTrack.findMany).mockResolvedValue([]);
     vi.mocked(prisma.userPlaylist.findMany).mockResolvedValue([]);
     vi.mocked(prisma.service.findUnique).mockResolvedValue(null);
+    vi.mocked(getWeeklyWrap).mockResolvedValue({
+      finishes: 5,
+      uniqueTracks: 3,
+      dayStreak: 2,
+    });
 
     const result = unwrapHomeData(await loadHomeData(new Request("http://localhost/")));
 
@@ -172,8 +183,10 @@ describe("loadHomeData", () => {
       playableTracks: 2,
       archivingCount: 2,
       recentlyPlayed: [],
+      weeklyWrap: { finishes: 5, uniqueTracks: 3, dayStreak: 2 },
     });
     expect(getRecentlyPlayedTracks).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(getWeeklyWrap).toHaveBeenCalledWith("user-1");
   });
 
   test("includes recentlyPlayed tracks from play_completed query", async () => {
@@ -206,6 +219,7 @@ describe("loadHomeData", () => {
       mode: "listening",
       recentlyPlayed,
     });
+    expect(getRecentlyPlayedTracks).toHaveBeenCalledWith({ userId: "user-1" });
   });
 
   test("attaches full playlist duration while keeping cover preview tracks", async () => {

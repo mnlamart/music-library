@@ -58,6 +58,7 @@ const baseListeningData: HomeListeningData = {
   recentTracks: [],
   recentlyPlayed: [],
   recentPlaylists: [],
+  weeklyWrap: null,
   youtubeData: Promise.resolve({
     hasYouTubeConnection: true,
     youtubeStats: {
@@ -118,6 +119,25 @@ test("enables Play library when tracks are playable", async () => {
   await waitFor(async () => {
     expect(await screen.findByRole("button", { name: /play library/i })).toBeEnabled();
   });
+});
+
+test("shows weekly wrap when loader provides summary data", async () => {
+  renderListening({
+    showArchivingBanner: false,
+    weeklyWrap: { finishes: 7, uniqueTracks: 4, dayStreak: 3 },
+  });
+
+  expect(await screen.findByTestId("weekly-wrap")).toHaveTextContent(/this week/i);
+  expect(screen.getByTestId("weekly-wrap")).toHaveTextContent(/7 finishes/i);
+  expect(screen.getByTestId("weekly-wrap")).toHaveTextContent(/4 tracks/i);
+  expect(screen.getByTestId("weekly-wrap")).toHaveTextContent(/3-day streak/i);
+});
+
+test("omits weekly wrap when summary is null", async () => {
+  renderListening({ showArchivingBanner: false, weeklyWrap: null });
+
+  await screen.findByRole("button", { name: /play library/i });
+  expect(screen.queryByTestId("weekly-wrap")).not.toBeInTheDocument();
 });
 
 test("omits Recently played strip when recentlyPlayed is empty", async () => {
