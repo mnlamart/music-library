@@ -43,7 +43,8 @@ export function UserDropdown() {
               </Icon>
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          {/* Desktop-only: these routes are in the mobile bottom nav (md:hidden). */}
+          <DropdownMenuItem asChild className="max-md:hidden">
             <Link prefetch="intent" to="/library">
               <Icon className="text-body-md" name="file-text">
                 My Library
@@ -57,14 +58,14 @@ export function UserDropdown() {
               </Icon>
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem asChild className="max-md:hidden">
             <Link prefetch="intent" to="/playlists">
               <Icon className="text-body-md" name="file-text">
                 My Playlists
               </Icon>
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem asChild className="max-md:hidden">
             <Link prefetch="intent" to="/history">
               <Icon className="text-body-md" name="clock">
                 History
