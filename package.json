@@ -144,7 +144,7 @@
     "remix-utils": "^10.0.0",
     "serwist": "^9.5.11",
     "set-cookie-parser": "^3.1.2",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "source-map-support": "^0.5.21",
     "spin-delay": "^2.0.1",
     "tailwind-merge": "^3.2.0",
