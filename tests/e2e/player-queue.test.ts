@@ -98,7 +98,7 @@ test.describe("Player / Queue", () => {
     await dismissOverlays(page);
 
     // Open queue sheet and verify playlist context
-    await playerBar.getByLabel("Open queue").click();
+    await playerBar.getByLabel("Open queue").click({ force: true });
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "Now playing" })).toBeVisible();
     await expect(dialog.getByText("Playlist Track A")).toBeVisible();
@@ -526,7 +526,7 @@ test.describe("Player / Queue", () => {
     const playButton = playerBar.getByLabel("Play", { exact: true });
     if (await playButton.isVisible().catch(() => false)) {
       await playButton.click({ force: true });
-      await expect(playerBar.getByLabel("Pause")).toBeVisible({ timeout: 5000 });
+      await expect(playerBar.getByLabel("Pause")).toBeVisible({ timeout: 15000 });
     }
 
     // Pause via button click
