@@ -496,6 +496,14 @@ async function processFilesAsync(
               fileName: file.fileName,
               title: track.title,
               artist: artistRecord.name,
+              exactDuplicate: persistResult.isDuplicate
+                ? {
+                    trackId: persistResult.duplicateTrack!.id,
+                    title: persistResult.duplicateTrack!.title,
+                    artist: persistResult.duplicateTrack!.artist.name,
+                    confidence: 100, // Content hash match is 100% confidence
+                  }
+                : undefined,
             });
 
             return { success: true, trackId: track.id };
