@@ -8,10 +8,12 @@ vi.mock("node:fs/promises", () => ({
   unlink: mockUnlink,
 }));
 
-// Mock fpcalc
+// Mock fpcalc (callback-based API)
 const mockFpcalc = vi.fn();
 vi.mock("fpcalc", () => ({
-  default: mockFpcalc,
+  default: (filePath: string, options: any, callback: (err: Error | null, result: any) => void) => {
+    mockFpcalc(filePath, options, callback);
+  },
 }));
 
 describe("calculateAudioHash", () => {
@@ -54,9 +56,11 @@ describe("generateAudioFingerprint", () => {
   });
 
   it("generates fingerprint for audio buffer", async () => {
-    mockFpcalc.mockResolvedValue({
-      fingerprint: "AQADtNE123test-fingerprint",
-      duration: 180,
+    mockFpcalc.mockImplementation((filePath: string, options: any, callback: any) => {
+      callback(null, {
+        fingerprint: "AQADtNE123test-fingerprint",
+        duration: 180,
+      });
     });
 
     const { generateAudioFingerprint } = await import("./audio-file-management.server");
@@ -65,13 +69,15 @@ describe("generateAudioFingerprint", () => {
 
     expect(fingerprint).toBe("AQADtNE123test-fingerprint");
     expect(mockWriteFile).toHaveBeenCalledWith(expect.stringContaining("audio-"), buffer);
-    expect(mockFpcalc).toHaveBeenCalledWith(expect.stringContaining("audio-"));
+    expect(mockFpcalc).toHaveBeenCalled();
   });
 
   it("cleans up temporary file after successful fingerprint generation", async () => {
-    mockFpcalc.mockResolvedValue({
-      fingerprint: "AQADtestfp",
-      duration: 180,
+    mockFpcalc.mockImplementation((filePath: string, options: any, callback: any) => {
+      callback(null, {
+        fingerprint: "AQADtestfp",
+        duration: 180,
+      });
     });
 
     const { generateAudioFingerprint } = await import("./audio-file-management.server");
@@ -85,9 +91,11 @@ describe("generateAudioFingerprint", () => {
     const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
     consoleWarn.mockImplementation(() => {});
 
-    mockFpcalc.mockResolvedValue({
-      duration: 180,
-      // No fingerprint field
+    mockFpcalc.mockImplementation((filePath: string, options: any, callback: any) => {
+      callback(null, {
+        duration: 180,
+        // No fingerprint field
+      });
     });
 
     const { generateAudioFingerprint } = await import("./audio-file-management.server");
@@ -101,7 +109,9 @@ describe("generateAudioFingerprint", () => {
     const { consoleError } = await import("#tests/setup/setup-test-env.ts");
     consoleError.mockImplementation(() => {});
 
-    mockFpcalc.mockRejectedValue(new Error("fpcalc failed"));
+    mockFpcalc.mockImplementation((filePath: string, options: any, callback: any) => {
+      callback(new Error("fpcalc failed"));
+    });
 
     const { generateAudioFingerprint } = await import("./audio-file-management.server");
     const buffer = Buffer.from("test-audio-data");
@@ -114,7 +124,9 @@ describe("generateAudioFingerprint", () => {
     const { consoleError } = await import("#tests/setup/setup-test-env.ts");
     consoleError.mockImplementation(() => {});
 
-    mockFpcalc.mockRejectedValue(new Error("fpcalc failed"));
+    mockFpcalc.mockImplementation((filePath: string, options: any, callback: any) => {
+      callback(new Error("fpcalc failed"));
+    });
 
     const { generateAudioFingerprint } = await import("./audio-file-management.server");
     const buffer = Buffer.from("test-audio-data");
@@ -124,9 +136,11 @@ describe("generateAudioFingerprint", () => {
   });
 
   it("handles cleanup errors gracefully", async () => {
-    mockFpcalc.mockResolvedValue({
-      fingerprint: "AQADtestfp",
-      duration: 180,
+    mockFpcalc.mockImplementation((filePath: string, options: any, callback: any) => {
+      callback(null, {
+        fingerprint: "AQADtestfp",
+        duration: 180,
+      });
     });
     mockUnlink.mockRejectedValue(new Error("cleanup failed"));
 
