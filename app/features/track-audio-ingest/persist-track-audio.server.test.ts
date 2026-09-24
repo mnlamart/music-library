@@ -127,6 +127,7 @@ describe("persistTrackAudio", () => {
   it("uses the transaction client when tx is provided", async () => {
     const txTrackAudioFile = {
       findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: "tx-audio-file" }),
     };
     const tx = { trackAudioFile: txTrackAudioFile };
@@ -546,7 +547,7 @@ describe("persistTrackAudio", () => {
         metadata: sampleMetadata,
       });
 
-      expect(result.isSimilar).toBeUndefined();
+      expect(result.isSimilar).toBe(false);
       expect(result.similarTrack).toBeUndefined();
       expect(result.fingerprintSimilarity).toBeUndefined();
     });
@@ -587,6 +588,9 @@ describe("persistTrackAudio", () => {
     });
 
     it("finds most similar fingerprint among multiple candidates", async () => {
+      const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
+      consoleWarn.mockImplementation(() => {});
+
       const newFingerprint = "AQADnew-fingerprint";
 
       mockGenerateAudioFingerprint.mockResolvedValue(newFingerprint);
@@ -665,6 +669,9 @@ describe("persistTrackAudio", () => {
     });
 
     it("ignores candidates with null fingerprints during similarity check", async () => {
+      const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
+      consoleWarn.mockImplementation(() => {});
+
       const newFingerprint = "AQADnew-fingerprint";
 
       mockGenerateAudioFingerprint.mockResolvedValue(newFingerprint);

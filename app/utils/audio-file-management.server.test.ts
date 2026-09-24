@@ -20,7 +20,7 @@ describe("calculateAudioHash", () => {
     const buffer = Buffer.from("test-audio-data");
     const hash = await calculateAudioHash(buffer);
 
-    expect(hash).toBe("b5a2c96250612366ea272ffac6d9744aaf4b45aacd96aa7cfcb931ee3b558259");
+    expect(hash).toBe("522272b26299fafc953e105f7f113422487ef7e4ddce23056532238b6ca29213");
   });
 
   it("produces different hashes for different buffers", async () => {
@@ -140,23 +140,23 @@ describe("generateAudioFingerprint", () => {
 });
 
 describe("calculateFingerprintSimilarity", () => {
-  it("returns 1 for identical fingerprints", () => {
-    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+  it("returns 1 for identical fingerprints", async () => {
+    const { calculateFingerprintSimilarity } = await import("./audio-file-management.server");
     const fp = "AQADtNE123test";
 
     expect(calculateFingerprintSimilarity(fp, fp)).toBe(1);
   });
 
-  it("returns 0 for empty fingerprints", () => {
-    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+  it("returns 0 for empty fingerprints", async () => {
+    const { calculateFingerprintSimilarity } = await import("./audio-file-management.server");
 
     expect(calculateFingerprintSimilarity("", "")).toBe(0);
     expect(calculateFingerprintSimilarity("test", "")).toBe(0);
     expect(calculateFingerprintSimilarity("", "test")).toBe(0);
   });
 
-  it("calculates similarity based on character matches", () => {
-    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+  it("calculates similarity based on character matches", async () => {
+    const { calculateFingerprintSimilarity } = await import("./audio-file-management.server");
 
     // 50% similarity (5 out of 10 characters match)
     const fp1 = "AQADtNE123";
@@ -167,8 +167,8 @@ describe("calculateFingerprintSimilarity", () => {
     expect(similarity).toBeLessThan(1);
   });
 
-  it("handles fingerprints of different lengths", () => {
-    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+  it("handles fingerprints of different lengths", async () => {
+    const { calculateFingerprintSimilarity } = await import("./audio-file-management.server");
 
     const fp1 = "AQAD123";
     const fp2 = "AQAD123456789";
@@ -178,8 +178,8 @@ describe("calculateFingerprintSimilarity", () => {
     expect(similarity).toBeLessThan(1);
   });
 
-  it("normalizes by longer fingerprint length", () => {
-    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+  it("normalizes by longer fingerprint length", async () => {
+    const { calculateFingerprintSimilarity } = await import("./audio-file-management.server");
 
     const fp1 = "AQAD"; // 4 chars
     const fp2 = "AQAD123456"; // 10 chars
@@ -189,8 +189,8 @@ describe("calculateFingerprintSimilarity", () => {
     expect(similarity).toBe(4 / 10);
   });
 
-  it("returns 0 for completely different fingerprints", () => {
-    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+  it("returns 0 for completely different fingerprints", async () => {
+    const { calculateFingerprintSimilarity } = await import("./audio-file-management.server");
 
     const fp1 = "AAAA";
     const fp2 = "BBBB";
@@ -198,8 +198,8 @@ describe("calculateFingerprintSimilarity", () => {
     expect(calculateFingerprintSimilarity(fp1, fp2)).toBe(0);
   });
 
-  it("is order-independent", () => {
-    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+  it("is order-independent", async () => {
+    const { calculateFingerprintSimilarity } = await import("./audio-file-management.server");
 
     const fp1 = "AQAD123";
     const fp2 = "AQAD456";

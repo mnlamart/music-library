@@ -263,18 +263,20 @@ export async function persistTrackAudio(
 
   if (!tx) runBackfillBestEffort(trackId, metadata);
 
+  // Only include similarity info if we actually checked for it
+  const checkedForSimilarity = audioFingerprint && !existingByHash;
+  const isSimilar = checkedForSimilarity
+    ? fingerprintSimilarity >= SIMILARITY_THRESHOLD && similarByFingerprint !== null
+    : undefined;
+
   return {
     audioFile,
     objectKey,
     created: true,
     isDuplicate: existingByHash !== null,
     duplicateTrack: existingByHash?.track,
-    isSimilar:
-      fingerprintSimilarity >= SIMILARITY_THRESHOLD &&
-      similarByFingerprint !== null &&
-      !existingByHash,
-    similarTrack: similarByFingerprint?.track,
-    fingerprintSimilarity:
-      fingerprintSimilarity >= SIMILARITY_THRESHOLD ? fingerprintSimilarity : undefined,
+    isSimilar,
+    similarTrack: isSimilar ? similarByFingerprint?.track : undefined,
+    fingerprintSimilarity: isSimilar ? fingerprintSimilarity : undefined,
   };
 }
