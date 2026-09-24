@@ -9,6 +9,11 @@ vi.mock("#app/utils/storage.server", () => ({
   buildAudioObjectKey: mockBuildAudioObjectKey,
 }));
 
+const mockCalculateAudioHash = vi.fn();
+vi.mock("#app/utils/audio-file-management.server", () => ({
+  calculateAudioHash: mockCalculateAudioHash,
+}));
+
 const mockBackfillTrackMetadata = vi.fn();
 vi.mock("./backfill-track-metadata.server.ts", () => ({
   backfillTrackMetadata: mockBackfillTrackMetadata,
@@ -44,6 +49,7 @@ describe("persistTrackAudio", () => {
       (serviceName: string, trackId: string, extension: string) =>
         `audio/tracks/${serviceName}/${trackId}.${extension}`,
     );
+    mockCalculateAudioHash.mockResolvedValue("abc123hash");
     mockUploadFile.mockResolvedValue("audio/tracks/youtube/track-1.mp3");
     mockPrisma.trackAudioFile.findFirst.mockResolvedValue(null);
     mockPrisma.trackAudioFile.create.mockResolvedValue({
@@ -194,5 +200,217 @@ describe("persistTrackAudio", () => {
     });
 
     expect(mockBackfillTrackMetadata).toHaveBeenCalledWith("track-1", sampleMetadata);
+  });
+
+  describe("duplicate detection", () => {
+    it("calculates content hash for all uploads", async () => {
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      await persistTrackAudio({
+        trackId: "track-1",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      expect(mockCalculateAudioHash).toHaveBeenCalledWith(sampleBuffer);
+    });
+
+    it("includes contentHash in created TrackAudioFile", async () => {
+      mockCalculateAudioHash.mockResolvedValue("test-hash-123");
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      await persistTrackAudio({
+        trackId: "track-1",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      expect(mockPrisma.trackAudioFile.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            contentHash: "test-hash-123",
+          }),
+        }),
+      );
+    });
+
+    it("detects duplicate audio by content hash", async () => {
+      const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
+      consoleWarn.mockImplementation(() => {});
+
+      const duplicateHash = "duplicate-hash-456";
+      mockCalculateAudioHash.mockResolvedValue(duplicateHash);
+
+      // First call returns nothing (no existing by trackId)
+      // Second call returns existing audio with same hash
+      mockPrisma.trackAudioFile.findFirst
+        .mockResolvedValueOnce(null) // No existing by trackId
+        .mockResolvedValueOnce({
+          // Existing by contentHash
+          id: "existing-audio-id",
+          trackId: "existing-track-id",
+          objectKey: "audio/tracks/local/existing-track-id.mp3",
+          track: {
+            id: "existing-track-id",
+            title: "Existing Song",
+            artist: {
+              name: "Existing Artist",
+            },
+          },
+        });
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      const result = await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      // Should check for existing by trackId first
+      expect(mockPrisma.trackAudioFile.findFirst).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: expect.objectContaining({
+            trackId: "new-track-id",
+          }),
+        }),
+      );
+
+      // Should check for existing by contentHash
+      expect(mockPrisma.trackAudioFile.findFirst).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: {
+            contentHash: duplicateHash,
+          },
+        }),
+      );
+
+      // Should mark as duplicate
+      expect(result.isDuplicate).toBe(true);
+      expect(result.duplicateTrack).toEqual({
+        id: "existing-track-id",
+        title: "Existing Song",
+        artist: {
+          name: "Existing Artist",
+        },
+      });
+    });
+
+    it("reuses S3 object key when duplicate detected", async () => {
+      const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
+      consoleWarn.mockImplementation(() => {});
+
+      const duplicateHash = "duplicate-hash-789";
+      const existingObjectKey = "audio/tracks/local/existing.mp3";
+      mockCalculateAudioHash.mockResolvedValue(duplicateHash);
+
+      mockPrisma.trackAudioFile.findFirst
+        .mockResolvedValueOnce(null) // No existing by trackId
+        .mockResolvedValueOnce({
+          // Existing by contentHash
+          id: "existing-audio-id",
+          trackId: "existing-track-id",
+          objectKey: existingObjectKey,
+          track: {
+            id: "existing-track-id",
+            title: "Existing Song",
+            artist: { name: "Existing Artist" },
+          },
+        });
+
+      mockPrisma.trackAudioFile.create.mockResolvedValue({
+        id: "new-audio-id",
+        trackId: "new-track-id",
+        objectKey: existingObjectKey, // Reused!
+      });
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      // Should NOT upload to S3 (duplicate)
+      expect(mockUploadFile).not.toHaveBeenCalled();
+
+      // Should create TrackAudioFile with existing objectKey
+      expect(mockPrisma.trackAudioFile.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            objectKey: existingObjectKey,
+            contentHash: duplicateHash,
+          }),
+        }),
+      );
+    });
+
+    it("uploads to S3 when no duplicate detected", async () => {
+      mockCalculateAudioHash.mockResolvedValue("unique-hash-999");
+      mockPrisma.trackAudioFile.findFirst.mockResolvedValue(null); // No duplicates
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      await persistTrackAudio({
+        trackId: "track-1",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      // Should upload to S3 (unique content)
+      expect(mockUploadFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          file: sampleBuffer,
+        }),
+      );
+    });
+
+    it("calls onProgress immediately for duplicates (no upload needed)", async () => {
+      const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
+      consoleWarn.mockImplementation(() => {});
+
+      const onProgress = vi.fn();
+      mockCalculateAudioHash.mockResolvedValue("duplicate-hash");
+
+      mockPrisma.trackAudioFile.findFirst
+        .mockResolvedValueOnce(null) // No existing by trackId
+        .mockResolvedValueOnce({
+          // Existing by contentHash
+          id: "existing-audio-id",
+          trackId: "existing-track-id",
+          objectKey: "audio/tracks/local/existing.mp3",
+          track: {
+            id: "existing-track-id",
+            title: "Existing Song",
+            artist: { name: "Existing Artist" },
+          },
+        });
+
+      mockPrisma.trackAudioFile.create.mockResolvedValue({
+        id: "new-audio-id",
+        trackId: "new-track-id",
+        objectKey: "audio/tracks/local/existing.mp3",
+      });
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+        onProgress,
+      });
+
+      // Should report 100% progress immediately (no upload)
+      expect(onProgress).toHaveBeenCalledWith({
+        loaded: sampleBuffer.length,
+        total: sampleBuffer.length,
+      });
+      expect(mockUploadFile).not.toHaveBeenCalled();
+    });
   });
 });
