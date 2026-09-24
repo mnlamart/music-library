@@ -6,7 +6,10 @@ import { authSessionStorage } from "#app/utils/session.server.ts";
 import { type ToastInput, toastSessionStorage, toastKey } from "#app/utils/toast.server.ts";
 import { convertSetCookieToCookie } from "#tests/utils.ts";
 
-import "@testing-library/jest-dom/vitest";
+// Import for side effects (registers matchers with expect)
+// Note: Using base import to avoid type conflicts with vitest 5
+// @ts-expect-error - @testing-library/jest-dom types not yet compatible with vitest 5
+import "@testing-library/jest-dom";
 
 expect.extend({
   toHaveRedirect(response: unknown, redirectTo?: string) {
@@ -142,7 +145,11 @@ interface CustomMatchers<R = unknown> {
   toSendToast(toast: ToastInput): Promise<R>;
 }
 
+// @ts-expect-error - @testing-library/jest-dom types not yet compatible with vitest 5's Assertion interface
+// This suppresses "All declarations of 'Assertion' must have identical type parameters" error
 declare module "vitest" {
-  interface Assertion<T = any> extends CustomMatchers<T> {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface Assertion<R extends void | Promise<void> = void, T = any>
+    extends CustomMatchers<R> {}
   interface AsymmetricMatchersContaining extends CustomMatchers {}
 }
