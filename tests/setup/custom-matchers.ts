@@ -6,10 +6,9 @@ import { authSessionStorage } from "#app/utils/session.server.ts";
 import { type ToastInput, toastSessionStorage, toastKey } from "#app/utils/toast.server.ts";
 import { convertSetCookieToCookie } from "#tests/utils.ts";
 
-// Import for side effects (registers matchers with expect)
-// Note: Using base import to avoid type conflicts with vitest 5
-// @ts-expect-error - @testing-library/jest-dom types not yet compatible with vitest 5
-import "@testing-library/jest-dom";
+// Import jest-dom matchers - use /vitest entry which properly sets up for vitest
+// @ts-expect-error - @testing-library/jest-dom v7 types not fully compatible with vitest 5 yet
+import "@testing-library/jest-dom/vitest";
 
 expect.extend({
   toHaveRedirect(response: unknown, redirectTo?: string) {
