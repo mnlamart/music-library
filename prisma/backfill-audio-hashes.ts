@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
-// @context7: Prisma, Node.js fs, crypto
+// @context7: Prisma, Node.js fs, crypto, fpcalc
 /**
- * Backfill contentHash for existing TrackAudioFile records
+ * Backfill contentHash and audioFingerprint for existing TrackAudioFile records
  *
  * This script:
- * 1. Finds all TrackAudioFile records with null contentHash
+ * 1. Finds all TrackAudioFile records with null contentHash or audioFingerprint
  * 2. Downloads each audio file from S3 (or local storage)
- * 3. Calculates SHA-256 hash
+ * 3. Calculates SHA-256 hash and Chromaprint fingerprint
  * 4. Updates the database
  *
  * Run with: npx tsx prisma/backfill-audio-hashes.ts
@@ -14,7 +14,10 @@
 
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
-import { calculateAudioHash } from "#app/utils/audio-file-management.server";
+import {
+  calculateAudioHash,
+  generateAudioFingerprint,
+} from "#app/utils/audio-file-management.server";
 import { downloadFile } from "#app/utils/storage.server";
 import { prisma } from "#app/utils/db.server";
 
@@ -53,25 +56,27 @@ async function getAudioBuffer(objectKey: string): Promise<Buffer | null> {
 }
 
 async function backfillContentHashes(dryRun = false): Promise<void> {
-  console.log("🔍 Finding TrackAudioFile records without contentHash...\n");
+  console.log("🔍 Finding TrackAudioFile records without contentHash or audioFingerprint...\n");
 
   const audioFilesWithoutHash = await prisma.trackAudioFile.findMany({
     where: {
-      contentHash: null,
+      OR: [{ contentHash: null }, { audioFingerprint: null }],
     },
     select: {
       id: true,
       objectKey: true,
       fileName: true,
+      contentHash: true,
+      audioFingerprint: true,
     },
   });
 
   if (audioFilesWithoutHash.length === 0) {
-    console.log("✅ All audio files already have contentHash!\n");
+    console.log("✅ All audio files already have contentHash and audioFingerprint!\n");
     return;
   }
 
-  console.log(`Found ${audioFilesWithoutHash.length} audio files to hash\n`);
+  console.log(`Found ${audioFilesWithoutHash.length} audio files to process\n`);
 
   if (dryRun) {
     console.log("🏃 DRY RUN MODE - No changes will be made\n");
@@ -85,6 +90,12 @@ async function backfillContentHashes(dryRun = false): Promise<void> {
     const progress = `[${index + 1}/${audioFilesWithoutHash.length}]`;
     console.log(`${progress} Processing: ${audioFile.fileName || audioFile.objectKey}`);
 
+    const needsHash = !audioFile.contentHash;
+    const needsFingerprint = !audioFile.audioFingerprint;
+
+    if (needsHash) console.log(`  🔨 Needs hash`);
+    if (needsFingerprint) console.log(`  🎵 Needs fingerprint`);
+
     try {
       // Get the audio file buffer
       const buffer = await getAudioBuffer(audioFile.objectKey);
@@ -95,15 +106,32 @@ async function backfillContentHashes(dryRun = false): Promise<void> {
         continue;
       }
 
-      // Calculate hash
-      const contentHash = await calculateAudioHash(buffer);
-      console.log(`  📊 Hash: ${contentHash.substring(0, 16)}...`);
+      const updates: { contentHash?: string; audioFingerprint?: string | null } = {};
+
+      // Calculate hash if needed
+      if (needsHash) {
+        const contentHash = await calculateAudioHash(buffer);
+        console.log(`  📊 Hash: ${contentHash.substring(0, 16)}...`);
+        updates.contentHash = contentHash;
+      }
+
+      // Generate fingerprint if needed
+      if (needsFingerprint) {
+        const audioFingerprint = await generateAudioFingerprint(buffer);
+        if (audioFingerprint) {
+          console.log(`  🎵 Fingerprint: ${audioFingerprint.substring(0, 16)}...`);
+          updates.audioFingerprint = audioFingerprint;
+        } else {
+          console.warn(`  ⚠️  Could not generate fingerprint`);
+          updates.audioFingerprint = null;
+        }
+      }
 
       if (!dryRun) {
         // Update database
         await prisma.trackAudioFile.update({
           where: { id: audioFile.id },
-          data: { contentHash },
+          data: updates,
         });
         console.log(`  ✅ Updated in database\n`);
       } else {
@@ -178,7 +206,7 @@ const dryRun = args.includes("--dry-run") || args.includes("-d");
 
 if (args.includes("--help") || args.includes("-h")) {
   console.log(`
-Backfill contentHash for existing TrackAudioFile records
+Backfill contentHash and audioFingerprint for existing TrackAudioFile records
 
 Usage:
   npx tsx prisma/backfill-audio-hashes.ts [options]

@@ -450,12 +450,13 @@ model TrackAudioFile {
   service   Service? @relation(fields: [serviceId], references: [id])
 
   // File storage
-  objectKey   String // S3 storage key
-  contentHash String? // SHA-256 hash for deduplication
-  fileName    String?
-  fileSize    Int?
-  mimeType    String? // audio/mpeg, audio/flac, etc.
-  format      String? // "mp3", "flac", "wav", etc.
+  objectKey        String  // S3 storage key
+  contentHash      String? // SHA-256 hash for deduplication
+  audioFingerprint String? // Chromaprint fingerprint for perceptual similarity
+  fileName         String?
+  fileSize         Int?
+  mimeType         String? // audio/mpeg, audio/flac, etc.
+  format           String? // "mp3", "flac", "wav", etc.
 
   // Audio metadata
   bitrate    Int? // kbps
@@ -470,6 +471,7 @@ model TrackAudioFile {
 
   @@unique([trackId, serviceId, format]) // One file per track/service/format combination
   @@index([contentHash]) // For duplicate detection
+  @@index([audioFingerprint]) // For perceptual similarity detection
   @@index([trackId])
   @@index([serviceId])
   @@index([format])

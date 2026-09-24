@@ -1,21 +1,38 @@
-# Audio File Deduplication Implementation
+# Audio File Deduplication & Similarity Detection
 
 ## Overview
 
-This implementation adds content-based deduplication for audio file uploads, preventing duplicate storage and warning users when they upload files that already exist in the system.
+This implementation provides two levels of duplicate detection:
+
+1. **Exact Duplicate Detection (SHA-256):** Detects identical audio files byte-for-byte
+2. **Perceptual Similarity Detection (Chromaprint):** Detects similar audio (re-encodes, different formats, remasters)
+
+Both features work together to prevent duplicate storage and warn users about similar content.
 
 ## What Was Implemented
 
 ### 1. Schema Changes (`prisma/schema.prisma`)
 
 - Added `contentHash` field to `TrackAudioFile` model (SHA-256 hash of audio content)
-- Added index on `contentHash` for efficient duplicate lookups
-- Migration file created: `prisma/migrations/20260924102309_add_content_hash_to_track_audio_file/migration.sql`
+- Added `audioFingerprint` field to `TrackAudioFile` model (Chromaprint fingerprint)
+- Added indices on both `contentHash` and `audioFingerprint` for efficient lookups
+- Migration files created:
+  - `prisma/migrations/20260924102309_add_content_hash_to_track_audio_file/migration.sql`
+  - `prisma/migrations/20260924150400_add_audio_fingerprint_to_track_audio_file/migration.sql`
 
-### 2. Audio Hash Utility (`app/utils/audio-file-management.server.ts`)
+### 2. Audio Hash & Fingerprint Utilities (`app/utils/audio-file-management.server.ts`)
 
-- New `calculateAudioHash()` function using SHA-256 (same pattern as cover images)
-- Comprehensive test coverage in `audio-file-management.server.test.ts`
+**Exact Duplicate Detection:**
+
+- `calculateAudioHash()` function using SHA-256 (same pattern as cover images)
+
+**Perceptual Similarity Detection:**
+
+- `generateAudioFingerprint()` function using Chromaprint (via `fpcalc` package)
+- `calculateFingerprintSimilarity()` function to compare fingerprints (0-1 scale)
+- Similarity threshold: 0.90 (90% match)
+
+Comprehensive test coverage in `audio-file-management.server.test.ts`
 
 ### 3. Upload Logic Updates
 
@@ -26,16 +43,24 @@ This implementation adds content-based deduplication for audio file uploads, pre
 **New behavior:**
 
 1. Calculate SHA-256 hash of audio buffer
-2. Check if audio with same hash already exists
-3. If duplicate found:
+2. Generate Chromaprint audio fingerprint
+3. Check if audio with same hash already exists (exact duplicate)
+4. If no exact duplicate, check for similar fingerprints (>= 90% similarity)
+5. If exact duplicate found:
    - Skip S3 upload (reuse existing object)
    - Create new `TrackAudioFile` record with existing `objectKey`
    - Return duplicate info in result
-4. If unique:
+6. If similar audio found (but not exact):
+   - Upload to S3 as normal (different audio content)
+   - Store hash and fingerprint with new record
+   - Return similarity info in result (track, similarity percentage)
+7. If unique:
    - Upload to S3 as before
-   - Store hash with new record
+   - Store hash and fingerprint with new record
 
-**Storage savings:** Duplicate audio files don't create new S3 objects, saving storage costs.
+**Storage savings:** Exact duplicate audio files don't create new S3 objects, saving storage costs.
+
+**User benefits:** Users are warned about similar audio (re-encodes, different formats) even when not byte-identical.
 
 #### Upload endpoints updated:
 
@@ -113,7 +138,7 @@ npx prisma migrate reset --force
 
 ### 2. Backfill Existing Audio Files
 
-After applying the migration, hash all existing audio files:
+After applying the migration, generate hashes and fingerprints for all existing audio files:
 
 ```bash
 # Preview what will be changed (safe)
@@ -125,9 +150,10 @@ npx tsx prisma/backfill-audio-hashes.ts
 
 This script:
 
-- Finds all `TrackAudioFile` records with `contentHash: null`
+- Finds all `TrackAudioFile` records with `contentHash: null` or `audioFingerprint: null`
 - Downloads files from S3 or reads from local storage
 - Calculates SHA-256 hash for each file
+- Generates Chromaprint fingerprint for each file
 - Updates database records
 - Reports any duplicates discovered
 
@@ -139,9 +165,12 @@ This script:
 Found 25 audio files to hash
 
 [1/25] Processing: song1.mp3
+  🔨 Needs hash
+  🎵 Needs fingerprint
   🌐 Downloading from S3: audio/tracks/local/abc123.mp3
   ✓ Downloaded from S3 (5.23 MB)
   📊 Hash: 4a5d7c8b9e2f1a3b...
+  🎵 Fingerprint: AQADtNE123...
   ✅ Updated in database
 
 ...
@@ -206,17 +235,80 @@ GROUP BY contentHash
 HAVING COUNT(*) > 1;
 ```
 
+## Chromaprint Audio Fingerprinting
+
+### What is Chromaprint?
+
+Chromaprint is an open-source audio fingerprinting library (MIT license) that generates compact fingerprints representing the perceptual characteristics of audio. Unlike SHA-256 hashes that require byte-for-byte matches, Chromaprint fingerprints can detect:
+
+- **Same song, different bitrate** (320kbps MP3 vs 128kbps MP3)
+- **Same song, different format** (MP3 vs FLAC vs WAV)
+- **Remasters** (same song, slightly different mastering)
+- **Re-encodes** (audio transcoded between formats)
+
+### How It Works
+
+1. **Fingerprint Generation:** The `fpcalc` binary analyzes the audio waveform and generates a base64-encoded fingerprint string (e.g., `AQADtNE123...`)
+
+2. **Similarity Comparison:** When a new audio file is uploaded, its fingerprint is compared against all existing fingerprints in the database using a character-based similarity algorithm
+
+3. **Threshold Detection:** If similarity >= 90%, the tracks are considered perceptually similar
+
+4. **User Warning:** The system warns about similar audio but still allows the upload (unlike exact duplicates which reuse storage)
+
+### Why 90% Threshold?
+
+- **Too high (>95%):** Misses legitimate re-encodes and format conversions
+- **Too low (<85%):** False positives (different songs flagged as similar)
+- **90%:** Balanced threshold that catches most re-encodes while minimizing false positives
+
+### Example Use Cases
+
+**Re-encoded Audio:**
+
+```
+User uploads: song.mp3 (320kbps, 10MB)
+Later uploads: song.flac (lossless, 40MB)
+→ 94% similar → Warning: "Similar to existing track"
+→ Both stored (different quality/format preferences)
+```
+
+**Different Bitrates:**
+
+```
+User uploads: song_high.mp3 (320kbps)
+Later uploads: song_low.mp3 (128kbps, same song)
+→ 92% similar → Warning shown
+```
+
+**Remasters:**
+
+```
+User uploads: song_original.mp3 (1990 master)
+Later uploads: song_remastered.mp3 (2020 remaster)
+→ 91% similar → Warning shown
+→ User can keep both versions
+```
+
+### Performance Considerations
+
+- Fingerprint generation adds ~500ms to upload time (one-time cost)
+- Similarity comparison is fast (O(n) where n = existing fingerprints)
+- For large libraries (>10,000 tracks), consider optimizing comparison logic
+- Failed fingerprint generation (e.g., corrupted audio) doesn't block upload
+
 ## Architecture Decisions
 
 ### Important: Existing Uploads
 
-**⚠️ Critical:** Audio files uploaded BEFORE this feature won't have a `contentHash`. This means:
+**⚠️ Critical:** Audio files uploaded BEFORE this feature won't have a `contentHash` or `audioFingerprint`. This means:
 
-1. They won't be detected as duplicates
-2. Re-uploading the same file will create new S3 objects
-3. You'll waste storage on duplicates
+1. They won't be detected as exact duplicates
+2. They won't be detected as similar audio
+3. Re-uploading the same file will create new S3 objects
+4. You'll waste storage on duplicates
 
-**Solution:** Run the backfill script (step 2 above) to hash all existing files.
+**Solution:** Run the backfill script (step 2 above) to generate hashes and fingerprints for all existing files.
 
 **Example Problem:**
 
@@ -262,23 +354,52 @@ We considered three approaches:
    - User gets warned about duplicates
    - Best balance of flexibility and efficiency
 
-### Why SHA-256?
+### Why SHA-256 + Chromaprint?
+
+**SHA-256 (Exact Duplicates):**
 
 - Same hashing algorithm used for cover images
 - Industry standard for content identification
 - Fast enough for audio files (100MB files hash in <1s)
 - Cryptographically secure (prevents collisions)
+- Enables storage optimization (reuse S3 objects)
 
-### Why Store Hash in Database?
+**Chromaprint (Similar Audio):**
 
-- Fast duplicate lookups via indexed column
+- Detects perceptual similarity (not just byte-for-byte matches)
+- Open source and MIT licensed
+- Used by AcoustID and MusicBrainz
+- Compact fingerprint size (~200-500 characters)
+- Robust to format changes and re-encoding
+
+**Why Both?**
+
+- SHA-256: Fast, precise, enables storage savings
+- Chromaprint: Catches re-encodes and format conversions SHA-256 misses
+- Complementary approaches for comprehensive duplicate detection
+
+### Why Store Both in Database?
+
+**contentHash:**
+
+- Fast exact duplicate lookups via indexed column
 - No need to download/hash files for comparison
+- Enables storage deduplication
+
+**audioFingerprint:**
+
+- Fast perceptual similarity detection
+- No need to re-analyze audio files
 - Enables future features:
-  - Admin dashboard showing duplicate stats
+  - Admin dashboard showing duplicate and similar audio stats
   - Bulk cleanup of duplicate storage
   - API to find "similar" tracks by content
+  - Automatic playlist generation (find similar songs)
+  - Music recommendation engine
 
-## Storage Savings Example
+## Storage Savings Examples
+
+### Exact Duplicates (SHA-256)
 
 **Before (no deduplication):**
 
@@ -292,6 +413,23 @@ We considered three approaches:
 - Storage used: 10MB
 - S3 objects: 1
 - **Savings: 40MB (80%)**
+
+### Re-encoded Audio (Chromaprint)
+
+**Scenario:**
+
+- User uploads: song.mp3 (320kbps, 10MB)
+- User uploads: song.flac (lossless, 40MB)
+- 94% similar by fingerprint
+
+**Result:**
+
+- Both files stored (different formats, user choice)
+- User warned: "Similar to existing track"
+- No automatic deduplication (different audio data)
+- User can decide to keep or delete
+
+**Benefit:** Prevents accidental duplicate uploads while respecting user choice for different formats/qualities
 
 ## Future Enhancements
 
@@ -312,31 +450,34 @@ Possible next steps:
    - Detect and consolidate duplicates
    - Update to single S3 objects
 
-4. **Metadata Fingerprinting**
-   - Detect near-duplicates (re-encodes)
-   - Match by: title + artist + duration
-   - "Did you mean to upload X?" suggestions
+4. **Enhanced Similarity Features**
+   - Music recommendation engine based on fingerprint similarity
+   - "Find similar tracks" feature
+   - Auto-playlist generation (similar sounding songs)
+   - Integration with MusicBrainz AcoustID for track identification
 
 ## Files Changed
 
 ```
 Modified:
-- prisma/schema.prisma
-- app/features/track-audio-ingest/persist-track-audio.server.ts
+- prisma/schema.prisma (added contentHash and audioFingerprint)
+- app/features/track-audio-ingest/persist-track-audio.server.ts (fingerprint generation and similarity detection)
 - app/routes/api+/upload-audio-batch.tsx
 - app/routes/api+/upload-audio.tsx
 - app/utils/storage.server.ts (added downloadFile function)
 - prisma/seed.ts
+- package.json (added fpcalc dependency)
 
 Added:
-- app/utils/audio-file-management.server.ts
-- app/utils/audio-file-management.server.test.ts
+- app/utils/audio-file-management.server.ts (hash + fingerprint utilities)
+- app/utils/audio-file-management.server.test.ts (comprehensive tests)
 - prisma/migrations/20260924102309_add_content_hash_to_track_audio_file/migration.sql
-- prisma/backfill-audio-hashes.ts (for existing uploads)
+- prisma/migrations/20260924150400_add_audio_fingerprint_to_track_audio_file/migration.sql
+- prisma/backfill-audio-hashes.ts (for existing uploads, now includes fingerprints)
 - docs/audio-deduplication.md (this file)
 
 Updated Tests:
-- app/features/track-audio-ingest/persist-track-audio.server.test.ts
+- app/features/track-audio-ingest/persist-track-audio.server.test.ts (added 13 new fingerprint tests)
 ```
 
 ## Questions?

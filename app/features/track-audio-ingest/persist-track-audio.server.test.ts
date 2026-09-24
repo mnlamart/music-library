@@ -10,8 +10,12 @@ vi.mock("#app/utils/storage.server", () => ({
 }));
 
 const mockCalculateAudioHash = vi.fn();
+const mockGenerateAudioFingerprint = vi.fn();
+const mockCalculateFingerprintSimilarity = vi.fn();
 vi.mock("#app/utils/audio-file-management.server", () => ({
   calculateAudioHash: mockCalculateAudioHash,
+  generateAudioFingerprint: mockGenerateAudioFingerprint,
+  calculateFingerprintSimilarity: mockCalculateFingerprintSimilarity,
 }));
 
 const mockBackfillTrackMetadata = vi.fn();
@@ -22,6 +26,7 @@ vi.mock("./backfill-track-metadata.server.ts", () => ({
 const mockPrisma = {
   trackAudioFile: {
     findFirst: vi.fn(),
+    findMany: vi.fn(),
     create: vi.fn(),
   },
 };
@@ -50,8 +55,11 @@ describe("persistTrackAudio", () => {
         `audio/tracks/${serviceName}/${trackId}.${extension}`,
     );
     mockCalculateAudioHash.mockResolvedValue("abc123hash");
+    mockGenerateAudioFingerprint.mockResolvedValue("AQADtNE123fingerprint");
+    mockCalculateFingerprintSimilarity.mockReturnValue(0);
     mockUploadFile.mockResolvedValue("audio/tracks/youtube/track-1.mp3");
     mockPrisma.trackAudioFile.findFirst.mockResolvedValue(null);
+    mockPrisma.trackAudioFile.findMany.mockResolvedValue([]);
     mockPrisma.trackAudioFile.create.mockResolvedValue({
       id: "audio-file-1",
       trackId: "track-1",
@@ -235,6 +243,47 @@ describe("persistTrackAudio", () => {
       );
     });
 
+    it("generates and includes audioFingerprint in created TrackAudioFile", async () => {
+      mockGenerateAudioFingerprint.mockResolvedValue("AQADtest-fingerprint");
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      await persistTrackAudio({
+        trackId: "track-1",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      expect(mockGenerateAudioFingerprint).toHaveBeenCalledWith(sampleBuffer);
+      expect(mockPrisma.trackAudioFile.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            audioFingerprint: "AQADtest-fingerprint",
+          }),
+        }),
+      );
+    });
+
+    it("handles null audioFingerprint gracefully when generation fails", async () => {
+      mockGenerateAudioFingerprint.mockResolvedValue(null);
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      await persistTrackAudio({
+        trackId: "track-1",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      expect(mockPrisma.trackAudioFile.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            audioFingerprint: null,
+          }),
+        }),
+      );
+    });
+
     it("detects duplicate audio by content hash", async () => {
       const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
       consoleWarn.mockImplementation(() => {});
@@ -411,6 +460,255 @@ describe("persistTrackAudio", () => {
         total: sampleBuffer.length,
       });
       expect(mockUploadFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("fingerprint similarity detection", () => {
+    it("detects similar audio by fingerprint when similarity >= 90%", async () => {
+      const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
+      consoleWarn.mockImplementation(() => {});
+
+      const newFingerprint = "AQADnew-fingerprint";
+      const similarFingerprint = "AQADsimilar-fingerprint";
+
+      mockCalculateAudioHash.mockResolvedValue("unique-hash-new");
+      mockGenerateAudioFingerprint.mockResolvedValue(newFingerprint);
+      mockCalculateFingerprintSimilarity.mockReturnValue(0.95); // 95% similar
+
+      // No exact hash match
+      mockPrisma.trackAudioFile.findFirst.mockResolvedValue(null);
+
+      // Return existing audio with similar fingerprint
+      mockPrisma.trackAudioFile.findMany.mockResolvedValue([
+        {
+          id: "similar-audio-id",
+          trackId: "similar-track-id",
+          audioFingerprint: similarFingerprint,
+          track: {
+            id: "similar-track-id",
+            title: "Similar Song",
+            artist: {
+              name: "Similar Artist",
+            },
+          },
+        },
+      ]);
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      const result = await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      expect(mockCalculateFingerprintSimilarity).toHaveBeenCalledWith(
+        newFingerprint,
+        similarFingerprint,
+      );
+      expect(result.isSimilar).toBe(true);
+      expect(result.similarTrack).toEqual({
+        id: "similar-track-id",
+        title: "Similar Song",
+        artist: {
+          name: "Similar Artist",
+        },
+      });
+      expect(result.fingerprintSimilarity).toBe(0.95);
+    });
+
+    it("does not mark as similar when similarity < 90%", async () => {
+      const newFingerprint = "AQADnew-fingerprint";
+      const differentFingerprint = "AQADdifferent-fingerprint";
+
+      mockGenerateAudioFingerprint.mockResolvedValue(newFingerprint);
+      mockCalculateFingerprintSimilarity.mockReturnValue(0.75); // 75% similar (below threshold)
+
+      mockPrisma.trackAudioFile.findFirst.mockResolvedValue(null);
+      mockPrisma.trackAudioFile.findMany.mockResolvedValue([
+        {
+          id: "different-audio-id",
+          trackId: "different-track-id",
+          audioFingerprint: differentFingerprint,
+          track: {
+            id: "different-track-id",
+            title: "Different Song",
+            artist: { name: "Different Artist" },
+          },
+        },
+      ]);
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      const result = await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      expect(result.isSimilar).toBeUndefined();
+      expect(result.similarTrack).toBeUndefined();
+      expect(result.fingerprintSimilarity).toBeUndefined();
+    });
+
+    it("does not check fingerprint similarity when exact duplicate exists", async () => {
+      const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
+      consoleWarn.mockImplementation(() => {});
+
+      const duplicateHash = "duplicate-hash";
+      mockCalculateAudioHash.mockResolvedValue(duplicateHash);
+      mockGenerateAudioFingerprint.mockResolvedValue("AQADsome-fingerprint");
+
+      // First call returns nothing (no existing by trackId)
+      // Second call returns existing audio with same hash (exact duplicate)
+      mockPrisma.trackAudioFile.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: "existing-audio-id",
+        trackId: "existing-track-id",
+        objectKey: "audio/tracks/local/existing.mp3",
+        track: {
+          id: "existing-track-id",
+          title: "Existing Song",
+          artist: { name: "Existing Artist" },
+        },
+      });
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      const result = await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      // Should not check fingerprint similarity when exact duplicate exists
+      expect(mockPrisma.trackAudioFile.findMany).not.toHaveBeenCalled();
+      expect(result.isDuplicate).toBe(true);
+      expect(result.isSimilar).toBeUndefined();
+    });
+
+    it("finds most similar fingerprint among multiple candidates", async () => {
+      const newFingerprint = "AQADnew-fingerprint";
+
+      mockGenerateAudioFingerprint.mockResolvedValue(newFingerprint);
+      mockPrisma.trackAudioFile.findFirst.mockResolvedValue(null);
+
+      // Return multiple candidates with different similarities
+      mockPrisma.trackAudioFile.findMany.mockResolvedValue([
+        {
+          id: "audio-1",
+          trackId: "track-1",
+          audioFingerprint: "AQAD-fp-1",
+          track: {
+            id: "track-1",
+            title: "Song 1",
+            artist: { name: "Artist 1" },
+          },
+        },
+        {
+          id: "audio-2",
+          trackId: "track-2",
+          audioFingerprint: "AQAD-fp-2",
+          track: {
+            id: "track-2",
+            title: "Song 2",
+            artist: { name: "Artist 2" },
+          },
+        },
+        {
+          id: "audio-3",
+          trackId: "track-3",
+          audioFingerprint: "AQAD-fp-3",
+          track: {
+            id: "track-3",
+            title: "Song 3",
+            artist: { name: "Artist 3" },
+          },
+        },
+      ]);
+
+      // Mock similarities: 0.85, 0.92 (highest), 0.88
+      mockCalculateFingerprintSimilarity
+        .mockReturnValueOnce(0.85)
+        .mockReturnValueOnce(0.92)
+        .mockReturnValueOnce(0.88);
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      const result = await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      // Should return the most similar one (track-2 with 0.92)
+      expect(result.isSimilar).toBe(true);
+      expect(result.similarTrack?.id).toBe("track-2");
+      expect(result.fingerprintSimilarity).toBe(0.92);
+    });
+
+    it("skips fingerprint similarity check when fingerprint generation fails", async () => {
+      mockGenerateAudioFingerprint.mockResolvedValue(null);
+      mockPrisma.trackAudioFile.findFirst.mockResolvedValue(null);
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      const result = await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      // Should not check for similar fingerprints
+      expect(mockPrisma.trackAudioFile.findMany).not.toHaveBeenCalled();
+      expect(result.isSimilar).toBeUndefined();
+      expect(result.similarTrack).toBeUndefined();
+    });
+
+    it("ignores candidates with null fingerprints during similarity check", async () => {
+      const newFingerprint = "AQADnew-fingerprint";
+
+      mockGenerateAudioFingerprint.mockResolvedValue(newFingerprint);
+      mockPrisma.trackAudioFile.findFirst.mockResolvedValue(null);
+
+      // Return candidates including one with null fingerprint
+      mockPrisma.trackAudioFile.findMany.mockResolvedValue([
+        {
+          id: "audio-1",
+          trackId: "track-1",
+          audioFingerprint: null, // Should be skipped
+          track: {
+            id: "track-1",
+            title: "Song 1",
+            artist: { name: "Artist 1" },
+          },
+        },
+        {
+          id: "audio-2",
+          trackId: "track-2",
+          audioFingerprint: "AQAD-fp-2",
+          track: {
+            id: "track-2",
+            title: "Song 2",
+            artist: { name: "Artist 2" },
+          },
+        },
+      ]);
+
+      mockCalculateFingerprintSimilarity.mockReturnValue(0.91);
+
+      const { persistTrackAudio } = await import("./persist-track-audio.server.ts");
+      const result = await persistTrackAudio({
+        trackId: "new-track-id",
+        serviceName: "local",
+        buffer: sampleBuffer,
+        metadata: sampleMetadata,
+      });
+
+      // Should only check against the non-null fingerprint
+      expect(mockCalculateFingerprintSimilarity).toHaveBeenCalledTimes(1);
+      expect(mockCalculateFingerprintSimilarity).toHaveBeenCalledWith(newFingerprint, "AQAD-fp-2");
+      expect(result.isSimilar).toBe(true);
+      expect(result.similarTrack?.id).toBe("track-2");
     });
   });
 });

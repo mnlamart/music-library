@@ -1,4 +1,8 @@
-import { calculateAudioHash } from "#app/utils/audio-file-management.server";
+import {
+  calculateAudioHash,
+  generateAudioFingerprint,
+  calculateFingerprintSimilarity,
+} from "#app/utils/audio-file-management.server";
 import { type ExtractedAudioMetadata } from "#app/utils/audio-metadata.server";
 import { prisma } from "#app/utils/db.server.ts";
 import { buildAudioObjectKey, uploadFile } from "#app/utils/storage.server";
@@ -34,6 +38,13 @@ export type PersistTrackAudioResult = {
     title: string;
     artist: { name: string };
   };
+  isSimilar?: boolean;
+  similarTrack?: {
+    id: string;
+    title: string;
+    artist: { name: string };
+  };
+  fingerprintSimilarity?: number;
 };
 
 function getAudioExtension(
@@ -109,7 +120,10 @@ export async function persistTrackAudio(
   // Step 2: Calculate content hash for deduplication
   const contentHash = await calculateAudioHash(buffer);
 
-  // Step 3: Check if audio with same hash already exists
+  // Step 3: Generate audio fingerprint for perceptual similarity
+  const audioFingerprint = await generateAudioFingerprint(buffer);
+
+  // Step 4: Check if audio with same hash already exists (exact duplicate)
   const existingByHash = await db.trackAudioFile.findFirst({
     where: {
       contentHash,
@@ -132,6 +146,69 @@ export async function persistTrackAudio(
     },
   });
 
+  // Step 5: Check for similar audio by fingerprint (if fingerprint was generated)
+  let similarByFingerprint: {
+    id: string;
+    trackId: string;
+    audioFingerprint: string | null;
+    track: {
+      id: string;
+      title: string;
+      artist: { name: string };
+    };
+  } | null = null;
+
+  let fingerprintSimilarity = 0;
+  const SIMILARITY_THRESHOLD = 0.9; // 90% similarity
+
+  if (audioFingerprint && !existingByHash) {
+    // Only check for similar fingerprints if no exact duplicate found
+    const allFingerprints = await db.trackAudioFile.findMany({
+      where: {
+        audioFingerprint: {
+          not: null,
+        },
+      },
+      select: {
+        id: true,
+        trackId: true,
+        audioFingerprint: true,
+        track: {
+          select: {
+            id: true,
+            title: true,
+            artist: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Find most similar fingerprint
+    for (const candidate of allFingerprints) {
+      if (!candidate.audioFingerprint) continue;
+
+      const similarity = calculateFingerprintSimilarity(
+        audioFingerprint,
+        candidate.audioFingerprint,
+      );
+
+      if (similarity > fingerprintSimilarity) {
+        fingerprintSimilarity = similarity;
+        similarByFingerprint = candidate;
+      }
+    }
+
+    if (fingerprintSimilarity >= SIMILARITY_THRESHOLD && similarByFingerprint) {
+      console.warn(
+        `⚠️  Similar audio detected for track ${trackId} (${(fingerprintSimilarity * 100).toFixed(1)}% similarity). Similar to track ${similarByFingerprint.trackId}`,
+      );
+    }
+  }
+
   let objectKey: string;
   let shouldUpload = true;
 
@@ -147,7 +224,7 @@ export async function persistTrackAudio(
     objectKey = buildAudioObjectKey(serviceName, trackId, extension);
   }
 
-  // Step 4: Upload to S3 if this is new audio
+  // Step 6: Upload to S3 if this is new audio
   if (shouldUpload) {
     await uploadFile({
       file: buffer,
@@ -161,13 +238,14 @@ export async function persistTrackAudio(
     onProgress({ loaded: buffer.length, total: buffer.length });
   }
 
-  // Step 5: Create new TrackAudioFile record (even for duplicates, to link this track)
+  // Step 7: Create new TrackAudioFile record (even for duplicates, to link this track)
   const audioFile = await db.trackAudioFile.create({
     data: {
       trackId,
       serviceId,
       objectKey,
       contentHash,
+      audioFingerprint,
       fileName: fileName ?? objectKey.split("/").pop(),
       format,
       mimeType: metadata.mimeType || "audio/mpeg",
@@ -191,5 +269,12 @@ export async function persistTrackAudio(
     created: true,
     isDuplicate: existingByHash !== null,
     duplicateTrack: existingByHash?.track,
+    isSimilar:
+      fingerprintSimilarity >= SIMILARITY_THRESHOLD &&
+      similarByFingerprint !== null &&
+      !existingByHash,
+    similarTrack: similarByFingerprint?.track,
+    fingerprintSimilarity:
+      fingerprintSimilarity >= SIMILARITY_THRESHOLD ? fingerprintSimilarity : undefined,
   };
 }

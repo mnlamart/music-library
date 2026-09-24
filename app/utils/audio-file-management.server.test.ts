@@ -1,30 +1,32 @@
-// @context7: Vitest
-import { describe, it, expect } from "vitest";
-import { calculateAudioHash } from "./audio-file-management.server";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+// Mock fs/promises
+const mockWriteFile = vi.fn();
+const mockUnlink = vi.fn();
+vi.mock("node:fs/promises", () => ({
+  writeFile: mockWriteFile,
+  unlink: mockUnlink,
+}));
+
+// Mock fpcalc
+const mockFpcalc = vi.fn();
+vi.mock("fpcalc", () => ({
+  default: mockFpcalc,
+}));
 
 describe("calculateAudioHash", () => {
-  it("should calculate SHA-256 hash of audio buffer", async () => {
-    const buffer = Buffer.from("test audio content");
+  it("calculates SHA-256 hash of audio buffer", async () => {
+    const { calculateAudioHash } = await import("./audio-file-management.server");
+    const buffer = Buffer.from("test-audio-data");
     const hash = await calculateAudioHash(buffer);
 
-    // SHA-256 hash should be 64 characters (hex)
-    expect(hash).toHaveLength(64);
-    expect(hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(hash).toBe("b5a2c96250612366ea272ffac6d9744aaf4b45aacd96aa7cfcb931ee3b558259");
   });
 
-  it("should return same hash for identical content", async () => {
-    const buffer1 = Buffer.from("test audio content");
-    const buffer2 = Buffer.from("test audio content");
-
-    const hash1 = await calculateAudioHash(buffer1);
-    const hash2 = await calculateAudioHash(buffer2);
-
-    expect(hash1).toBe(hash2);
-  });
-
-  it("should return different hash for different content", async () => {
-    const buffer1 = Buffer.from("test audio content 1");
-    const buffer2 = Buffer.from("test audio content 2");
+  it("produces different hashes for different buffers", async () => {
+    const { calculateAudioHash } = await import("./audio-file-management.server");
+    const buffer1 = Buffer.from("audio-data-1");
+    const buffer2 = Buffer.from("audio-data-2");
 
     const hash1 = await calculateAudioHash(buffer1);
     const hash2 = await calculateAudioHash(buffer2);
@@ -32,21 +34,179 @@ describe("calculateAudioHash", () => {
     expect(hash1).not.toBe(hash2);
   });
 
-  it("should handle empty buffer", async () => {
-    const buffer = Buffer.from("");
-    const hash = await calculateAudioHash(buffer);
+  it("produces same hash for identical buffers", async () => {
+    const { calculateAudioHash } = await import("./audio-file-management.server");
+    const buffer1 = Buffer.from("same-audio-data");
+    const buffer2 = Buffer.from("same-audio-data");
 
-    // Should still return valid SHA-256 hash
-    expect(hash).toHaveLength(64);
-    expect(hash).toMatch(/^[a-f0-9]{64}$/);
+    const hash1 = await calculateAudioHash(buffer1);
+    const hash2 = await calculateAudioHash(buffer2);
+
+    expect(hash1).toBe(hash2);
+  });
+});
+
+describe("generateAudioFingerprint", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockWriteFile.mockResolvedValue(undefined);
+    mockUnlink.mockResolvedValue(undefined);
   });
 
-  it("should handle large buffers", async () => {
-    // Simulate a 10MB file
-    const largeBuffer = Buffer.alloc(10 * 1024 * 1024, "a");
-    const hash = await calculateAudioHash(largeBuffer);
+  it("generates fingerprint for audio buffer", async () => {
+    mockFpcalc.mockResolvedValue({
+      fingerprint: "AQADtNE123test-fingerprint",
+      duration: 180,
+    });
 
-    expect(hash).toHaveLength(64);
-    expect(hash).toMatch(/^[a-f0-9]{64}$/);
+    const { generateAudioFingerprint } = await import("./audio-file-management.server");
+    const buffer = Buffer.from("test-audio-data");
+    const fingerprint = await generateAudioFingerprint(buffer);
+
+    expect(fingerprint).toBe("AQADtNE123test-fingerprint");
+    expect(mockWriteFile).toHaveBeenCalledWith(expect.stringContaining("audio-"), buffer);
+    expect(mockFpcalc).toHaveBeenCalledWith(expect.stringContaining("audio-"));
+  });
+
+  it("cleans up temporary file after successful fingerprint generation", async () => {
+    mockFpcalc.mockResolvedValue({
+      fingerprint: "AQADtestfp",
+      duration: 180,
+    });
+
+    const { generateAudioFingerprint } = await import("./audio-file-management.server");
+    const buffer = Buffer.from("test-audio-data");
+    await generateAudioFingerprint(buffer);
+
+    expect(mockUnlink).toHaveBeenCalledWith(expect.stringContaining("audio-"));
+  });
+
+  it("returns null when fpcalc returns no fingerprint", async () => {
+    const { consoleWarn } = await import("#tests/setup/setup-test-env.ts");
+    consoleWarn.mockImplementation(() => {});
+
+    mockFpcalc.mockResolvedValue({
+      duration: 180,
+      // No fingerprint field
+    });
+
+    const { generateAudioFingerprint } = await import("./audio-file-management.server");
+    const buffer = Buffer.from("test-audio-data");
+    const result = await generateAudioFingerprint(buffer);
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null when fpcalc throws error", async () => {
+    const { consoleError } = await import("#tests/setup/setup-test-env.ts");
+    consoleError.mockImplementation(() => {});
+
+    mockFpcalc.mockRejectedValue(new Error("fpcalc failed"));
+
+    const { generateAudioFingerprint } = await import("./audio-file-management.server");
+    const buffer = Buffer.from("test-audio-data");
+    const result = await generateAudioFingerprint(buffer);
+
+    expect(result).toBeNull();
+  });
+
+  it("cleans up temporary file even when fpcalc fails", async () => {
+    const { consoleError } = await import("#tests/setup/setup-test-env.ts");
+    consoleError.mockImplementation(() => {});
+
+    mockFpcalc.mockRejectedValue(new Error("fpcalc failed"));
+
+    const { generateAudioFingerprint } = await import("./audio-file-management.server");
+    const buffer = Buffer.from("test-audio-data");
+    await generateAudioFingerprint(buffer);
+
+    expect(mockUnlink).toHaveBeenCalledWith(expect.stringContaining("audio-"));
+  });
+
+  it("handles cleanup errors gracefully", async () => {
+    mockFpcalc.mockResolvedValue({
+      fingerprint: "AQADtestfp",
+      duration: 180,
+    });
+    mockUnlink.mockRejectedValue(new Error("cleanup failed"));
+
+    const { generateAudioFingerprint } = await import("./audio-file-management.server");
+    const buffer = Buffer.from("test-audio-data");
+    const result = await generateAudioFingerprint(buffer);
+
+    // Should still return the fingerprint despite cleanup error
+    expect(result).toBe("AQADtestfp");
+  });
+});
+
+describe("calculateFingerprintSimilarity", () => {
+  it("returns 1 for identical fingerprints", () => {
+    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+    const fp = "AQADtNE123test";
+
+    expect(calculateFingerprintSimilarity(fp, fp)).toBe(1);
+  });
+
+  it("returns 0 for empty fingerprints", () => {
+    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+
+    expect(calculateFingerprintSimilarity("", "")).toBe(0);
+    expect(calculateFingerprintSimilarity("test", "")).toBe(0);
+    expect(calculateFingerprintSimilarity("", "test")).toBe(0);
+  });
+
+  it("calculates similarity based on character matches", () => {
+    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+
+    // 50% similarity (5 out of 10 characters match)
+    const fp1 = "AQADtNE123";
+    const fp2 = "AQADxxxxxZ";
+
+    const similarity = calculateFingerprintSimilarity(fp1, fp2);
+    expect(similarity).toBeGreaterThan(0);
+    expect(similarity).toBeLessThan(1);
+  });
+
+  it("handles fingerprints of different lengths", () => {
+    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+
+    const fp1 = "AQAD123";
+    const fp2 = "AQAD123456789";
+
+    const similarity = calculateFingerprintSimilarity(fp1, fp2);
+    expect(similarity).toBeGreaterThan(0);
+    expect(similarity).toBeLessThan(1);
+  });
+
+  it("normalizes by longer fingerprint length", () => {
+    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+
+    const fp1 = "AQAD"; // 4 chars
+    const fp2 = "AQAD123456"; // 10 chars
+
+    // All 4 chars of fp1 match, but normalized by 10
+    const similarity = calculateFingerprintSimilarity(fp1, fp2);
+    expect(similarity).toBe(4 / 10);
+  });
+
+  it("returns 0 for completely different fingerprints", () => {
+    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+
+    const fp1 = "AAAA";
+    const fp2 = "BBBB";
+
+    expect(calculateFingerprintSimilarity(fp1, fp2)).toBe(0);
+  });
+
+  it("is order-independent", () => {
+    const { calculateFingerprintSimilarity } = require("./audio-file-management.server");
+
+    const fp1 = "AQAD123";
+    const fp2 = "AQAD456";
+
+    const sim1 = calculateFingerprintSimilarity(fp1, fp2);
+    const sim2 = calculateFingerprintSimilarity(fp2, fp1);
+
+    expect(sim1).toBe(sim2);
   });
 });
