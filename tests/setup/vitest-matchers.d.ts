@@ -23,7 +23,7 @@ interface CustomMatchers<R = unknown> {
   toContainHTML(html: string): R;
   toHaveAccessibleDescription(description?: string | RegExp): R;
   toHaveAccessibleName(name?: string | RegExp): R;
-  toHaveAttribute(attr: string, value?: string | RegExp): R;
+  toHaveAttribute(attr: string, value?: string | RegExp | null): R;
   toHaveClass(...classNames: string[]): R;
   toHaveDisplayValue(value: string | RegExp | Array<string | RegExp>): R;
   toHaveFocus(): R;
