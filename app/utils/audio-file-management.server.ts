@@ -22,7 +22,7 @@ export async function calculateAudioHash(buffer: Buffer): Promise<string> {
  * @returns Chromaprint fingerprint string, or null if generation fails
  */
 export async function generateAudioFingerprint(buffer: Buffer): Promise<string | null> {
-  let tempPath: string | null = null;
+  let tempPath: string | undefined;
 
   try {
     // Create a temporary file for fpcalc to process
@@ -34,7 +34,7 @@ export async function generateAudioFingerprint(buffer: Buffer): Promise<string |
     // Generate fingerprint using fpcalc (callback-based API)
     const result = await new Promise<{ fingerprint: string; duration: number } | null>(
       (resolve, reject) => {
-        fpcalc(tempPath, {}, (err: Error | null, result: any) => {
+        fpcalc(tempPath!, {}, (err: Error | null, result: any) => {
           if (err) {
             reject(err);
           } else {
