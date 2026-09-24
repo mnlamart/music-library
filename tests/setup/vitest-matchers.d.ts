@@ -1,5 +1,11 @@
 // Type declarations for vitest 5 + custom matchers
 // This file overrides @testing-library/jest-dom's vitest types which use old signature
+//
+// TODO: Remove this file once @testing-library/jest-dom releases Vitest 5 support
+// Current version (7.0.1) was released before Vitest 5 and uses the old Assertion<T> signature.
+// Vitest 5 requires Assertion<R, T> with 2 type parameters.
+// Check weekly: npm view @testing-library/jest-dom version
+// Once updated, revert to: import '@testing-library/jest-dom/vitest'
 
 import "vitest";
 
