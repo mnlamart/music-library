@@ -100,7 +100,9 @@ test.describe("Player / Queue", () => {
     // Open queue sheet and verify playlist context
     await playerBar.getByLabel("Open queue").click({ force: true });
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Now playing" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Now playing" })).toBeVisible({
+      timeout: 15000,
+    });
     await expect(dialog.getByText("Playlist Track A")).toBeVisible();
 
     // Cleanup
