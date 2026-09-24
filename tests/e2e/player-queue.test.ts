@@ -98,25 +98,9 @@ test.describe("Player / Queue", () => {
     await dismissOverlays(page);
 
     // Open queue sheet and verify playlist context
-    // Wait longer for any animations/overlays to fully settle
-    await page.waitForTimeout(3000);
-
-    // Check if there's any blocking overlay by trying to click the body first
-    await page
-      .locator("body")
-      .click({ position: { x: 10, y: 10 }, force: true })
-      .catch(() => {});
-    await page.waitForTimeout(500);
-
-    const queueButton = playerBar.getByLabel("Open queue");
-    // Ensure the button is fully ready for interaction
-    await queueButton.waitFor({ state: "visible", timeout: 10000 });
-    // Use force click since normal clicks are being intercepted
-    await queueButton.click({ force: true });
+    await playerBar.getByLabel("Open queue").click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Now playing" })).toBeVisible({
-      timeout: 15000,
-    });
+    await expect(dialog.getByRole("heading", { name: "Now playing" })).toBeVisible();
     await expect(dialog.getByText("Playlist Track A")).toBeVisible();
 
     // Cleanup
@@ -542,7 +526,7 @@ test.describe("Player / Queue", () => {
     const playButton = playerBar.getByLabel("Play", { exact: true });
     if (await playButton.isVisible().catch(() => false)) {
       await playButton.click({ force: true });
-      await expect(playerBar.getByLabel("Pause")).toBeVisible({ timeout: 15000 });
+      await expect(playerBar.getByLabel("Pause")).toBeVisible({ timeout: 5000 });
     }
 
     // Pause via button click

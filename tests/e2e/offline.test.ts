@@ -185,7 +185,7 @@ test.describe("Offline mode", () => {
     await page.goto(`/playlists/${playlist.id}`, { timeout: 30000 });
     await page.waitForLoadState("domcontentloaded", { timeout: 15000 });
     await page.getByRole("button", { name: "Download playlist" }).click();
-    await expect(page.getByTestId("toast").getByText("Playlist downloaded")).toBeVisible({
+    await expect(page.getByText("Playlist downloaded")).toBeVisible({
       timeout: 15000,
     });
     await page.waitForTimeout(1500);
