@@ -111,7 +111,63 @@ npx prisma migrate reset --force
 
 ⚠️ **Warning:** `migrate reset` will **delete all data** in your database. Only use this in development environments.
 
-### 2. Run the Tests
+### 2. Backfill Existing Audio Files
+
+After applying the migration, hash all existing audio files:
+
+```bash
+# Preview what will be changed (safe)
+npx tsx prisma/backfill-audio-hashes.ts --dry-run
+
+# Actually update the database
+npx tsx prisma/backfill-audio-hashes.ts
+```
+
+This script:
+
+- Finds all `TrackAudioFile` records with `contentHash: null`
+- Downloads files from S3 or reads from local storage
+- Calculates SHA-256 hash for each file
+- Updates database records
+- Reports any duplicates discovered
+
+**Expected output:**
+
+```
+🔍 Finding TrackAudioFile records without contentHash...
+
+Found 25 audio files to hash
+
+[1/25] Processing: song1.mp3
+  🌐 Downloading from S3: audio/tracks/local/abc123.mp3
+  ✓ Downloaded from S3 (5.23 MB)
+  📊 Hash: 4a5d7c8b9e2f1a3b...
+  ✅ Updated in database
+
+...
+
+═══════════════════════════════════════════════════
+📊 Summary:
+   ✅ Successfully hashed: 25
+   ⏭️  Skipped: 0
+   ❌ Errors: 0
+   📝 Total processed: 25
+═══════════════════════════════════════════════════
+
+🔍 Checking for newly discovered duplicates...
+
+⚠️  Found 2 duplicate audio hashes:
+
+  Hash: 4a5d7c8b9e2f1a3b... (3 files)
+    1. "Song Title" by Artist (song1.mp3)
+    2. "Song Title (Copy)" by Artist (song1-copy.mp3)
+    3. "Song Title (Another)" by Artist (song1-another.mp3)
+
+💡 Consider consolidating these duplicates to save storage.
+   See docs/audio-deduplication.md for cleanup strategies.
+```
+
+### 3. Run the Tests
 
 After applying the migration:
 
@@ -151,6 +207,42 @@ HAVING COUNT(*) > 1;
 ```
 
 ## Architecture Decisions
+
+### Important: Existing Uploads
+
+**⚠️ Critical:** Audio files uploaded BEFORE this feature won't have a `contentHash`. This means:
+
+1. They won't be detected as duplicates
+2. Re-uploading the same file will create new S3 objects
+3. You'll waste storage on duplicates
+
+**Solution:** Run the backfill script (step 2 above) to hash all existing files.
+
+**Example Problem:**
+
+```
+Day 1 (before deduplication feature):
+- User uploads "song.mp3" → contentHash: null
+
+Day 2 (after deploying this feature):
+- User uploads same "song.mp3" again
+- System calculates hash: "abc123..."
+- Looks for existing: SELECT * WHERE contentHash = "abc123..."
+- Finds nothing! (old record has null)
+- Creates new S3 object → DUPLICATE! ❌
+```
+
+**After Backfill:**
+
+```
+Run backfill script:
+- Updates old record: contentHash: "abc123..."
+
+User uploads same "song.mp3" again:
+- System calculates hash: "abc123..."
+- Finds existing match! ✅
+- Reuses S3 object → No duplicate!
+```
 
 ### Why Allow Multiple Tracks with Same Audio?
 
@@ -233,12 +325,14 @@ Modified:
 - app/features/track-audio-ingest/persist-track-audio.server.ts
 - app/routes/api+/upload-audio-batch.tsx
 - app/routes/api+/upload-audio.tsx
+- app/utils/storage.server.ts (added downloadFile function)
 - prisma/seed.ts
 
 Added:
 - app/utils/audio-file-management.server.ts
 - app/utils/audio-file-management.server.test.ts
 - prisma/migrations/20260924102309_add_content_hash_to_track_audio_file/migration.sql
+- prisma/backfill-audio-hashes.ts (for existing uploads)
 - docs/audio-deduplication.md (this file)
 
 Updated Tests:
