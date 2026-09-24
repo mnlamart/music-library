@@ -117,6 +117,11 @@ test.describe("Bottom Navigation", () => {
     await expect(menu.getByRole("menuitem", { name: /my playlists/i })).not.toBeVisible();
     await expect(menu.getByRole("menuitem", { name: /history/i })).not.toBeVisible();
 
+    // Close the menu first — Radix sets aria-hidden on the rest of the page while open,
+    // which hides bottom-nav links from getByRole.
+    await page.keyboard.press("Escape");
+    await expect(menu).not.toBeVisible();
+
     const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
     await expect(bottomNav.getByRole("link", { name: /my library/i })).toBeVisible();
     await expect(bottomNav.getByRole("link", { name: /my playlists/i })).toBeVisible();
