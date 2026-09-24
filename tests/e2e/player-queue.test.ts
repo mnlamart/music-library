@@ -98,7 +98,14 @@ test.describe("Player / Queue", () => {
     await dismissOverlays(page);
 
     // Open queue sheet and verify playlist context
-    await playerBar.getByLabel("Open queue").click({ force: true });
+    // Wait a moment for any animations/overlays to fully dismiss
+    await page.waitForTimeout(1000);
+    const queueButton = playerBar.getByLabel("Open queue");
+    // Ensure the button is fully ready for interaction
+    await queueButton.waitFor({ state: "visible", timeout: 10000 });
+    await queueButton.waitFor({ state: "attached", timeout: 5000 });
+    // Try normal click first (force: true can bypass event handlers)
+    await queueButton.click({ timeout: 10000 });
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "Now playing" })).toBeVisible({
       timeout: 15000,
