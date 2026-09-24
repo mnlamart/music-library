@@ -4,6 +4,16 @@ declare module "fpcalc" {
     duration: number;
   }
 
-  function fpcalc(filePath: string): Promise<FpcalcResult>;
+  interface FpcalcOptions {
+    length?: number;
+    raw?: boolean;
+  }
+
+  function fpcalc(
+    filePath: string,
+    options: FpcalcOptions,
+    callback: (err: Error | null, result: FpcalcResult) => void,
+  ): void;
+
   export default fpcalc;
 }

@@ -31,8 +31,18 @@ export async function generateAudioFingerprint(buffer: Buffer): Promise<string |
 
     await writeFile(tempPath, buffer);
 
-    // Generate fingerprint using fpcalc
-    const result = await fpcalc(tempPath);
+    // Generate fingerprint using fpcalc (callback-based API)
+    const result = await new Promise<{ fingerprint: string; duration: number } | null>(
+      (resolve, reject) => {
+        fpcalc(tempPath, {}, (err: Error | null, result: any) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+      },
+    );
 
     if (!result || !result.fingerprint) {
       console.warn("fpcalc returned no fingerprint");
