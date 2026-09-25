@@ -297,6 +297,20 @@ Later uploads: song_remastered.mp3 (2020 remaster)
 - For large libraries (>10,000 tracks), consider optimizing comparison logic
 - Failed fingerprint generation (e.g., corrupted audio) doesn't block upload
 
+## Monitoring fingerprint / decode failures
+
+After backfill (`prisma/backfill-audio-hashes.ts`) or ingest, each `TrackAudioFile` falls into one of:
+
+| Signal             | `contentHash` | `audioFingerprint` | Meaning                                                                                                             |
+| ------------------ | ------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| Healthy            | set           | set                | Hash + Chromaprint OK                                                                                               |
+| Fingerprint failed | set           | `null`             | SHA-256 OK; `fpcalc` failed (often corrupt/truncated MP3, e.g. YouTube downloads with `Error decoding audio frame`) |
+| Unprocessed        | `null`        | `null`             | Not yet hashed / fingerprinted                                                                                      |
+
+There is no separate error column — ops monitor the hash-set / fingerprint-null combination.
+
+**Admin UI:** `/music/admin/fingerprint-failures` (admin role). Summary stats plus a paginated, filterable list (format, service, file-size bucket). API: `/api/admin/fingerprint-failures`. Related: `/music/admin/duplicates`.
+
 ## Architecture Decisions
 
 ### Important: Existing Uploads
@@ -441,7 +455,8 @@ Possible next steps:
    - "Upload anyway" option with explicit choice
 
 2. **Admin Dashboard**
-   - Page showing all duplicate audio files
+   - Page showing all duplicate audio files (`/music/admin/duplicates`)
+   - Fingerprint / decode failure monitor (`/music/admin/fingerprint-failures`)
    - One-click to merge/delete duplicates
    - Storage savings report
 

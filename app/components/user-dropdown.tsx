@@ -108,6 +108,24 @@ export function UserDropdown() {
           )}
           {isAdmin && (
             <DropdownMenuItem asChild>
+              <Link prefetch="intent" to="/music/admin/fingerprint-failures">
+                <Icon className="text-body-md" name="magnifying-glass">
+                  Fingerprint Failures
+                </Icon>
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {isAdmin && (
+            <DropdownMenuItem asChild>
+              <Link prefetch="intent" to="/music/admin/duplicates">
+                <Icon className="text-body-md" name="file-text">
+                  Duplicate Audio
+                </Icon>
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {isAdmin && (
+            <DropdownMenuItem asChild>
               <Link prefetch="intent" to="/admin/youtube-cookies">
                 <Icon className="text-body-md" name="file-text">
                   YouTube Cookies
