@@ -75,6 +75,7 @@ import {
 import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
 import { AudioPlayer } from "./audio-player";
 import { InstallAppBanner } from "./pwa/install-app-banner";
+import { toast } from "./ui/use-toast";
 
 type Track = FullTrack;
 
@@ -640,16 +641,44 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     [beginPlayback, buildShuffledOrder, hydrateAround, loadSpineForContext, rememberTrack],
   );
 
-  const playResolvedTrack = useCallback(
-    async (queueTrack: QueueTrack) => {
-      await hydrateAround(queueTrack.id);
+  const resolvePlayableTrack = useCallback(
+    async (queueTrack: QueueTrack): Promise<FullTrack | null> => {
+      try {
+        await hydrateAround(queueTrack.id);
+      } catch {
+        toast({
+          title: "Playback failed",
+          description: "Could not load the next track. Check your connection and try again.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
       const fullTrack = resolveFullTrack(playbackCacheRef.current, queueTrack);
-      if (!isPlayableTrack(fullTrack)) return;
+      if (!isPlayableTrack(fullTrack)) {
+        toast({
+          title: "Playback failed",
+          description: "This track is unavailable. Try another track.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      return fullTrack;
+    },
+    [hydrateAround],
+  );
+
+  const playResolvedTrack = useCallback(
+    async (queueTrack: QueueTrack): Promise<boolean> => {
+      const fullTrack = await resolvePlayableTrack(queueTrack);
+      if (!fullTrack) return false;
 
       beginPlayback();
       setCurrentTrack(fullTrack);
+      return true;
     },
-    [beginPlayback, hydrateAround],
+    [beginPlayback, resolvePlayableTrack],
   );
 
   const playTrack = useCallback(
@@ -1032,19 +1061,27 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       const queueTrack = getTrackAtTarget(navigationState, target);
       if (!queueTrack) return;
 
-      const nextState = advanceAfterPlay(navigationState, target);
-      setUpNext(nextState.upNext);
-      if (target.zone === "upNext" && target.index < upNextPlayNextCount) {
-        setUpNextPlayNextCount((count) => {
-          const next = Math.max(0, count - 1);
-          upNextPlayNextCountRef.current = next;
-          return next;
-        });
-      }
-      setSpinePosition(nextState.spinePosition);
-      void playResolvedTrack(queueTrack);
+      // Resolve before committing the pointer so a hydration failure cannot
+      // leave the queue stuck with hasNext=false and no current playback.
+      void (async () => {
+        const fullTrack = await resolvePlayableTrack(queueTrack);
+        if (!fullTrack) return;
+
+        const nextState = advanceAfterPlay(navigationState, target);
+        setUpNext(nextState.upNext);
+        if (target.zone === "upNext" && target.index < upNextPlayNextCount) {
+          setUpNextPlayNextCount((count) => {
+            const next = Math.max(0, count - 1);
+            upNextPlayNextCountRef.current = next;
+            return next;
+          });
+        }
+        setSpinePosition(nextState.spinePosition);
+        beginPlayback();
+        setCurrentTrack(fullTrack);
+      })();
     },
-    [navigationState, playResolvedTrack, upNextPlayNextCount],
+    [beginPlayback, navigationState, resolvePlayableTrack, upNextPlayNextCount],
   );
 
   const playNext = useCallback(() => {
@@ -1068,27 +1105,39 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
       noteUserQueueMutation();
 
-      const nextState = jumpToTarget(navigationState, target);
-      setUpNext(nextState.upNext);
+      void (async () => {
+        const fullTrack = await resolvePlayableTrack(queueTrack);
+        if (!fullTrack) return;
 
-      if (target.zone === "upNext") {
-        // Discarding 0..target.index drops the clicked track and everything before
-        // it. Play-next items sit at the front of Up Next, so decrement the count
-        // by however many of them fall inside the discarded range.
-        const playNextDiscarded = Math.min(target.index + 1, upNextPlayNextCount);
-        if (playNextDiscarded > 0) {
-          setUpNextPlayNextCount((count) => {
-            const next = Math.max(0, count - playNextDiscarded);
-            upNextPlayNextCountRef.current = next;
-            return next;
-          });
+        const nextState = jumpToTarget(navigationState, target);
+        setUpNext(nextState.upNext);
+
+        if (target.zone === "upNext") {
+          // Discarding 0..target.index drops the clicked track and everything before
+          // it. Play-next items sit at the front of Up Next, so decrement the count
+          // by however many of them fall inside the discarded range.
+          const playNextDiscarded = Math.min(target.index + 1, upNextPlayNextCount);
+          if (playNextDiscarded > 0) {
+            setUpNextPlayNextCount((count) => {
+              const next = Math.max(0, count - playNextDiscarded);
+              upNextPlayNextCountRef.current = next;
+              return next;
+            });
+          }
         }
-      }
 
-      setSpinePosition(nextState.spinePosition);
-      void playResolvedTrack(queueTrack);
+        setSpinePosition(nextState.spinePosition);
+        beginPlayback();
+        setCurrentTrack(fullTrack);
+      })();
     },
-    [navigationState, noteUserQueueMutation, playResolvedTrack, upNextPlayNextCount],
+    [
+      beginPlayback,
+      navigationState,
+      noteUserQueueMutation,
+      resolvePlayableTrack,
+      upNextPlayNextCount,
+    ],
   );
 
   const startQueuePlayback = useCallback(() => {
@@ -1190,7 +1239,12 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     const storage = getOfflineStorage();
 
     void (async () => {
-      await hydrateAround(currentTrackId);
+      try {
+        await hydrateAround(currentTrackId);
+      } catch (error) {
+        console.warn("Queue auto-cache hydration failed:", error);
+        return;
+      }
       const ids = collectHydrationIds(navigationState, currentTrackId);
 
       for (const id of ids) {

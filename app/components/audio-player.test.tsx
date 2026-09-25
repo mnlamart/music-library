@@ -59,6 +59,8 @@ vi.mock("#app/features/offline-storage/resolve-playback-url.client.ts", () => ({
   resolvePlaybackAudioUrl: vi.fn().mockResolvedValue(null),
   revokePlaybackAudioUrl: vi.fn(),
   clearBlobUrlCache: vi.fn(),
+  invalidateRemotePlaybackUrl: vi.fn(),
+  peekCachedPlaybackUrl: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("#app/features/offline-storage/cover-cache.client.ts", () => ({
@@ -316,6 +318,11 @@ test("shows playback error with user-friendly message for MEDIA_ERR_DECODE (code
 
 test("shows playback error with user-friendly message for MEDIA_ERR_SRC_NOT_SUPPORTED (code 4)", async () => {
   const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { resolveTrackPlaybackSource, resolvePlaybackAudioUrl } =
+    await import("#app/features/offline-storage/resolve-playback-url.client.ts");
+  // Same URL after invalidate → recovery skips; no offline blob → show error.
+  vi.mocked(resolveTrackPlaybackSource).mockResolvedValue("https://cdn.example/track-1.mp3");
+  vi.mocked(resolvePlaybackAudioUrl).mockResolvedValue(null);
 
   const { audioEl } = await renderPlayer();
 
@@ -331,6 +338,53 @@ test("shows playback error with user-friendly message for MEDIA_ERR_SRC_NOT_SUPP
       "The audio source could not be found or is not supported.",
     );
   });
+
+  consoleSpy.mockRestore();
+});
+
+test("recovers from MEDIA_ERR_SRC_NOT_SUPPORTED by re-resolving a fresh remote URL", async () => {
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { resolveTrackPlaybackSource, invalidateRemotePlaybackUrl } =
+    await import("#app/features/offline-storage/resolve-playback-url.client.ts");
+
+  vi.mocked(resolveTrackPlaybackSource)
+    .mockResolvedValueOnce("https://cdn.example/track-1.mp3")
+    .mockResolvedValueOnce("https://cdn.example/track-1-fresh.mp3");
+
+  const playSpy = vi
+    .spyOn(window.HTMLMediaElement.prototype, "play")
+    .mockImplementation(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, "paused", { configurable: true, value: false });
+      return Promise.resolve();
+    });
+
+  const { audioEl } = await renderPlayer();
+
+  await waitFor(() => {
+    expect(audioEl).toHaveAttribute("src", "https://cdn.example/track-1.mp3");
+  });
+
+  audioEl.dispatchEvent(new Event("play"));
+  Object.defineProperty(audioEl, "paused", { configurable: true, value: true });
+  Object.defineProperty(audioEl, "currentTime", {
+    configurable: true,
+    value: 12,
+    writable: true,
+  });
+  Object.defineProperty(audioEl, "error", {
+    configurable: true,
+    value: { code: 4, message: "The media resource is not supported" },
+  });
+
+  playSpy.mockClear();
+  audioEl.dispatchEvent(new Event("error"));
+
+  await waitFor(() => {
+    expect(invalidateRemotePlaybackUrl).toHaveBeenCalledWith("track-1");
+    expect(audioEl).toHaveAttribute("src", "https://cdn.example/track-1-fresh.mp3");
+    expect(playSpy).toHaveBeenCalled();
+  });
+  expect(screen.queryByTestId("player-playback-error")).not.toBeInTheDocument();
 
   consoleSpy.mockRestore();
 });
@@ -381,6 +435,49 @@ test("calls onNext when audio ends and loopMode is off", async () => {
   audioEl.dispatchEvent(new Event("ended"));
 
   expect(onNext).toHaveBeenCalledOnce();
+});
+
+test("keeps isPlaying through pause-before-ended during auto-advance", async () => {
+  const onNext = vi.fn();
+  const { audioEl } = await renderPlayer({ onNext, loopMode: "off", hasNext: true });
+
+  // Playing state arms keepPlayingRef (same as a real play() success).
+  audioEl.dispatchEvent(new Event("play"));
+  await waitFor(() => {
+    expect(within(screen.getByTestId("player-desktop-bar")).getByLabelText("Pause")).toBeTruthy();
+  });
+
+  // HTML fires pause immediately before ended at natural completion.
+  audioEl.dispatchEvent(new Event("pause"));
+  audioEl.dispatchEvent(new Event("ended"));
+
+  expect(onNext).toHaveBeenCalledOnce();
+  // Flush React updates from the pause handler, then confirm continuity.
+  await waitFor(() => {
+    expect(onNext).toHaveBeenCalledOnce();
+  });
+  expect(within(screen.getByTestId("player-desktop-bar")).queryByLabelText("Play")).toBeNull();
+  expect(within(screen.getByTestId("player-desktop-bar")).getByLabelText("Pause")).toBeTruthy();
+});
+
+test("user pause still clears isPlaying when keepPlaying was armed", async () => {
+  const user = userEvent.setup();
+  const { audioEl } = await renderPlayer({ loopMode: "off", hasNext: true });
+
+  audioEl.dispatchEvent(new Event("play"));
+  Object.defineProperty(audioEl, "paused", { configurable: true, value: false });
+  await waitFor(() => {
+    expect(within(screen.getByTestId("player-desktop-bar")).getByLabelText("Pause")).toBeTruthy();
+  });
+
+  // togglePlayPause clears keepPlayingRef before calling pause().
+  await user.click(within(screen.getByTestId("player-desktop-bar")).getByLabelText("Pause"));
+  // jsdom's pause() does not reliably emit the pause event.
+  audioEl.dispatchEvent(new Event("pause"));
+
+  await waitFor(() => {
+    expect(within(screen.getByTestId("player-desktop-bar")).getByLabelText("Play")).toBeTruthy();
+  });
 });
 
 test("does NOT call onNext when audio ends and loopMode is one", async () => {
@@ -503,36 +600,101 @@ test("auto-plays after track change once the new audio URL has loaded", async ()
   });
 });
 
-test("unlocks the audio element on the first pointer gesture", async () => {
-  const loadSpy = vi.spyOn(window.HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+test("applies a prefetched URL synchronously on track change without blanking src", async () => {
+  const { peekCachedPlaybackUrl, resolveTrackPlaybackSource } =
+    await import("#app/features/offline-storage/resolve-playback-url.client.ts");
+
+  vi.mocked(peekCachedPlaybackUrl).mockImplementation((id: string) =>
+    id === "track-2" ? "https://cdn.example/track-2-prefetched.mp3" : null,
+  );
+  vi.mocked(resolveTrackPlaybackSource).mockImplementation(async (id: string) =>
+    id === "track-2"
+      ? "https://cdn.example/track-2-prefetched.mp3"
+      : "https://cdn.example/track-1.mp3",
+  );
+
+  const { audioEl, rerender } = await renderPlayer({
+    playbackToken: 1,
+    wantsAutoPlayRef: { current: true },
+  });
+
+  await waitFor(() => {
+    expect(audioEl).toHaveAttribute("src", "https://cdn.example/track-1.mp3");
+  });
+
+  vi.mocked(resolveTrackPlaybackSource).mockClear();
+
+  rerender(
+    <AudioPlayer
+      {...defaultProps}
+      track={mockTrack2}
+      playbackToken={2}
+      wantsAutoPlayRef={{ current: true }}
+    />,
+  );
+
+  // Prefetched handoff must not wait on async resolve (no blank → gap → play).
+  expect(audioEl).toHaveAttribute("src", "https://cdn.example/track-2-prefetched.mp3");
+  expect(resolveTrackPlaybackSource).not.toHaveBeenCalled();
+});
+
+test("unlock tolerates jsdom play() returning undefined", async () => {
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(() => {
+    return undefined as unknown as Promise<void>;
+  });
 
   await renderPlayer();
+  playSpy.mockClear();
+
+  expect(() => window.dispatchEvent(new Event("pointerdown"))).not.toThrow();
+  expect(playSpy).toHaveBeenCalledOnce();
+});
+
+test("unlocks the audio element on the first pointer gesture", async () => {
+  const playSpy = vi
+    .spyOn(window.HTMLMediaElement.prototype, "play")
+    .mockImplementation(function (this: HTMLMediaElement) {
+      return Promise.resolve();
+    });
+
+  await renderPlayer();
+  playSpy.mockClear();
 
   window.dispatchEvent(new Event("pointerdown"));
 
-  expect(loadSpy).toHaveBeenCalledOnce();
+  expect(playSpy).toHaveBeenCalledOnce();
 });
 
 test("unlocks the audio element on the first keydown", async () => {
-  const loadSpy = vi.spyOn(window.HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  const playSpy = vi
+    .spyOn(window.HTMLMediaElement.prototype, "play")
+    .mockImplementation(function (this: HTMLMediaElement) {
+      return Promise.resolve();
+    });
 
   await renderPlayer();
+  playSpy.mockClear();
 
   window.dispatchEvent(new Event("keydown"));
 
-  expect(loadSpy).toHaveBeenCalledOnce();
+  expect(playSpy).toHaveBeenCalledOnce();
 });
 
 test("unlock is one-shot — later gestures of either type do not reload", async () => {
-  const loadSpy = vi.spyOn(window.HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  const playSpy = vi
+    .spyOn(window.HTMLMediaElement.prototype, "play")
+    .mockImplementation(function (this: HTMLMediaElement) {
+      return Promise.resolve();
+    });
 
   await renderPlayer();
+  playSpy.mockClear();
 
   window.dispatchEvent(new Event("pointerdown"));
   window.dispatchEvent(new Event("pointerdown"));
   window.dispatchEvent(new Event("keydown"));
 
-  expect(loadSpy).toHaveBeenCalledOnce();
+  expect(playSpy).toHaveBeenCalledOnce();
 });
 
 test("keeps the audio element mounted when hidden or trackless", async () => {

@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { type ComponentProps, StrictMode, type ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { consoleError } from "#tests/setup/setup-test-env.ts";
+import { toast } from "#app/components/ui/use-toast.ts";
 import { type FullTrack } from "#app/types/frontend/shared";
 import { AudioPlayerProvider, useAudioPlayer } from "./audio-player-provider";
 import { TrackListItem } from "./track-list-item";
@@ -31,6 +32,8 @@ vi.mock("#app/features/offline-storage/resolve-playback-url.client.ts", () => ({
   prefetchPlaybackAudioUrl: vi.fn(),
   revokePlaybackAudioUrl: vi.fn(),
   clearBlobUrlCache: vi.fn(),
+  peekCachedPlaybackUrl: vi.fn().mockReturnValue(null),
+  invalidateRemotePlaybackUrl: vi.fn(),
 }));
 
 vi.mock("#app/features/offline-storage/offline-storage.client.ts", () => ({
@@ -213,12 +216,14 @@ function buildPlayableTracks(count: number, titlePrefix: string): FullTrack[] {
 }
 
 function QueueStateProbe() {
-  const { upNext, spine } = useAudioPlayer();
+  const { upNext, spine, currentTrack, hasNext } = useAudioPlayer();
   return (
     <div
       data-testid="queue-state-probe"
       data-up-next-ids={upNext.map((track) => track.id).join(",")}
       data-spine-ids={spine.map((track) => track.id).join(",")}
+      data-current-track-id={currentTrack?.id ?? ""}
+      data-has-next={String(hasNext)}
     />
   );
 }
@@ -672,6 +677,110 @@ describe("queue sheet integration", () => {
         within(screen.getByTestId("player-desktop-bar")).getByText("Inject-Delta-99"),
       ).toBeTruthy();
     });
+  });
+
+  test("failed next-track hydration keeps hasNext and surfaces an error toast", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.mocked(fetch);
+    let playbackCalls = 0;
+    const twoTrackSpine = spineTracks.slice(0, 2);
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/queue-spine")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ tracks: twoTrackSpine, total: twoTrackSpine.length }),
+        } as Response);
+      }
+      if (url.includes("/api/tracks/playback")) {
+        playbackCalls += 1;
+        // Initial hydrate: return only the current track so lookahead stubs stay unplayable.
+        if (playbackCalls === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ tracks: [trackA] }),
+          } as Response);
+        }
+        // Advance hydrate: network failure (flaky mobile connection).
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          statusText: "Service Unavailable",
+        } as Response);
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderQueueApp(<WarmPlaybackControls />);
+    await startWarmLibraryPlayback(user);
+
+    await waitFor(() => {
+      expect(queueProbe().getAttribute("data-current-track-id")).toBe("track-a");
+      expect(queueProbe().getAttribute("data-has-next")).toBe("true");
+    });
+
+    await clickNextTrack(user);
+
+    await waitFor(() => {
+      expect(vi.mocked(toast)).toHaveBeenCalled();
+    });
+
+    // Pointer must not commit on failure — otherwise hasNext dies and Next cannot recover.
+    expect(queueProbe().getAttribute("data-current-track-id")).toBe("track-a");
+    expect(queueProbe().getAttribute("data-has-next")).toBe("true");
+    expect(
+      within(screen.getByTestId("player-desktop-bar")).getByLabelText("Next track"),
+    ).not.toBeDisabled();
+  });
+
+  test("omitted next-track hydration keeps hasNext and surfaces an error toast", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.mocked(fetch);
+    let playbackCalls = 0;
+    const twoTrackSpine = spineTracks.slice(0, 2);
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/queue-spine")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ tracks: twoTrackSpine, total: twoTrackSpine.length }),
+        } as Response);
+      }
+      if (url.includes("/api/tracks/playback")) {
+        playbackCalls += 1;
+        if (playbackCalls === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ tracks: [trackA] }),
+          } as Response);
+        }
+        // Access revoked / stale spine: 200 but next track omitted.
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ tracks: [] }),
+        } as Response);
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderQueueApp(<WarmPlaybackControls />);
+    await startWarmLibraryPlayback(user);
+
+    await waitFor(() => {
+      expect(queueProbe().getAttribute("data-current-track-id")).toBe("track-a");
+      expect(queueProbe().getAttribute("data-has-next")).toBe("true");
+    });
+
+    await clickNextTrack(user);
+
+    await waitFor(() => {
+      expect(vi.mocked(toast)).toHaveBeenCalled();
+    });
+
+    expect(queueProbe().getAttribute("data-current-track-id")).toBe("track-a");
+    expect(queueProbe().getAttribute("data-has-next")).toBe("true");
   });
 
   test("add to queue appends after the spine and shows in the queue sheet", async () => {

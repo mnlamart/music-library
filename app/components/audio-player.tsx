@@ -35,6 +35,8 @@ import { toast } from "#app/components/ui/use-toast.ts";
 import { selectBestAudioFile } from "#app/domain/audio-format.ts";
 import {
   clearBlobUrlCache,
+  invalidateRemotePlaybackUrl,
+  peekCachedPlaybackUrl,
   resolvePlaybackAudioUrl,
   resolveTrackPlaybackSource,
   revokePlaybackAudioUrl,
@@ -115,10 +117,10 @@ function getMediaErrorMessage(code: number): string {
   }
 }
 
-/** Swap <audio> to a local blob URL, restore position, and optionally resume play. */
-function swapToOfflineSource(
+/** Swap <audio> to a new source URL, restore position, and optionally resume play. */
+function swapPlaybackSource(
   audio: HTMLAudioElement,
-  offlineUrl: string,
+  nextUrl: string,
   savedTime: number,
   shouldResume: boolean,
 ) {
@@ -131,7 +133,7 @@ function swapToOfflineSource(
     }
   };
 
-  audio.src = offlineUrl;
+  audio.src = nextUrl;
   // Attempt immediately (works for many blob swaps / jsdom); re-apply on loadeddata
   // in case the browser rejected the seek before media was ready.
   restore();
@@ -893,14 +895,32 @@ export function AudioPlayer(props: AudioPlayerProps) {
   // Clear the media element's "user gesture lock" on the first interaction.
   // Chromium blocks audible autoplay unless the element's lock is cleared by
   // calling play()/load() within a user gesture (chromium docs/media/autoplay.md).
-  // Without this, the first autoplay from a track tap (not the play button) is
-  // rejected because the eventual play() runs in an effect, outside the gesture.
+  // On iOS the reliable unlock is a gesture-initiated play(); we mute+play+pause
+  // so we do not audibly start playback from the unlock itself.
   useEffect(() => {
     let unlocked = false;
     const unlock = () => {
       if (unlocked) return;
       unlocked = true;
-      audioRef.current?.load();
+      const audio = audioRef.current;
+      if (!audio) return;
+      const wasMuted = audio.muted;
+      audio.muted = true;
+      try {
+        // jsdom's play() returns undefined; browsers return a Promise.
+        void Promise.resolve(audio.play())
+          .then(() => {
+            audio.pause();
+            audio.muted = wasMuted;
+          })
+          .catch(() => {
+            audio.muted = wasMuted;
+            audio.load();
+          });
+      } catch {
+        audio.muted = wasMuted;
+        audio.load();
+      }
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     };
@@ -932,6 +952,19 @@ export function AudioPlayer(props: AudioPlayerProps) {
       setCurrentTime(0);
       return;
     }
+
+    // Prefetched / already-resolved URL: apply synchronously so auto-advance
+    // does not blank <audio src> and wait on async storage/network.
+    const cachedUrl = peekCachedPlaybackUrl(trackId);
+    if (cachedUrl) {
+      loadedTrackIdRef.current = trackId;
+      setAudioSrc(cachedUrl);
+      setPlaybackError(null);
+      return () => {
+        revokePlaybackAudioUrl(trackId);
+      };
+    }
+
     loadedTrackIdRef.current = null;
     setAudioSrc(undefined);
     setPlaybackError(null);
@@ -988,7 +1021,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
         // No blob — let handleError deal with it when buffer runs out
         return;
       }
-      swapToOfflineSource(audioRef.current, offlineUrl, savedTime, shouldResume);
+      swapPlaybackSource(audioRef.current, offlineUrl, savedTime, shouldResume);
       setAudioSrc(offlineUrl);
       setPlaybackError(null);
     });
@@ -1294,7 +1327,13 @@ export function AudioPlayer(props: AudioPlayerProps) {
       setIsPlaying(true);
       keepPlayingRef.current = true;
     };
-    const handlePause = () => setIsPlaying(false);
+    const handlePause = () => {
+      // Spec fires pause before ended at natural completion. Ignore that pause
+      // while we intend to auto-advance so Media Session stays "playing".
+      // User pause clears keepPlayingRef first (see togglePlayPause).
+      if (keepPlayingRef.current) return;
+      setIsPlaying(false);
+    };
     const handleSeeking = () => {
       // Browser manages seeking state automatically via audio.seeking property
       // This listener is kept for potential future use (e.g., showing loading indicator)
@@ -1344,24 +1383,46 @@ export function AudioPlayer(props: AudioPlayerProps) {
       const errorCode = audioElement.error.code;
       console.error(`Audio load error: ${audioElement.error.message} (code: ${errorCode})`);
 
-      // For network errors while a track is loaded, try to recover from
-      // the offline cache before giving up.
-      // MEDIA_ERR_NETWORK === 2 — numeric constant instead of MediaError.MEDIA_ERR_NETWORK
-      // because jsdom does not expose the MediaError constructor.
-      if (errorCode === 2 && trackId) {
+      // MEDIA_ERR_NETWORK (2) and MEDIA_ERR_SRC_NOT_SUPPORTED (4) often mean a
+      // stale/failed remote URL (expired presign, flaky mobile). Re-resolve a
+      // fresh URL, then fall back to the offline blob before giving up.
+      // Numeric codes (jsdom does not expose MediaError constants).
+      if ((errorCode === 2 || errorCode === 4) && trackId) {
         const savedTime = audioElement.currentTime;
         const shouldResume = keepPlayingRef.current || !audioElement.paused;
+        const previousSrc = audioElement.src;
 
-        resolvePlaybackAudioUrl(trackId).then((offlineUrl) => {
-          if (offlineUrl && audioRef.current && loadedTrackIdRef.current === trackId) {
-            swapToOfflineSource(audioRef.current, offlineUrl, savedTime || 0, shouldResume);
-            setAudioSrc(offlineUrl);
-            setPlaybackError(null);
-          } else {
+        invalidateRemotePlaybackUrl(trackId);
+
+        void resolveTrackPlaybackSource(trackId)
+          .then((freshUrl) => {
+            if (
+              freshUrl &&
+              freshUrl !== previousSrc &&
+              audioRef.current &&
+              loadedTrackIdRef.current === trackId
+            ) {
+              swapPlaybackSource(audioRef.current, freshUrl, savedTime || 0, shouldResume);
+              setAudioSrc(freshUrl);
+              setPlaybackError(null);
+              return;
+            }
+
+            return resolvePlaybackAudioUrl(trackId).then((offlineUrl) => {
+              if (offlineUrl && audioRef.current && loadedTrackIdRef.current === trackId) {
+                swapPlaybackSource(audioRef.current, offlineUrl, savedTime || 0, shouldResume);
+                setAudioSrc(offlineUrl);
+                setPlaybackError(null);
+              } else {
+                setPlaybackError(getMediaErrorMessage(errorCode));
+                setAudioSrc(undefined);
+              }
+            });
+          })
+          .catch(() => {
             setPlaybackError(getMediaErrorMessage(errorCode));
             setAudioSrc(undefined);
-          }
-        });
+          });
         return;
       }
 
@@ -1454,7 +1515,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
   // Always mounted so the element's user-gesture lock can be unlocked on the
   // first interaction, before any track is loaded.
   const audioElement = (
-    <audio ref={audioRef} src={audioSrc} loop={loopMode === "one"} preload="metadata" />
+    <audio ref={audioRef} src={audioSrc} loop={loopMode === "one"} preload="auto" />
   );
 
   if (!isVisible) {
