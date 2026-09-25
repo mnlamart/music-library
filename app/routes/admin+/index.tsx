@@ -171,6 +171,18 @@ export default function AdminOverviewRoute({ loaderData }: Route.ComponentProps)
             Audio queue
           </Link>
           <Link
+            to="/music/admin/fingerprint-failures"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            Fingerprint failures
+          </Link>
+          <Link
+            to="/music/admin/duplicates"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            Duplicates
+          </Link>
+          <Link
             to="/admin/youtube-cookies"
             className="text-muted-foreground hover:text-foreground text-sm underline"
           >
