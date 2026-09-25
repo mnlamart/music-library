@@ -66,6 +66,19 @@ const uploadProgressStore = new Map<
       fileName: string;
       title: string;
       artist: string;
+      exactDuplicate?: {
+        trackId: string;
+        title: string;
+        artist: string;
+        confidence: number;
+      };
+      fuzzyMatches?: Array<{
+        trackId: string;
+        title: string;
+        artist: string;
+        matchScore: number;
+        matchType: "fingerprint" | "metadata";
+      }>;
     }>;
     failedFiles?: Array<{
       fileId: string;
@@ -108,6 +121,19 @@ export function setUploadProgress(
       fileName: string;
       title: string;
       artist: string;
+      exactDuplicate?: {
+        trackId: string;
+        title: string;
+        artist: string;
+        confidence: number;
+      };
+      fuzzyMatches?: Array<{
+        trackId: string;
+        title: string;
+        artist: string;
+        matchScore: number;
+        matchType: "fingerprint" | "metadata";
+      }>;
     }>;
     failedFiles?: Array<{
       fileId: string;
@@ -187,6 +213,8 @@ function pushProgressUpdate(uploadId: string) {
       fileName: track.fileName,
       title: track.title,
       artist: track.artist,
+      exactDuplicate: track.exactDuplicate,
+      fuzzyMatches: track.fuzzyMatches,
     })),
     failedFiles: (progress.failedFiles || []).map((file) => ({
       fileId: file.fileId,
@@ -274,6 +302,19 @@ export function addSuccessfulTrack(
     fileName: string;
     title: string;
     artist: string;
+    exactDuplicate?: {
+      trackId: string;
+      title: string;
+      artist: string;
+      confidence: number;
+    };
+    fuzzyMatches?: Array<{
+      trackId: string;
+      title: string;
+      artist: string;
+      matchScore: number;
+      matchType: "fingerprint" | "metadata";
+    }>;
   },
 ) {
   const current = uploadProgressStore.get(uploadId);
@@ -379,6 +420,8 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
             fileName: track.fileName,
             title: track.title,
             artist: track.artist,
+            exactDuplicate: track.exactDuplicate,
+            fuzzyMatches: track.fuzzyMatches,
           })),
           failedFiles: (initialProgress.failedFiles || []).map((file) => ({
             fileId: file.fileId,
@@ -437,6 +480,8 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
               fileName: track.fileName,
               title: track.title,
               artist: track.artist,
+              exactDuplicate: track.exactDuplicate,
+              fuzzyMatches: track.fuzzyMatches,
             })),
             failedFiles: (progress.failedFiles || []).map((file) => ({
               fileId: file.fileId,

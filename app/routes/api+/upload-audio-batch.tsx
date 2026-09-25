@@ -438,7 +438,7 @@ async function processFilesAsync(
             const uploadEndProgress = 50;
             const uploadProgressRange = uploadEndProgress - uploadStartProgress;
 
-            await persistTrackAudio({
+            const persistResult = await persistTrackAudio({
               trackId: track.id,
               serviceName: LOCAL_SERVICE.NAME,
               buffer: file.buffer,
@@ -469,6 +469,13 @@ async function processFilesAsync(
               tx,
             });
 
+            // Log duplicate detection
+            if (persistResult.isDuplicate && persistResult.duplicateTrack) {
+              console.warn(
+                `⚠️  Duplicate: "${file.fileName}" has same audio as "${persistResult.duplicateTrack.title}" by ${persistResult.duplicateTrack.artist.name}`,
+              );
+            }
+
             updateFileProgress(uploadId, fileId, 50, "uploading", undefined, file.buffer.length);
 
             updateFileProgress(uploadId, fileId, 85, "uploading");
@@ -489,6 +496,14 @@ async function processFilesAsync(
               fileName: file.fileName,
               title: track.title,
               artist: artistRecord.name,
+              exactDuplicate: persistResult.isDuplicate
+                ? {
+                    trackId: persistResult.duplicateTrack!.id,
+                    title: persistResult.duplicateTrack!.title,
+                    artist: persistResult.duplicateTrack!.artist.name,
+                    confidence: 100, // Content hash match is 100% confidence
+                  }
+                : undefined,
             });
 
             return { success: true, trackId: track.id };

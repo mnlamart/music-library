@@ -148,7 +148,7 @@ export async function action({ request }: ActionFunctionArgs) {
         },
       });
 
-      const { audioFile: audioFileRecord } = await persistTrackAudio({
+      const persistResult = await persistTrackAudio({
         trackId: track.id,
         serviceName: LOCAL_SERVICE.NAME,
         buffer,
@@ -165,6 +165,13 @@ export async function action({ request }: ActionFunctionArgs) {
         tx,
       });
 
+      // Log duplicate detection
+      if (persistResult.isDuplicate && persistResult.duplicateTrack) {
+        console.warn(
+          `⚠️  Duplicate: "${audioFile.name}" has same audio as "${persistResult.duplicateTrack.title}" by ${persistResult.duplicateTrack.artist.name}`,
+        );
+      }
+
       // Add track to user's library
       await tx.userTrack.create({
         data: {
@@ -173,7 +180,7 @@ export async function action({ request }: ActionFunctionArgs) {
         },
       });
 
-      return { track, audioFile: audioFileRecord };
+      return { track, audioFile: persistResult.audioFile };
     });
 
     // Fetch artist name for response
