@@ -33,37 +33,34 @@ export async function action({ request, params }: Route.ActionArgs) {
     throw data({ error: "Track not found" }, { status: 404 });
   }
 
-  // Check if any audio files are shared with other tracks
-  const audioFilesToConsider = track.audioFiles;
-  const objectKeysToDelete: string[] = [];
-  const objectKeysPreserved: string[] = [];
+  // Decide S3 cleanup only after the track (and its TrackAudioFile rows) are
+  // gone. A pre-delete refcount races with persistTrackAudio, which can reuse
+  // this objectKey for a new track between the count and deleteFile.
+  const objectKeys = [...new Set(track.audioFiles.map((audioFile) => audioFile.objectKey))];
 
-  for (const audioFile of audioFilesToConsider) {
-    // Check if this objectKey is used by other tracks
-    const otherTracksWithSameObject = await prisma.trackAudioFile.count({
-      where: {
-        objectKey: audioFile.objectKey,
-        trackId: { not: trackId },
-      },
-    });
-
-    // Only delete from S3 if no other tracks reference this object
-    if (otherTracksWithSameObject === 0) {
-      objectKeysToDelete.push(audioFile.objectKey);
-    } else {
-      objectKeysPreserved.push(audioFile.objectKey);
-      console.log(
-        `⚠️ Preserving S3 object (used by ${otherTracksWithSameObject} other track${otherTracksWithSameObject > 1 ? "s" : ""}): ${audioFile.objectKey}`,
-      );
-    }
-  }
-
-  // Delete the track (cascade will handle related records)
   await prisma.track.delete({
     where: { id: trackId },
   });
 
-  // Delete S3 objects that are no longer referenced
+  const objectKeysToDelete: string[] = [];
+  const objectKeysPreserved: string[] = [];
+
+  for (const objectKey of objectKeys) {
+    const stillReferenced = await prisma.trackAudioFile.count({
+      where: { objectKey },
+    });
+
+    if (stillReferenced > 0) {
+      objectKeysPreserved.push(objectKey);
+      console.log(
+        `⚠️ Preserving S3 object (used by ${stillReferenced} other track${stillReferenced > 1 ? "s" : ""}): ${objectKey}`,
+      );
+      continue;
+    }
+
+    objectKeysToDelete.push(objectKey);
+  }
+
   for (const objectKey of objectKeysToDelete) {
     try {
       await deleteFile(objectKey);
