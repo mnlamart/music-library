@@ -248,7 +248,13 @@ export default function DuplicatesRoute({ loaderData }: Route.ComponentProps) {
             Manage duplicate audio files across the library
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
+          <Link
+            to="/music/admin/fingerprint-failures"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            Fingerprint failures
+          </Link>
           <Link
             to="/admin"
             className="text-muted-foreground hover:text-foreground text-sm underline"
