@@ -36,6 +36,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   // Check if any audio files are shared with other tracks
   const audioFilesToConsider = track.audioFiles;
   const objectKeysToDelete: string[] = [];
+  const objectKeysPreserved: string[] = [];
 
   for (const audioFile of audioFilesToConsider) {
     // Check if this objectKey is used by other tracks
@@ -49,6 +50,11 @@ export async function action({ request, params }: Route.ActionArgs) {
     // Only delete from S3 if no other tracks reference this object
     if (otherTracksWithSameObject === 0) {
       objectKeysToDelete.push(audioFile.objectKey);
+    } else {
+      objectKeysPreserved.push(audioFile.objectKey);
+      console.log(
+        `⚠️ Preserving S3 object (used by ${otherTracksWithSameObject} other track${otherTracksWithSameObject > 1 ? "s" : ""}): ${audioFile.objectKey}`,
+      );
     }
   }
 
@@ -68,10 +74,22 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
   }
 
+  // Log summary
+  if (objectKeysPreserved.length > 0 && objectKeysToDelete.length > 0) {
+    console.log(
+      `📊 Track deletion summary: Deleted ${objectKeysToDelete.length} S3 object(s), preserved ${objectKeysPreserved.length} shared object(s)`,
+    );
+  } else if (objectKeysPreserved.length > 0) {
+    console.log(
+      `📊 Track deletion summary: All ${objectKeysPreserved.length} S3 object(s) preserved (shared with other tracks)`,
+    );
+  }
+
   return data({
     success: true,
     trackId,
     objectsDeleted: objectKeysToDelete.length,
+    objectsPreserved: objectKeysPreserved.length,
   });
 }
 

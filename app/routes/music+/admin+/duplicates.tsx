@@ -1,6 +1,6 @@
 import { type SEOHandle } from "@nasa-gcn/remix-seo";
 import { data, Form, Link, useFetcher, useSearchParams } from "react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GeneralErrorBoundary } from "#app/components/error-boundary";
 import { Spacer } from "#app/components/spacer.tsx";
 import { Badge } from "#app/components/ui/badge.tsx";
@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "#app/components/ui/card.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
+import { useToast } from "#app/components/ui/use-toast.ts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,6 +97,7 @@ function formatBytes(bytes: number): string {
 function DuplicateGroupCard({ group }: { group: DuplicateGroup }) {
   const [deleteTrackId, setDeleteTrackId] = useState<string | null>(null);
   const deleteFetcher = useFetcher();
+  const { toast } = useToast();
 
   const handleDelete = (trackId: string) => {
     deleteFetcher.submit(null, {
@@ -106,6 +108,27 @@ function DuplicateGroupCard({ group }: { group: DuplicateGroup }) {
   };
 
   const isDeleting = deleteFetcher.state === "submitting";
+
+  // Show toast when deletion completes
+  useEffect(() => {
+    if (deleteFetcher.state === "idle" && deleteFetcher.data?.success) {
+      const { objectsDeleted, objectsPreserved } = deleteFetcher.data;
+
+      let description = "Track has been removed from the database.";
+      if (objectsDeleted > 0 && objectsPreserved > 0) {
+        description = `Deleted ${objectsDeleted} audio file(s), preserved ${objectsPreserved} shared file(s).`;
+      } else if (objectsPreserved > 0) {
+        description = `Track removed. All ${objectsPreserved} audio file(s) preserved (shared with other tracks).`;
+      } else if (objectsDeleted > 0) {
+        description = `Track and ${objectsDeleted} audio file(s) deleted from storage.`;
+      }
+
+      toast({
+        title: "Track Deleted",
+        description,
+      });
+    }
+  }, [deleteFetcher.state, deleteFetcher.data, toast]);
 
   // Filter out deleted tracks
   const visibleTracks = group.tracks.filter(

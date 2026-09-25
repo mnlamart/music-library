@@ -206,10 +206,19 @@ function TrackItem({ track, onDelete, showDuplicateWarning }: TrackItemProps) {
     // Optimistic update
     onDelete(track.trackId);
 
-    toast({
-      title: "Track Deleted",
-      description: `"${track.title}" by ${track.artist} has been removed from your library.`,
-    });
+    // Show toast based on whether this was a duplicate
+    if (hasDuplicate) {
+      toast({
+        title: "Duplicate Track Deleted",
+        description: `"${track.title}" removed. Storage optimized - shared audio file preserved.`,
+        variant: "default",
+      });
+    } else {
+      toast({
+        title: "Track Deleted",
+        description: `"${track.title}" by ${track.artist} has been removed from your library.`,
+      });
+    }
 
     setDeleteDialogOpen(false);
   };
