@@ -130,7 +130,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       if (userId === actorId) {
         return data({ error: "You cannot disable your own account" }, { status: 400 });
       }
-      const result = await disableUser(userId);
+      const result = await disableUser(userId, request, actorId);
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {
         type: "success",
@@ -139,7 +139,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       });
     }
     case "enable": {
-      const result = await enableUser(userId);
+      const result = await enableUser(userId, request, actorId);
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {
         type: "success",
@@ -148,7 +148,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       });
     }
     case "promote": {
-      const result = await promoteToAdmin(userId);
+      const result = await promoteToAdmin(userId, request, actorId);
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {
         type: "success",
@@ -160,6 +160,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       const result = await demoteFromAdmin({
         targetUserId: userId,
         actorUserId: actorId,
+        request,
       });
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {

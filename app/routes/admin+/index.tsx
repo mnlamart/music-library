@@ -165,6 +165,23 @@ export default function AdminOverviewRoute({ loaderData }: Route.ComponentProps)
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
+            to="/admin/security-events"
+            className="text-muted-foreground hover:text-foreground relative text-sm underline"
+          >
+            Security events
+            {loaderData.alertCount > 0 && (
+              <Badge variant="destructive" className="ml-2">
+                {loaderData.alertCount}
+              </Badge>
+            )}
+          </Link>
+          <Link
+            to="/admin/database-quality"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            Database quality
+          </Link>
+          <Link
             to="/admin/audio-queue"
             className="text-muted-foreground hover:text-foreground text-sm underline"
           >
