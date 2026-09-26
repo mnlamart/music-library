@@ -165,6 +165,12 @@ export default function AdminOverviewRoute({ loaderData }: Route.ComponentProps)
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
+            to="/admin/database-quality"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            Database quality
+          </Link>
+          <Link
             to="/admin/audio-queue"
             className="text-muted-foreground hover:text-foreground text-sm underline"
           >
@@ -175,6 +181,12 @@ export default function AdminOverviewRoute({ loaderData }: Route.ComponentProps)
             className="text-muted-foreground hover:text-foreground text-sm underline"
           >
             YouTube cookies
+          </Link>
+          <Link
+            to="/admin/missing-covers"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            Missing covers
           </Link>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { downloadExternalImage, findOrCreateCoverImage } from "#app/utils/cover-management.server";
+import { smartAlbumInheritance } from "#app/features/admin/cover-fetch.server";
 import { prisma } from "#app/utils/db.server";
 
 const MAX_CONCURRENCY = 3;
@@ -80,6 +81,9 @@ async function processPlaylistTrackImages(
             where: { id: playlistTrack.trackId },
             data: { coverImageId: coverImage.id },
           });
+
+          // Smart album inheritance
+          await smartAlbumInheritance(playlistTrack.trackId);
         } catch (error) {
           console.error(`Error processing image for track ${playlistTrack.trackId}:`, error);
         }
