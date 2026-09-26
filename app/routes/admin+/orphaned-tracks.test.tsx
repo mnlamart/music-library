@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { render, screen } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
 import { expect, test } from "vitest";
@@ -142,7 +145,9 @@ test("renders unused tracks tab with age filter", async () => {
           <div>
             <select data-testid="age-filter">
               <option value="7d">7 days</option>
-              <option value="30d" selected>30 days</option>
+              <option value="30d" selected>
+                30 days
+              </option>
               <option value="90d">90 days</option>
               <option value="all">All</option>
             </select>
@@ -257,5 +262,7 @@ test("shows empty state when no data is available", async () => {
 
   render(<Stub />);
 
-  expect(screen.getByTestId("empty-state")).toHaveTextContent("No tracks without audio files found.");
+  expect(screen.getByTestId("empty-state")).toHaveTextContent(
+    "No tracks without audio files found.",
+  );
 });
