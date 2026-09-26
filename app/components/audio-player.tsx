@@ -840,6 +840,9 @@ interface AudioPlayerProps {
   isShuffleEnabled: boolean;
   playbackToken?: number;
   wantsAutoPlayRef?: React.MutableRefObject<boolean>;
+  unlockAutoplayRef?: React.MutableRefObject<
+    ((trackId: string, cachedUrl: string) => boolean) | null
+  >;
 }
 
 export function AudioPlayer(props: AudioPlayerProps) {
@@ -859,6 +862,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
     isShuffleEnabled,
     playbackToken = 0,
     wantsAutoPlayRef,
+    unlockAutoplayRef,
   } = props;
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -881,6 +885,59 @@ export function AudioPlayer(props: AudioPlayerProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isNowPlayingOpen, setIsNowPlayingOpen] = useState(false);
   const isOnline = useOnlineStatus();
+
+  // Expose a function to apply a prefetched track and play it synchronously within
+  // a user gesture. This maintains autoplay permission across track changes.
+  // Returns true if the track was applied and play() was initiated successfully.
+  useEffect(() => {
+    if (unlockAutoplayRef) {
+      unlockAutoplayRef.current = (trackId: string, cachedUrl: string) => {
+        const audio = audioRef.current;
+        if (!audio) return false;
+
+        // Apply the cached source synchronously within the user gesture.
+        // DO NOT call setAudioSrc here - it schedules a React update that will
+        // interrupt the play() call by resetting the audio element.
+        audio.src = cachedUrl;
+        loadedTrackIdRef.current = trackId;
+        audio.currentTime = 0;
+        audio.volume = isMuted ? 0 : volume;
+
+        // Call play() synchronously to maintain the user-gesture-initiated playback
+        keepPlayingRef.current = true;
+        const playPromise = audio.play();
+
+        if (playPromise) {
+          playPromise
+            .then(() => {
+              setIsPlaying(true);
+              keepPlayingRef.current = true;
+              // The audioSrc React state is intentionally not synced here to avoid
+              // triggering a re-render that would reset the audio element mid-playback.
+              // The state will naturally sync when the track fully loads via the effect.
+            })
+            .catch(() => {
+              setIsPlaying(false);
+              keepPlayingRef.current = false;
+              setPlaybackError("Autoplay was prevented by your browser. Press play to start.");
+              recordAutoplayFailure();
+              toast({
+                title: "Autoplay blocked",
+                description:
+                  "Your browser prevented automatic playback. Press play to start listening.",
+              });
+            });
+        }
+
+        return true;
+      };
+    }
+    return () => {
+      if (unlockAutoplayRef) {
+        unlockAutoplayRef.current = null;
+      }
+    };
+  }, [unlockAutoplayRef, isMuted, volume]);
 
   useEffect(() => {
     setVolume(readStoredVolume());
@@ -950,6 +1007,12 @@ export function AudioPlayer(props: AudioPlayerProps) {
       }
       setIsPlaying(false);
       setCurrentTime(0);
+      return;
+    }
+
+    // If the track is already loaded (e.g., by synchronous unlock), skip to avoid
+    // interrupting ongoing playback with a redundant source update.
+    if (loadedTrackIdRef.current === trackId) {
       return;
     }
 
