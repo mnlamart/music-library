@@ -33,7 +33,7 @@ test("displays orphaned track statistics correctly", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   expect(screen.getByTestId("missing-audio-stat")).toHaveTextContent("5");
   expect(screen.getByTestId("failed-downloads-stat")).toHaveTextContent("3");
@@ -68,7 +68,7 @@ test("renders missing audio tab with tracks", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   const trackRows = screen.getAllByTestId("track-row");
   expect(trackRows).toHaveLength(2);
@@ -99,7 +99,7 @@ test("renders failed downloads tab with error categories", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   const failedTrack = screen.getByTestId("failed-track");
   expect(failedTrack).toHaveTextContent("Failed Track");
@@ -128,7 +128,7 @@ test("renders storage orphans tab with file details", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   const orphanedFile = screen.getByTestId("orphaned-file");
   expect(orphanedFile).toHaveTextContent("audio/track123.mp3");
@@ -166,7 +166,7 @@ test("renders unused tracks tab with age filter", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   expect(screen.getByTestId("age-filter")).toHaveValue("30d");
   expect(screen.getByTestId("unused-track")).toHaveTextContent("Old Unused Track");
@@ -190,7 +190,7 @@ test("displays service filter for missing audio tab", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   const serviceFilter = screen.getByTestId("service-filter");
   expect(serviceFilter).toBeInTheDocument();
@@ -212,7 +212,7 @@ test("displays bulk action buttons when tracks are selected", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   expect(screen.getByTestId("selected-count")).toHaveTextContent("2 selected");
   expect(screen.getByTestId("queue-btn")).toBeInTheDocument();
@@ -234,7 +234,7 @@ test("formats byte sizes correctly", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   expect(screen.getByTestId("size-mb")).toHaveTextContent("5.2 MB");
   expect(screen.getByTestId("size-kb")).toHaveTextContent("512.0 KB");
@@ -260,7 +260,7 @@ test("shows empty state when no data is available", async () => {
     },
   ]);
 
-  render(<Stub />);
+  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
 
   expect(screen.getByTestId("empty-state")).toHaveTextContent(
     "No tracks without audio files found.",
