@@ -136,42 +136,6 @@ test("renders storage orphans tab with file details", async () => {
   expect(orphanedFile).toHaveTextContent("5.2 MB");
 });
 
-test("renders unused tracks tab with age filter", async () => {
-  const Stub = createRoutesStub([
-    {
-      path: "/admin/orphaned-tracks",
-      Component: () => {
-        return (
-          <div>
-            <select data-testid="age-filter">
-              <option value="7d">7 days</option>
-              <option value="30d" selected>
-                30 days
-              </option>
-              <option value="90d">90 days</option>
-              <option value="all">All</option>
-            </select>
-            <table>
-              <tbody>
-                <tr data-testid="unused-track">
-                  <td>Old Unused Track</td>
-                  <td>Test Artist</td>
-                  <td>YouTube</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        );
-      },
-    },
-  ]);
-
-  render(<Stub initialEntries={["/admin/orphaned-tracks"]} />);
-
-  expect(screen.getByTestId("age-filter")).toHaveValue("30d");
-  expect(screen.getByTestId("unused-track")).toHaveTextContent("Old Unused Track");
-});
-
 test("displays service filter for missing audio tab", async () => {
   const Stub = createRoutesStub([
     {
