@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { processTrackImagesAsync } from "./image-processor.server";
 
+// Mock smartAlbumInheritance
+vi.mock("#app/features/admin/cover-fetch.server", () => ({
+	smartAlbumInheritance: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("#app/utils/db.server", () => ({
   prisma: {
     servicePlaylistTrack: {
