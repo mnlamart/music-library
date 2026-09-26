@@ -169,7 +169,7 @@ function OverviewTab({ loaderData }: { loaderData: LoaderData }) {
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link to="/music/admin/duplicates">
-              <Icon name="copy" className="mr-1" />
+              <Icon name="file-text" className="mr-1" />
               View Duplicates
             </Link>
           </Button>
@@ -178,7 +178,7 @@ function OverviewTab({ loaderData }: { loaderData: LoaderData }) {
             Review Metadata Issues
           </Button>
           <Button variant="outline" size="sm" disabled>
-            <Icon name="photo" className="mr-1" />
+            <Icon name="camera" className="mr-1" />
             Fix Missing Covers
           </Button>
         </div>
@@ -490,7 +490,7 @@ function DuplicatesTab({ loaderData }: { loaderData: LoaderData }) {
 
             <Button asChild>
               <Link to="/music/admin/duplicates">
-                <Icon name="copy" className="mr-2" />
+                <Icon name="file-text" className="mr-2" />
                 View Duplicate Tracks
               </Link>
             </Button>
@@ -550,7 +550,7 @@ function IntegrityTab({ loaderData }: { loaderData: LoaderData }) {
 
             <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-4">
               <div className="flex items-start gap-2">
-                <Icon name="info-circled" className="text-blue-600 mt-0.5" />
+                <Icon name="question-mark-circled" className="text-blue-600 mt-0.5" />
                 <div>
                   <h4 className="mb-1 font-semibold text-blue-900 dark:text-blue-100">
                     Confidence Note
@@ -614,7 +614,7 @@ export default function DatabaseQualityRoute({ loaderData }: Route.ComponentProp
               className="mt-2"
               onClick={() => window.location.reload()}
             >
-              <Icon name="reload" className="mr-1" />
+              <Icon name="arrow-path" className="mr-1" />
               Refresh Metrics
             </Button>
           </div>
