@@ -1,4 +1,3 @@
-import { smartAlbumInheritance } from "#app/features/admin/cover-fetch.server";
 import { downloadExternalImage, findOrCreateCoverImage } from "#app/utils/cover-management.server";
 import { prisma } from "#app/utils/db.server";
 
