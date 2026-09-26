@@ -28,14 +28,16 @@ import {
   TableRow,
 } from "#app/components/ui/table.tsx";
 import {
-  calculateHealthScore,
   formatBytes,
+  METRIC_TARGETS,
+  METRIC_WEIGHTS,
+} from "#app/features/admin/database-quality.ts";
+import {
+  calculateHealthScore,
   getDuplicateTracksCount,
   getMetadataIssues,
   getOrphanedFilesCount,
   getStorageStats,
-  METRIC_TARGETS,
-  METRIC_WEIGHTS,
   type QualityMetrics,
   type MetadataIssues,
   type StorageStats,

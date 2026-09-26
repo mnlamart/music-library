@@ -3,16 +3,8 @@
  */
 
 import { prisma } from "#app/utils/db.server.ts";
+import { METRIC_WEIGHTS, type MetricTarget, METRIC_TARGETS, formatBytes } from "./database-quality.ts";
 
-export const METRIC_WEIGHTS = {
-  audio: 0.3,
-  covers: 0.25,
-  duration: 0.15,
-  album: 0.1,
-  year: 0.1,
-  genre: 0.05,
-  lyrics: 0.05,
-} as const;
 
 export function getHealthColor(percentage: number): "green" | "yellow" | "red" {
   if (percentage >= 90) return "green";
@@ -36,25 +28,6 @@ export interface QualityMetrics {
   lyrics: number;
 }
 
-export interface MetricTarget {
-  audio: number;
-  covers: number;
-  duration: number;
-  album: number;
-  year: number;
-  genre: number;
-  lyrics: number;
-}
-
-export const METRIC_TARGETS: MetricTarget = {
-  audio: 100,
-  covers: 95,
-  duration: 99,
-  album: 80,
-  year: 85,
-  genre: 60,
-  lyrics: 10,
-} as const;
 
 export function calculateHealthScore(metrics: QualityMetrics): number {
   return (
