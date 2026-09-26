@@ -12,7 +12,10 @@ import { isOfflineEnvironment } from "#app/features/offline-app/is-offline-envir
 import { getOfflineStorage } from "#app/features/offline-storage/offline-storage.client.ts";
 import { offlineSummaryToFullTrack } from "#app/features/offline-storage/offline-track-summary.client.ts";
 import { isQueueCacheEnabled } from "#app/features/offline-storage/queue-cache-preference.client.ts";
-import { prefetchPlaybackAudioUrl } from "#app/features/offline-storage/resolve-playback-url.client.ts";
+import {
+  peekCachedPlaybackUrl,
+  prefetchPlaybackAudioUrl,
+} from "#app/features/offline-storage/resolve-playback-url.client.ts";
 import {
   collectHydrationIds,
   fetchPlaybackBatch,
@@ -336,6 +339,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   const playbackCacheRef = useRef(new PlaybackHydrationCache());
   const playlistFetchEpochRef = useRef(0);
   const wantsAutoPlayRef = useRef(false);
+  const unlockAutoplayRef = useRef<((trackId: string, cachedUrl: string) => boolean) | null>(null);
   const upNextPlayNextCountRef = useRef(0);
 
   // Throttle scroll-driven hydration: accumulate IDs during rapid scrolling,
@@ -1061,11 +1065,30 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       const queueTrack = getTrackAtTarget(navigationState, target);
       if (!queueTrack) return;
 
-      // Resolve before committing the pointer so a hydration failure cannot
-      // leave the queue stuck with hasNext=false and no current playback.
+      // Try to get the prefetched URL synchronously. If it exists, we can apply
+      // it and call play() within the user gesture, satisfying autoplay policy.
+      const cachedUrl = peekCachedPlaybackUrl(queueTrack.id);
+      let appliedSynchronously = false;
+
+      if (cachedUrl && unlockAutoplayRef.current) {
+        // Apply the prefetched source and play synchronously within the gesture
+        appliedSynchronously = unlockAutoplayRef.current(queueTrack.id, cachedUrl);
+      }
+
+      if (!appliedSynchronously) {
+        // No cached URL or sync application failed - set autoplay intent for async flow
+        wantsAutoPlayRef.current = true;
+      }
+
+      // Resolve the full track and update queue state. Even if we played synchronously,
+      // we still need the full track metadata for the UI.
       void (async () => {
         const fullTrack = await resolvePlayableTrack(queueTrack);
-        if (!fullTrack) return;
+        if (!fullTrack) {
+          // Hydration failed - clear autoplay intent
+          wantsAutoPlayRef.current = false;
+          return;
+        }
 
         const nextState = advanceAfterPlay(navigationState, target);
         setUpNext(nextState.upNext);
@@ -1077,11 +1100,21 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
           });
         }
         setSpinePosition(nextState.spinePosition);
-        beginPlayback();
+
+        if (!appliedSynchronously) {
+          // Async flow - increment token to trigger autoplay effect
+          setPlaybackToken((token) => token + 1);
+          if (hydrationTimerRef.current) {
+            clearTimeout(hydrationTimerRef.current);
+            hydrationTimerRef.current = null;
+          }
+          pendingHydrationIdsRef.current.clear();
+        }
+
         setCurrentTrack(fullTrack);
       })();
     },
-    [beginPlayback, navigationState, resolvePlayableTrack, upNextPlayNextCount],
+    [navigationState, resolvePlayableTrack, upNextPlayNextCount],
   );
 
   const playNext = useCallback(() => {
@@ -1105,9 +1138,28 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
       noteUserQueueMutation();
 
+      // Try to get the prefetched URL synchronously. If it exists, we can apply
+      // it and call play() within the user gesture, satisfying autoplay policy.
+      const cachedUrl = peekCachedPlaybackUrl(queueTrack.id);
+      let appliedSynchronously = false;
+
+      if (cachedUrl && unlockAutoplayRef.current) {
+        // Apply the prefetched source and play synchronously within the gesture
+        appliedSynchronously = unlockAutoplayRef.current(queueTrack.id, cachedUrl);
+      }
+
+      if (!appliedSynchronously) {
+        // No cached URL or sync application failed - set autoplay intent for async flow
+        wantsAutoPlayRef.current = true;
+      }
+
       void (async () => {
         const fullTrack = await resolvePlayableTrack(queueTrack);
-        if (!fullTrack) return;
+        if (!fullTrack) {
+          // Hydration failed - clear autoplay intent
+          wantsAutoPlayRef.current = false;
+          return;
+        }
 
         const nextState = jumpToTarget(navigationState, target);
         setUpNext(nextState.upNext);
@@ -1127,17 +1179,21 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         }
 
         setSpinePosition(nextState.spinePosition);
-        beginPlayback();
+
+        if (!appliedSynchronously) {
+          // Async flow - increment token to trigger autoplay effect
+          setPlaybackToken((token) => token + 1);
+          if (hydrationTimerRef.current) {
+            clearTimeout(hydrationTimerRef.current);
+            hydrationTimerRef.current = null;
+          }
+          pendingHydrationIdsRef.current.clear();
+        }
+
         setCurrentTrack(fullTrack);
       })();
     },
-    [
-      beginPlayback,
-      navigationState,
-      noteUserQueueMutation,
-      resolvePlayableTrack,
-      upNextPlayNextCount,
-    ],
+    [navigationState, noteUserQueueMutation, resolvePlayableTrack, upNextPlayNextCount],
   );
 
   const startQueuePlayback = useCallback(() => {
@@ -1664,6 +1720,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         isShuffleEnabled={isShuffleEnabled}
         playbackToken={playbackToken}
         wantsAutoPlayRef={wantsAutoPlayRef}
+        unlockAutoplayRef={unlockAutoplayRef}
       />
     </AudioPlayerContext.Provider>
   );

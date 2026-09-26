@@ -17,9 +17,27 @@ import { consoleError } from "#tests/setup/setup-test-env.ts";
 import { AudioPlayerProvider, useAudioPlayer } from "./audio-player-provider";
 
 vi.mock("./audio-player", () => ({
-  AudioPlayer: ({ wantsAutoPlayRef }: { wantsAutoPlayRef?: React.MutableRefObject<boolean> }) => (
-    <span data-testid="wants-autoplay">{String(wantsAutoPlayRef?.current ?? false)}</span>
-  ),
+  AudioPlayer: ({
+    wantsAutoPlayRef,
+    unlockAutoplayRef,
+  }: {
+    wantsAutoPlayRef?: React.MutableRefObject<boolean>;
+    unlockAutoplayRef?: React.MutableRefObject<
+      ((trackId: string, cachedUrl: string) => boolean) | null
+    >;
+  }) => {
+    // Mock the unlock function
+    if (unlockAutoplayRef) {
+      unlockAutoplayRef.current = (_trackId: string, _cachedUrl: string) => {
+        // Mock implementation - just set wants autoplay to true and return success
+        if (wantsAutoPlayRef) {
+          wantsAutoPlayRef.current = true;
+        }
+        return true;
+      };
+    }
+    return <span data-testid="wants-autoplay">{String(wantsAutoPlayRef?.current ?? false)}</span>;
+  },
 }));
 
 vi.mock("#app/components/pwa/install-app-banner", () => ({
@@ -64,6 +82,7 @@ vi.mock("#app/features/offline-storage/offline-storage.client.ts", () => ({
 }));
 
 vi.mock("#app/features/offline-storage/resolve-playback-url.client.ts", () => ({
+  peekCachedPlaybackUrl: vi.fn(() => null), // Return null by default (no cached URL)
   prefetchPlaybackAudioUrl: vi.fn(),
 }));
 
@@ -238,6 +257,69 @@ test("addToUpNext opens queue-only playback without autoplay when idle", async (
   expect(screen.getByTestId("player-visible").textContent).toBe("true");
   expect(screen.getByTestId("has-queued-playback").textContent).toBe("true");
   expect(screen.getByTestId("wants-autoplay").textContent).toBe("false");
+});
+
+test("playNext sets autoplay intent synchronously to enable browser autoplay", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.mocked(fetch);
+
+  fetchMock
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tracks: [spineTrack, { ...spineTrack, id: "track-2", title: "Second Track" }],
+        total: 2,
+      }),
+    } as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ tracks: [playableTrack] }),
+    } as Response)
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tracks: [{ ...playableTrack, id: "track-2", title: "Second Track" }],
+      }),
+    } as Response);
+
+  function PlayNextProbe() {
+    const { playTrack, playNext } = useAudioPlayer();
+    return (
+      <div>
+        <QueueProbe />
+        <button type="button" onClick={() => playTrack(playableTrack, { type: "library" }, 0)}>
+          Play first track
+        </button>
+        <button type="button" onClick={playNext}>
+          Play next
+        </button>
+      </div>
+    );
+  }
+
+  render(
+    <AudioPlayerProvider>
+      <PlayNextProbe />
+    </AudioPlayerProvider>,
+  );
+
+  // Start playback with first track
+  await user.click(screen.getByRole("button", { name: "Play first track" }));
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+
+  // Clear wants-autoplay flag (simulating that autoplay already happened)
+  expect(screen.getByTestId("wants-autoplay").textContent).toBe("true");
+
+  // Click next - should set wants-autoplay to true synchronously
+  await user.click(screen.getByRole("button", { name: "Play next" }));
+
+  // Verify wants-autoplay was set before async hydration completes
+  // (In real usage, this synchronous setting enables browser autoplay)
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-2");
+  });
 });
 
 test("startQueuePlayback plays the first Up Next track when idle", async () => {
