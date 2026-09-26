@@ -80,6 +80,10 @@ async function processPlaylistTrackImages(
             where: { id: playlistTrack.trackId },
             data: { coverImageId: coverImage.id },
           });
+
+          // Smart album inheritance (disabled - requires cover-fetch.server from Missing Covers feature)
+          // TODO: Re-enable when Missing Covers feature is merged
+          // await smartAlbumInheritance(playlistTrack.trackId);
         } catch (error) {
           console.error(`Error processing image for track ${playlistTrack.trackId}:`, error);
         }
