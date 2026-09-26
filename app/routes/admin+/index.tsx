@@ -182,6 +182,12 @@ export default function AdminOverviewRoute({ loaderData }: Route.ComponentProps)
           >
             Missing covers
           </Link>
+          <Link
+            to="/admin/orphaned-tracks"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            Orphaned tracks
+          </Link>
         </div>
       </div>
 
