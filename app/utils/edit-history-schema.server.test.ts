@@ -383,7 +383,7 @@ describe("Edit History Schema", () => {
 
       expect(curatorRole).not.toBeNull();
       expect(curatorRole?.name).toBe("curator");
-      expect(curatorRole?.description).toContain("edit track metadata");
+      expect(curatorRole?.description).toContain("edit track/artist/album metadata");
 
       // Verify required permissions exist
       const permissionKeys = curatorRole?.permissions.map(
