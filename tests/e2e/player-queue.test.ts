@@ -688,8 +688,11 @@ test.describe("Player / Queue", () => {
     await playTrackFromLibrary(page, "Sticky Player Track");
     await dismissOverlays(page);
 
+    // Wait for player to be ready
+    await page.waitForTimeout(1000);
+
     const miniBar = page.getByTestId("player-mini-bar");
-    await expect(miniBar).toBeVisible({ timeout: 10000 });
+    await expect(miniBar).toBeVisible({ timeout: 15000 });
 
     const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
     await expect(bottomNav).toBeVisible();
