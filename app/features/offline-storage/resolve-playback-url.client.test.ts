@@ -193,6 +193,33 @@ describe("resolveTrackPlaybackSource", () => {
 
     expect(result).toMatch(/^blob:/);
   });
+
+  test("returns a cached remote URL without awaiting OPFS when the remote cache is warm", async () => {
+    vi.stubGlobal("window", {});
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: "https://cdn.example/warm.mp3" }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    // Slow OPFS — must not be awaited on the warm-cache path.
+    let resolveBlob: ((value: null) => void) | undefined;
+    mockResolvePlaybackBlob.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveBlob = resolve;
+        }),
+    );
+
+    prefetchPlaybackAudioUrl("track-warm");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const resultPromise = resolveTrackPlaybackSource("track-warm");
+    await expect(resultPromise).resolves.toBe("https://cdn.example/warm.mp3");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    resolveBlob?.(null);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -399,5 +426,85 @@ describe("prefetchPlaybackAudioUrl", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("treats cached remote URLs as expired after the TTL safety margin", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ url: "https://cdn.example/stale.mp3" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ url: "https://cdn.example/fresh.mp3" }),
+      });
+    vi.stubGlobal("fetch", fetchSpy);
+    mockResolvePlaybackBlob.mockResolvedValue(null);
+
+    const first = await resolveTrackPlaybackSource("track-ttl");
+    expect(first).toBe("https://cdn.example/stale.mp3");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Server signs for 3600s; client TTL uses a safety margin under that.
+    vi.advanceTimersByTime(55 * 60 * 1000 + 1);
+
+    const second = await resolveTrackPlaybackSource("track-ttl");
+    expect(second).toBe("https://cdn.example/fresh.mp3");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+});
+
+describe("invalidateRemotePlaybackUrl / clearBlobUrlCache", () => {
+  test("invalidateRemotePlaybackUrl forces the next resolve to re-fetch", async () => {
+    const { invalidateRemotePlaybackUrl, clearBlobUrlCache } =
+      await import("./resolve-playback-url.client.ts");
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ url: "https://cdn.example/first.mp3" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ url: "https://cdn.example/second.mp3" }),
+      });
+    vi.stubGlobal("fetch", fetchSpy);
+    mockResolvePlaybackBlob.mockResolvedValue(null);
+
+    expect(await resolveTrackPlaybackSource("track-inv")).toBe("https://cdn.example/first.mp3");
+    invalidateRemotePlaybackUrl("track-inv");
+    expect(await resolveTrackPlaybackSource("track-inv")).toBe("https://cdn.example/second.mp3");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    clearBlobUrlCache();
+  });
+
+  test("clearBlobUrlCache also clears the remote URL cache", async () => {
+    const { clearBlobUrlCache } = await import("./resolve-playback-url.client.ts");
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ url: "https://cdn.example/a.mp3" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ url: "https://cdn.example/b.mp3" }),
+      });
+    vi.stubGlobal("fetch", fetchSpy);
+    mockResolvePlaybackBlob.mockResolvedValue(null);
+
+    expect(await resolveTrackPlaybackSource("track-clear")).toBe("https://cdn.example/a.mp3");
+    clearBlobUrlCache();
+    expect(await resolveTrackPlaybackSource("track-clear")).toBe("https://cdn.example/b.mp3");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

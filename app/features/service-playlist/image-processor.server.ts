@@ -1,3 +1,4 @@
+import { smartAlbumInheritance } from "#app/features/admin/cover-fetch.server";
 import { downloadExternalImage, findOrCreateCoverImage } from "#app/utils/cover-management.server";
 import { prisma } from "#app/utils/db.server";
 
@@ -81,9 +82,14 @@ async function processPlaylistTrackImages(
             data: { coverImageId: coverImage.id },
           });
 
-          // Smart album inheritance (disabled - requires cover-fetch.server from Missing Covers feature)
-          // TODO: Re-enable when Missing Covers feature is merged
-          // await smartAlbumInheritance(playlistTrack.trackId);
+          try {
+            await smartAlbumInheritance(playlistTrack.trackId);
+          } catch (error) {
+            console.warn(
+              `Smart album inheritance failed for track ${playlistTrack.trackId}:`,
+              error,
+            );
+          }
         } catch (error) {
           console.error(`Error processing image for track ${playlistTrack.trackId}:`, error);
         }
