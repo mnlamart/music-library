@@ -6,14 +6,16 @@ interface TabConfig {
   label: string;
   icon: string;
   to: string;
+  ariaLabel?: string;
 }
 
 const tabs: TabConfig[] = [
-  { label: "Home", icon: "home", to: "/" },
-  { label: "Search", icon: "magnifying-glass", to: "/search" },
-  { label: "My Library", icon: "file-text", to: "/library" },
-  { label: "My Playlists", icon: "list-bullet", to: "/playlists" },
-  { label: "History", icon: "clock", to: "/history" },
+  { label: "Home", icon: "home", to: "/", ariaLabel: "Home page" },
+  { label: "Discover", icon: "globe", to: "/discover", ariaLabel: "Discover music" },
+  { label: "Search", icon: "magnifying-glass", to: "/search", ariaLabel: "Search music" },
+  { label: "My Library", icon: "file-text", to: "/library", ariaLabel: "My music library" },
+  { label: "My Playlists", icon: "list-bullet", to: "/playlists", ariaLabel: "My playlists" },
+  { label: "History", icon: "clock", to: "/history", ariaLabel: "Listening history" },
 ];
 
 export function BottomNav() {
@@ -36,7 +38,10 @@ export function BottomNav() {
             <NavLink
               to={tab.to}
               end={tab.to === "/"}
+              viewTransition={false}
               onClick={tab.to === "/search" ? handleSearchClick : undefined}
+              aria-label={tab.ariaLabel || tab.label}
+              prefetch="intent"
               className={({ isActive }) =>
                 cn(
                   "flex h-full flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",

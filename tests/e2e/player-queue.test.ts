@@ -621,7 +621,7 @@ test.describe("Player / Queue", () => {
     await expect(miniBar).toBeVisible({ timeout: 10000 });
 
     const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
-    const homeLink = bottomNav.getByRole("link", { name: /^home$/i });
+    const homeLink = bottomNav.getByRole("link", { name: /home/i });
 
     // Close any lingering sheet from previous tests to avoid overlay interception
     await page.keyboard.press("Escape");

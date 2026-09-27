@@ -11,5 +11,6 @@ export function mapSearchTrackToListItem(result: TrackSearchResult) {
     service: result.service ?? null,
     audioFiles: result.audioFiles ?? [],
     isInUserLibrary: true,
+    popularityStats: result.popularityStats,
   };
 }

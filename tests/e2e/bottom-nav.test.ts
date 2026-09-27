@@ -15,19 +15,20 @@ async function dismissInstallBanner(page: import("@playwright/test").Page) {
 }
 
 test.describe("Bottom Navigation", () => {
-  test("bottom nav is visible with 5 tabs", { tag: "@smoke" }, async ({ page }) => {
+  test("bottom nav is visible with 6 tabs", { tag: "@smoke" }, async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/");
 
     const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
     await expect(bottomNav).toBeVisible();
 
-    // 5 tabs: Home, Search, My Library, My Playlists, History
+    // 6 tabs: Home, Discover, Search, My Library, My Playlists, History
     const tabs = bottomNav.getByRole("listitem");
-    await expect(tabs).toHaveCount(5);
+    await expect(tabs).toHaveCount(6);
 
     // Check each tab label
     await expect(bottomNav.getByText("Home")).toBeVisible();
+    await expect(bottomNav.getByText("Discover")).toBeVisible();
     await expect(bottomNav.getByText("Search")).toBeVisible();
     await expect(bottomNav.getByText("My Library")).toBeVisible();
     await expect(bottomNav.getByText("My Playlists")).toBeVisible();
@@ -52,12 +53,28 @@ test.describe("Bottom Navigation", () => {
     await expect(searchLink).toHaveAttribute("aria-current", "page");
   });
 
-  test("clicking tabs navigates to correct pages", async ({ page }) => {
+  test("discover tab is active on discover page", async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin();
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto("/discover");
+
+    const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
+    const discoverLink = bottomNav.getByRole("link", { name: /discover/i });
+    await expect(discoverLink).toBeVisible();
+    await expect(page).toHaveURL(/\/discover/);
+  });
+
+  test("clicking tabs navigates to correct pages", async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin();
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/");
     await dismissInstallBanner(page);
 
     const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
+
+    // Navigate to Discover
+    await bottomNav.getByRole("link", { name: /discover/i }).click();
+    await expect(page).toHaveURL(/\/discover/);
 
     // Navigate to Search
     await bottomNav.getByRole("link", { name: /search/i }).click();
@@ -71,8 +88,11 @@ test.describe("Bottom Navigation", () => {
     await page.getByRole("button", { name: /back/i }).click();
     await expect(page).not.toHaveURL(/\/search/);
 
+    // Wait for bottom nav to be visible and clickable again
+    await expect(bottomNav.getByRole("link", { name: /home/i })).toBeVisible();
+
     // Navigate back to Home
-    await bottomNav.getByRole("link", { name: /^home$/i }).click();
+    await bottomNav.getByRole("link", { name: /home/i }).click();
     await expect(page).toHaveURL(/\/(\?|$)/);
     await expect(bottomNav.getByRole("link", { name: /home/i })).toHaveAttribute(
       "aria-current",
@@ -123,8 +143,8 @@ test.describe("Bottom Navigation", () => {
     await expect(menu).not.toBeVisible();
 
     const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
-    await expect(bottomNav.getByRole("link", { name: /my library/i })).toBeVisible();
+    await expect(bottomNav.getByRole("link", { name: /my music library/i })).toBeVisible();
     await expect(bottomNav.getByRole("link", { name: /my playlists/i })).toBeVisible();
-    await expect(bottomNav.getByRole("link", { name: /history/i })).toBeVisible();
+    await expect(bottomNav.getByRole("link", { name: /listening history/i })).toBeVisible();
   });
 });

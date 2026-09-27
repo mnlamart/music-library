@@ -2,6 +2,8 @@
  * Search result types and interfaces for global search functionality
  */
 
+import { type TrackPopularityStats } from "#app/utils/discover.ts";
+
 export type SearchResultType = "track" | "album" | "artist" | "playlist";
 
 export type SearchFilterType = "all" | "tracks" | "albums" | "artists" | "playlists";
@@ -27,6 +29,7 @@ export interface TrackSearchResult extends BaseSearchResult {
   service?: { displayName: string; logoUrl: string | null } | null;
   audioFiles?: Array<{ id: string; format: string | null; objectKey: string }>;
   addedAt?: string;
+  popularityStats?: TrackPopularityStats;
 }
 
 export interface AlbumSearchResult extends BaseSearchResult {

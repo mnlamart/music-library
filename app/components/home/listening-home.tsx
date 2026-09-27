@@ -52,6 +52,30 @@ export function ListeningHome({
       <WeeklyWrap wrap={weeklyWrap} />
 
       <section className="mb-10">
+        <Card className="overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-2xl">
+              <Icon name="globe" className="h-6 w-6 text-primary" />
+              Explore Music
+            </CardTitle>
+            <CardDescription>Discover popular tracks from the global library</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Browse trending songs, explore what others are listening to, and find new favorites in
+              our community catalog.
+            </p>
+            <Button asChild size="lg" className="w-full sm:w-auto">
+              <Link to="/discover">
+                <Icon name="globe" className="mr-2 h-4 w-4" />
+                Browse Discover →
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mb-10">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Recently added</h2>
           <Link to="/library" className="text-sm text-muted-foreground hover:underline">

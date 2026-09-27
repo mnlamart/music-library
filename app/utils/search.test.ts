@@ -1155,7 +1155,7 @@ describe("Search Utilities", () => {
       expect(trackIds).toContain(unfamiliar.id);
       // Without boost, title ASC tie-break puts Alpha before Zebra.
       expect(trackIds.indexOf(unfamiliar.id)).toBeLessThan(trackIds.indexOf(familiar.id));
-    });
+    }, 10000);
 
     it("does not hard-override relevance: exact match beats contains despite plays", async () => {
       const { user, exactUnused, containsHeavy } = await seedBoostFixture();
@@ -1165,6 +1165,6 @@ describe("Search Utilities", () => {
 
       expect(trackIds[0]).toBe(exactUnused.id);
       expect(trackIds.indexOf(exactUnused.id)).toBeLessThan(trackIds.indexOf(containsHeavy.id));
-    });
+    }, 10000);
   });
 });

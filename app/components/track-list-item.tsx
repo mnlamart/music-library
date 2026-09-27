@@ -30,6 +30,8 @@ import { useTrackAudioFileDownload } from "#app/hooks/use-track-audio-file-downl
 import { formatDuration } from "#app/utils/format-duration.ts";
 import { isPlayableTrack } from "#app/utils/playable-track";
 import { formatServiceDateAdded } from "#app/utils/service-date.ts";
+import { type TrackPopularityStats } from "#app/utils/discover.ts";
+import { formatPopularityStats } from "#app/utils/popularity-format.ts";
 import { useIsMobile } from "#app/utils/use-mobile.ts";
 import { AddToPlaylistMenu } from "./add-to-playlist-menu";
 
@@ -47,6 +49,7 @@ interface TrackListItemData {
   releaseDate?: string | Date | null;
   originalDate?: string | Date | null;
   createdAt?: string | Date | null;
+  popularityStats?: TrackPopularityStats;
 }
 
 interface UserTrack {
@@ -367,6 +370,11 @@ export const TrackListItem = memo(function TrackListItem({
                   <span className="ml-2 text-muted-foreground/70">• Deleted from YouTube</span>
                 )}
               </div>
+              {track.popularityStats && formatPopularityStats(track.popularityStats, true) && (
+                <div className="text-xs text-muted-foreground/80 truncate">
+                  {formatPopularityStats(track.popularityStats, true)}
+                </div>
+              )}
             </div>
           </div>
         </div>

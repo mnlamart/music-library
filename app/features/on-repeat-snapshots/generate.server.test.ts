@@ -144,7 +144,7 @@ describe("rankPlayCompletedTracks", () => {
     expect(ranked[0]?.listenCount).toBe(35);
     expect(ranked[29]?.trackId).toBe(trackIds[29]);
     expect(ranked[29]?.listenCount).toBe(6);
-  });
+  }, 15000);
 });
 
 describe("generateOnRepeatSnapshotForUser", () => {

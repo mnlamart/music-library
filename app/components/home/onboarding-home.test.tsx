@@ -36,6 +36,9 @@ test("shows Connect YouTube when YouTube is not connected", () => {
 
   const primaryLink = screen.getByRole("link", { name: /connect youtube/i });
   expect(primaryLink).toHaveAttribute("href", "/music/services/youtube/auth");
+
+  const discoverLink = screen.getByRole("link", { name: /explore global library/i });
+  expect(discoverLink).toHaveAttribute("href", "/discover");
 });
 
 test("shows Sync a playlist when YouTube is connected", () => {
@@ -43,6 +46,9 @@ test("shows Sync a playlist when YouTube is connected", () => {
 
   const primaryLink = screen.getByRole("link", { name: /sync a playlist/i });
   expect(primaryLink).toHaveAttribute("href", "/music/services/youtube/playlists");
+
+  const discoverLink = screen.getByRole("link", { name: /explore global library/i });
+  expect(discoverLink).toHaveAttribute("href", "/discover");
 });
 
 test("shows upload link for admin users", () => {
