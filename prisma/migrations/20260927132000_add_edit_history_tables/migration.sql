@@ -252,22 +252,6 @@ BEGIN
   WHERE alb.artistId = NEW.id;
 END;
 
--- Backfill FTS tables with current data
-DELETE FROM tracks_fts;
-DELETE FROM albums_fts;
-DELETE FROM artists_fts;
-
-INSERT INTO tracks_fts(track_id, title, artist_name, album_name)
-SELECT t.id, t.title, a.name, COALESCE(alb.name, '')
-FROM Track t
-JOIN Artist a ON t.artistId = a.id
-LEFT JOIN Album alb ON t.albumId = alb.id;
-
-INSERT INTO albums_fts(album_id, name, artist_name)
-SELECT alb.id, alb.name, a.name
-FROM Album alb
-JOIN Artist a ON alb.artistId = a.id;
-
-INSERT INTO artists_fts(artist_id, name, genre)
-SELECT id, name, COALESCE(genre, '')
-FROM Artist;
+-- No backfill needed: FTS tables are automatically maintained by triggers
+-- The new merge tracking fields (mergedIntoId, mergedAt, mergedBy) don't affect FTS data
+-- so there's no need to clear and repopulate the FTS tables
