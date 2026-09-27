@@ -89,10 +89,10 @@ test.describe("Bottom Navigation", () => {
     await expect(page).not.toHaveURL(/\/search/);
 
     // Wait for bottom nav to be visible and clickable again
-    await expect(bottomNav.getByRole("link", { name: /^home$/i })).toBeVisible();
+    await expect(bottomNav.getByRole("link", { name: /home/i })).toBeVisible();
 
     // Navigate back to Home
-    await bottomNav.getByRole("link", { name: /^home$/i }).click();
+    await bottomNav.getByRole("link", { name: /home/i }).click();
     await expect(page).toHaveURL(/\/(\?|$)/);
     await expect(bottomNav.getByRole("link", { name: /home/i })).toHaveAttribute(
       "aria-current",
