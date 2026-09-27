@@ -19,6 +19,7 @@ import {
   CursorSchema,
   SearchLimitSchema,
   SearchQuerySchema,
+  SearchScopeSchema,
   SearchTypeSchema,
 } from "#app/utils/search-validation.server.ts";
 import { searchWithCache } from "#app/utils/search-cache.server.ts";
@@ -67,6 +68,11 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     return invalidSearchParameters(cursorResult.error, limit);
   }
 
+  const scopeResult = SearchScopeSchema.safeParse(url.searchParams.get("scope") ?? "all");
+  if (!scopeResult.success) {
+    return invalidSearchParameters(scopeResult.error, limit);
+  }
+
   const usePrefix = url.searchParams.get("prefix") !== "false";
 
   // Get the authenticated user ID if available (needed for playlist search)
@@ -80,6 +86,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
       typeResult.data,
       usePrefix,
       userId,
+      scopeResult.data,
     );
     return Response.json(results);
   } catch (error) {
