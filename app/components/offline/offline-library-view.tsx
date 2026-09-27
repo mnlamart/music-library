@@ -1,6 +1,9 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useRef } from "react";
 import { Link } from "react-router";
 import { TrackListItem } from "#app/components/track-list-item.tsx";
 import { Button } from "#app/components/ui/button.tsx";
+import { ScrollArea } from "#app/components/ui/scroll-area";
 import { type OfflineTrackSummary } from "#app/features/offline-storage/types.ts";
 
 type OfflineLibraryViewProps = {
@@ -34,6 +37,16 @@ function OfflineLibraryTrackItem({ track, index }: { track: OfflineTrackSummary;
 }
 
 export function OfflineLibraryView({ tracks }: OfflineLibraryViewProps) {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: tracks.length,
+    getScrollElement: () =>
+      parentRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
+    estimateSize: useCallback(() => 64, []),
+    overscan: 5,
+  });
+
   if (tracks.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-10 text-center">
@@ -48,10 +61,38 @@ export function OfflineLibraryView({ tracks }: OfflineLibraryViewProps) {
   }
 
   return (
-    <ul className="divide-y rounded-lg border">
-      {tracks.map((track, index) => (
-        <OfflineLibraryTrackItem key={track.trackId} track={track} index={index} />
-      ))}
-    </ul>
+    <div className="h-[600px] w-full rounded-lg border">
+      <ScrollArea className="h-full w-full" ref={parentRef}>
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const track = tracks[virtualItem.index];
+            if (!track) return null;
+
+            return (
+              <div
+                key={track.trackId}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${virtualItem.size}px`,
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+                className="border-b last:border-b-0"
+              >
+                <OfflineLibraryTrackItem track={track} index={virtualItem.index} />
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
