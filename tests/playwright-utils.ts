@@ -264,14 +264,19 @@ export const test = base.extend<{
 
       // Get or create artist
       const artistName = options?.artist || "Test Artist";
-      const artist = await testPrisma.artist.upsert({
-        where: { normalizedName: artistName.toLowerCase().trim() },
-        update: {},
-        create: {
-          name: artistName,
-          normalizedName: artistName.toLowerCase().trim(),
-        },
+      const normalizedName = artistName.toLowerCase().trim();
+      let artist = await testPrisma.artist.findFirst({
+        where: { normalizedName },
       });
+
+      if (!artist) {
+        artist = await testPrisma.artist.create({
+          data: {
+            name: artistName,
+            normalizedName,
+          },
+        });
+      }
 
       const track = await testPrisma.track.create({
         data: {

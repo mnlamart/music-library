@@ -115,26 +115,30 @@ export async function getOrCreateAlbum(
     return null;
   }
 
-  const album = await prisma.album.upsert({
+  // Try to find existing album first
+  let album = await prisma.album.findFirst({
     where: {
-      artistId_name: {
-        artistId,
-        name: albumName,
-      },
-    },
-    update: {
-      // Update year if provided and not already set
-      ...(year && { year }),
-    },
-    create: {
-      name: albumName,
       artistId,
-      ...(year && { year }),
+      name: albumName,
     },
     select: {
       id: true,
     },
   });
+
+  // If not found, create it
+  if (!album) {
+    album = await prisma.album.create({
+      data: {
+        name: albumName,
+        artistId,
+        ...(year && { year }),
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
 
   return album;
 }
@@ -152,26 +156,30 @@ export async function getOrCreateAlbumTx(
     return null;
   }
 
-  const album = await tx.album.upsert({
+  // Try to find existing album first
+  let album = await tx.album.findFirst({
     where: {
-      artistId_name: {
-        artistId,
-        name: albumName,
-      },
-    },
-    update: {
-      // Update year if provided and not already set
-      ...(year && { year }),
-    },
-    create: {
-      name: albumName,
       artistId,
-      ...(year && { year }),
+      name: albumName,
     },
     select: {
       id: true,
     },
   });
+
+  // If not found, create it
+  if (!album) {
+    album = await tx.album.create({
+      data: {
+        name: albumName,
+        artistId,
+        ...(year && { year }),
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
 
   return album;
 }
