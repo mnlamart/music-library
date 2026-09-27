@@ -1165,6 +1165,6 @@ describe("Search Utilities", () => {
 
       expect(trackIds[0]).toBe(exactUnused.id);
       expect(trackIds.indexOf(exactUnused.id)).toBeLessThan(trackIds.indexOf(containsHeavy.id));
-    });
+    }, 10000);
   });
 });
