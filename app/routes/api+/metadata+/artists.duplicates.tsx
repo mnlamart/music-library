@@ -32,54 +32,49 @@ export async function loader({ request }: Route.LoaderArgs) {
   const minTracks = parseInt(url.searchParams.get("minTracks") || "2", 10);
 
   // Find artists with duplicate normalized names
-  // First, get all normalized names that have more than one artist
-  const duplicateGroups = await prisma.artist.groupBy({
-    by: ["normalizedName"],
+  // Get all non-merged artists with track and album counts
+  const allArtists = await prisma.artist.findMany({
     where: {
-      mergedIntoId: null, // Exclude already-merged artists
+      mergedIntoId: null,
     },
-    having: {
-      normalizedName: {
-        _count: {
-          gt: 1,
+    select: {
+      id: true,
+      name: true,
+      normalizedName: true,
+      _count: {
+        select: {
+          tracks: true,
+          albums: true,
         },
       },
     },
+    orderBy: {
+      createdAt: "asc",
+    },
   });
 
-  // For each group, fetch artist details with track and album counts
-  const groups = await Promise.all(
-    duplicateGroups.map(async (group) => {
-      const artists = await prisma.artist.findMany({
-        where: {
-          normalizedName: group.normalizedName,
-          mergedIntoId: null,
-        },
-        select: {
-          id: true,
-          name: true,
-          _count: {
-            select: {
-              tracks: true,
-              albums: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
+  // Group by normalizedName in JavaScript
+  const artistsByNormalizedName = new Map<string, typeof allArtists>();
+  for (const artist of allArtists) {
+    const existing = artistsByNormalizedName.get(artist.normalizedName) || [];
+    existing.push(artist);
+    artistsByNormalizedName.set(artist.normalizedName, existing);
+  }
 
+  // Filter groups to only include duplicates with artists meeting minTracks threshold
+  const validGroups = Array.from(artistsByNormalizedName.entries())
+    .filter(([_, artists]) => artists.length > 1) // Only groups with duplicates
+    .map(([normalizedName, artists]) => {
       // Filter by minTracks
       const filteredArtists = artists.filter((artist) => artist._count.tracks >= minTracks);
 
-      // Only return groups that have at least one artist meeting the threshold
+      // Only return if at least one artist meets threshold
       if (filteredArtists.length === 0) {
         return null;
       }
 
       return {
-        normalizedName: group.normalizedName,
+        normalizedName,
         artists: filteredArtists.map((artist) => ({
           id: artist.id,
           name: artist.name,
@@ -87,11 +82,8 @@ export async function loader({ request }: Route.LoaderArgs) {
           albumCount: artist._count.albums,
         })),
       };
-    }),
-  );
-
-  // Filter out null groups and ensure each group still has duplicates after filtering
-  const validGroups = groups.filter((g) => g !== null && g.artists.length > 1);
+    })
+    .filter((g) => g !== null && g.artists.length > 1); // Ensure still duplicates after filtering
 
   return data({ groups: validGroups });
 }

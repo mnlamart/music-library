@@ -32,63 +32,58 @@ export async function loader({ request }: Route.LoaderArgs) {
   const minTracks = parseInt(url.searchParams.get("minTracks") || "2", 10);
 
   // Find albums with duplicate artist+name combinations
-  // Group by artistId and name to find duplicates
-  const duplicateGroups = await prisma.album.groupBy({
-    by: ["artistId", "name"],
+  // Get all non-merged albums with track counts
+  const allAlbums = await prisma.album.findMany({
     where: {
-      mergedIntoId: null, // Exclude already-merged albums
+      mergedIntoId: null,
     },
-    having: {
-      artistId: {
-        _count: {
-          gt: 1,
-        },
-      },
-    },
-  });
-
-  // For each group, fetch album details with track counts
-  const groups = await Promise.all(
-    duplicateGroups.map(async (group) => {
-      const albums = await prisma.album.findMany({
-        where: {
-          artistId: group.artistId,
-          name: group.name,
-          mergedIntoId: null,
-        },
+    select: {
+      id: true,
+      name: true,
+      artistId: true,
+      year: true,
+      artist: {
         select: {
           id: true,
           name: true,
-          year: true,
-          artist: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          _count: {
-            select: {
-              tracks: true,
-            },
-          },
         },
-        orderBy: {
-          createdAt: "asc",
+      },
+      _count: {
+        select: {
+          tracks: true,
         },
-      });
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
 
+  // Group by artistId+name in JavaScript
+  const albumsByKey = new Map<string, typeof allAlbums>();
+  for (const album of allAlbums) {
+    const key = `${album.artistId}:${album.name}`;
+    const existing = albumsByKey.get(key) || [];
+    existing.push(album);
+    albumsByKey.set(key, existing);
+  }
+
+  // Filter groups to only include duplicates with albums meeting minTracks threshold
+  const validGroups = Array.from(albumsByKey.entries())
+    .filter(([_, albums]) => albums.length > 1) // Only groups with duplicates
+    .map(([_, albums]) => {
       // Filter by minTracks
       const filteredAlbums = albums.filter((album) => album._count.tracks >= minTracks);
 
-      // Only return groups that have at least one album meeting the threshold
+      // Only return if at least one album meets threshold
       if (filteredAlbums.length === 0) {
         return null;
       }
 
       return {
-        artistId: group.artistId,
-        artistName: albums[0]?.artist.name || "",
-        name: group.name,
+        artistId: albums[0]!.artistId,
+        artistName: albums[0]!.artist.name,
+        name: albums[0]!.name,
         albums: filteredAlbums.map((album) => ({
           id: album.id,
           name: album.name,
@@ -96,11 +91,8 @@ export async function loader({ request }: Route.LoaderArgs) {
           trackCount: album._count.tracks,
         })),
       };
-    }),
-  );
-
-  // Filter out null groups and ensure each group still has duplicates after filtering
-  const validGroups = groups.filter((g) => g !== null && g.albums.length > 1);
+    })
+    .filter((g) => g !== null && g.albums.length > 1); // Ensure still duplicates after filtering
 
   return data({ groups: validGroups });
 }

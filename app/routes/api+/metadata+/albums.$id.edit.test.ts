@@ -1,29 +1,35 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
-import { createUser } from "#tests/db-utils.ts";
+import { requireUserId } from "#app/utils/auth.server.ts";
 import { action } from "./albums.$id.edit.tsx";
 
+vi.mock("#app/utils/auth.server.ts", () => ({
+  requireUserId: vi.fn(),
+}));
+
 describe("POST /api/metadata/albums/:id/edit", () => {
+  let mockUserId: string;
+
   beforeEach(async () => {
+    mockUserId = "test-user-id";
+    vi.mocked(requireUserId).mockResolvedValue(mockUserId);
     await prisma.album.deleteMany();
     await prisma.artist.deleteMany();
     await prisma.user.deleteMany();
+  });
+
+  test("curator can edit album", async () => {
     await prisma.role.upsert({
       where: { name: "curator" },
       update: {},
       create: { name: "curator", description: "Curator" },
     });
-    await prisma.role.upsert({
-      where: { name: "user" },
-      update: {},
-      create: { name: "user", description: "User" },
-    });
-  });
 
-  test("curator can edit album", async () => {
-    const curator = await prisma.user.create({
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
@@ -46,7 +52,6 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         name: "Updated Album",
@@ -56,15 +61,14 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       }),
     });
 
-    const response = await action({ request, params: { id: album.id } });
-    const data = await response.json();
+    const result = await action({ request, params: { id: album.id } } as any);
+    const data = result.data;
 
-    expect(response.status).toBe(200);
     expect(data.album.name).toBe("Updated Album");
     expect(data.album.year).toBe(2024);
     expect(data.edit).toBeDefined();
     expect(data.edit.comment).toBe("Fixing album name");
-    expect(data.edit.editedBy).toBe(curator.id);
+    expect(data.edit.editedBy).toBe(mockUserId);
 
     const albumInDb = await prisma.album.findUnique({ where: { id: album.id } });
     expect(albumInDb?.name).toBe("Updated Album");
@@ -72,9 +76,17 @@ describe("POST /api/metadata/albums/:id/edit", () => {
   });
 
   test("can change album artist", async () => {
-    const curator = await prisma.user.create({
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
@@ -104,7 +116,6 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         name: "Album",
@@ -113,10 +124,9 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       }),
     });
 
-    const response = await action({ request, params: { id: album.id } });
-    const data = await response.json();
+    const result = await action({ request, params: { id: album.id } } as any);
+    const data = result.data;
 
-    expect(response.status).toBe(200);
     expect(data.album.artistId).toBe(artist2.id);
 
     const albumInDb = await prisma.album.findUnique({ where: { id: album.id } });
@@ -124,9 +134,17 @@ describe("POST /api/metadata/albums/:id/edit", () => {
   });
 
   test("regular user cannot edit album", async () => {
-    const user = await prisma.user.create({
+    await prisma.role.upsert({
+      where: { name: "user" },
+      update: {},
+      create: { name: "user", description: "User" },
+    });
+
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "user@test.com",
+        username: "user",
         roles: { connect: { name: "user" } },
       },
     });
@@ -149,7 +167,6 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(user.id),
       },
       body: JSON.stringify({
         name: "Updated Album",
@@ -158,13 +175,21 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       }),
     });
 
-    await expect(action({ request, params: { id: album.id } })).rejects.toThrow();
+    await expect(action({ request, params: { id: album.id } } as any)).rejects.toThrow();
   });
 
   test("requires name and artistId fields", async () => {
-    const curator = await prisma.user.create({
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
@@ -187,20 +212,27 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         year: 2024,
       }),
     });
 
-    await expect(action({ request, params: { id: album.id } })).rejects.toThrow();
+    await expect(action({ request, params: { id: album.id } } as any)).rejects.toThrow();
   });
 
   test("creates edit history entry", async () => {
-    const curator = await prisma.user.create({
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
@@ -224,7 +256,6 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         name: "Updated Album",
@@ -234,7 +265,7 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       }),
     });
 
-    await action({ request, params: { id: album.id } });
+    await action({ request, params: { id: album.id } } as any);
 
     const edits = await prisma.albumEdit.findMany({
       where: { albumId: album.id },
@@ -248,9 +279,17 @@ describe("POST /api/metadata/albums/:id/edit", () => {
   });
 
   test("returns 404 for non-existent album", async () => {
-    const curator = await prisma.user.create({
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
@@ -266,7 +305,6 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         name: "Updated Album",
@@ -274,16 +312,6 @@ describe("POST /api/metadata/albums/:id/edit", () => {
       }),
     });
 
-    await expect(action({ request, params: { id: "nonexistent" } })).rejects.toThrow();
+    await expect(action({ request, params: { id: "nonexistent" } } as any)).rejects.toThrow();
   });
 });
-
-async function createSessionCookie(userId: string): Promise<string> {
-  const session = await prisma.session.create({
-    data: {
-      userId,
-      expirationDate: new Date(Date.now() + 1000 * 60 * 60 * 24),
-    },
-  });
-  return `en_session=${session.id}`;
-}

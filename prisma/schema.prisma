@@ -213,7 +213,7 @@ model Passkey {
 model Artist {
   id             String   @id @default(cuid())
   name           String
-  normalizedName String   @unique
+  normalizedName String
   bio            String?
   imageUrl       String?
   website        String?
@@ -273,7 +273,6 @@ model Album {
   mergedAlbum  Album?   @relation("AlbumMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
   mergedFrom   Album[]  @relation("AlbumMerge")
 
-  @@unique([artistId, name]) // Unique album identifier
   @@index([artistId, name])
   @@index([artistId])
   @@index([mergedIntoId])

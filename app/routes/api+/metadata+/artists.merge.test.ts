@@ -1,37 +1,45 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
-import { createUser } from "#tests/db-utils.ts";
+import { requireUserId } from "#app/utils/auth.server.ts";
 import { action } from "./artists.merge.tsx";
 
+vi.mock("#app/utils/auth.server.ts", () => ({
+  requireUserId: vi.fn(),
+}));
+
 describe("POST /api/metadata/artists/merge", () => {
+  let mockUserId: string;
+
   beforeEach(async () => {
+    mockUserId = "test-user-id";
+    vi.mocked(requireUserId).mockResolvedValue(mockUserId);
     await prisma.track.deleteMany();
     await prisma.album.deleteMany();
     await prisma.artist.deleteMany();
     await prisma.user.deleteMany();
+  });
+
+  test("curator can merge artists", async () => {
     await prisma.role.upsert({
       where: { name: "curator" },
       update: {},
       create: { name: "curator", description: "Curator" },
     });
-    await prisma.role.upsert({
-      where: { name: "user" },
-      update: {},
-      create: { name: "user", description: "User" },
-    });
-  });
 
-  test("curator can merge artists", async () => {
     const curator = await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
 
-    // Create service first
-    const service = await prisma.service.create({
-      data: {
+    // Create service first (use upsert to avoid conflicts)
+    const service = await prisma.service.upsert({
+      where: { name: "test" },
+      update: {},
+      create: {
         name: "test",
         displayName: "Test",
         baseUrl: "http://test.com",
@@ -84,7 +92,6 @@ describe("POST /api/metadata/artists/merge", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         sourceId: sourceArtist.id,
@@ -94,10 +101,9 @@ describe("POST /api/metadata/artists/merge", () => {
       }),
     });
 
-    const response = await action({ request, params: {} });
-    const data = await response.json();
+    const result = await action({ request, params: {} } as any);
+    const data = result.data;
 
-    expect(response.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.tracksUpdated).toBe(2);
     expect(data.albumsUpdated).toBe(1);
@@ -121,9 +127,17 @@ describe("POST /api/metadata/artists/merge", () => {
   });
 
   test("prevents self-merge", async () => {
-    const curator = await prisma.user.create({
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
@@ -139,7 +153,6 @@ describe("POST /api/metadata/artists/merge", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         sourceId: artist.id,
@@ -149,13 +162,21 @@ describe("POST /api/metadata/artists/merge", () => {
       }),
     });
 
-    await expect(action({ request, params: {} })).rejects.toThrow();
+    await expect(action({ request, params: {} } as any)).rejects.toThrow();
   });
 
   test("prevents circular merge (target already merged)", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
     const curator = await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
@@ -188,7 +209,6 @@ describe("POST /api/metadata/artists/merge", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         sourceId: artist2.id,
@@ -198,13 +218,21 @@ describe("POST /api/metadata/artists/merge", () => {
       }),
     });
 
-    await expect(action({ request, params: {} })).rejects.toThrow();
+    await expect(action({ request, params: {} } as any)).rejects.toThrow();
   });
 
   test("requires comment field", async () => {
-    const curator = await prisma.user.create({
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
         roles: { connect: { name: "curator" } },
       },
     });
@@ -227,7 +255,6 @@ describe("POST /api/metadata/artists/merge", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(curator.id),
       },
       body: JSON.stringify({
         sourceId: artist1.id,
@@ -236,13 +263,21 @@ describe("POST /api/metadata/artists/merge", () => {
       }),
     });
 
-    await expect(action({ request, params: {} })).rejects.toThrow();
+    await expect(action({ request, params: {} } as any)).rejects.toThrow();
   });
 
   test("regular user cannot merge artists", async () => {
-    const user = await prisma.user.create({
+    await prisma.role.upsert({
+      where: { name: "user" },
+      update: {},
+      create: { name: "user", description: "User" },
+    });
+
+    await prisma.user.create({
       data: {
-        ...createUser(),
+        id: mockUserId,
+        email: "user@test.com",
+        username: "user",
         roles: { connect: { name: "user" } },
       },
     });
@@ -265,7 +300,6 @@ describe("POST /api/metadata/artists/merge", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: await createSessionCookie(user.id),
       },
       body: JSON.stringify({
         sourceId: artist1.id,
@@ -275,16 +309,6 @@ describe("POST /api/metadata/artists/merge", () => {
       }),
     });
 
-    await expect(action({ request, params: {} })).rejects.toThrow();
+    await expect(action({ request, params: {} } as any)).rejects.toThrow();
   });
 });
-
-async function createSessionCookie(userId: string): Promise<string> {
-  const session = await prisma.session.create({
-    data: {
-      userId,
-      expirationDate: new Date(Date.now() + 1000 * 60 * 60 * 24),
-    },
-  });
-  return `en_session=${session.id}`;
-}
