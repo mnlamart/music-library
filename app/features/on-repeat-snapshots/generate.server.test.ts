@@ -120,13 +120,17 @@ describe("rankPlayCompletedTracks", () => {
       const track = await createTrack(`T${i}`);
       trackIds.push(track.id);
       // Distinct counts: track 0 has 35 completes … track 34 has 1
+      // Batch create events for better performance
+      const events = [];
       for (let j = 0; j < 35 - i; j++) {
-        await recordCompleted({
+        events.push({
+          type: USAGE_EVENT_TYPES.play_completed,
           userId: user.id,
           trackId: track.id,
           createdAt: new Date(Date.UTC(2026, 7, 1, 0, j)),
         });
       }
+      await prisma.usageEvent.createMany({ data: events });
     }
 
     const ranked = await rankPlayCompletedTracks({
