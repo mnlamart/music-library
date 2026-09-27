@@ -52,6 +52,11 @@ export const SearchLimitSchema = z
 export const SearchTypeSchema = z.enum(["all", "tracks", "albums", "artists", "playlists"]);
 
 /**
+ * Search scope validation schema
+ */
+export const SearchScopeSchema = z.enum(["all", "library"]);
+
+/**
  * Cursor validation schema
  * Validates composite cursor: base64-encoded JSON with optional per-type sort tuples
  */

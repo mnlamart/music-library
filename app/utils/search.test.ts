@@ -548,17 +548,72 @@ describe("Search Utilities", () => {
         data: { userId: userB.id, trackId: trackB.id },
       });
 
-      // User A should see only track A
-      const resultA = await searchTracks("User", 10, undefined, true, userA.id);
+      // User A should see only track A with scope='library'
+      const resultA = await searchTracks("User", 10, undefined, true, userA.id, "library");
       const trackIdsA = resultA.results.filter((r) => r.type === "track").map((r) => r.id);
       expect(trackIdsA).toContain(trackA.id);
       expect(trackIdsA).not.toContain(trackB.id);
 
-      // User B should see only track B
-      const resultB = await searchTracks("User", 10, undefined, true, userB.id);
+      // User B should see only track B with scope='library'
+      const resultB = await searchTracks("User", 10, undefined, true, userB.id, "library");
       const trackIdsB = resultB.results.filter((r) => r.type === "track").map((r) => r.id);
       expect(trackIdsB).toContain(trackB.id);
       expect(trackIdsB).not.toContain(trackA.id);
+    });
+
+    it("scope='all' should return all tracks even with userId", async () => {
+      const localService = await prisma.service.upsert({
+        where: { name: "local" },
+        update: {},
+        create: {
+          name: "local",
+          displayName: "Local Upload",
+          baseUrl: "",
+          isActive: true,
+        },
+      });
+
+      const user = await prisma.user.create({
+        data: {
+          email: `all-scope-${timestamp}@test.com`,
+          username: `all-scope-${timestamp}`,
+        },
+      });
+
+      const artist = await prisma.artist.create({
+        data: {
+          name: "All Scope Artist",
+          normalizedName: "all scope artist",
+        },
+      });
+
+      const trackInLibrary = await prisma.track.create({
+        data: {
+          title: "In Library Track",
+          artistId: artist.id,
+          serviceId: localService.id,
+          externalId: `in-library-track-${timestamp}`,
+        },
+      });
+
+      const trackNotInLibrary = await prisma.track.create({
+        data: {
+          title: "Not In Library Track",
+          artistId: artist.id,
+          serviceId: localService.id,
+          externalId: `not-in-library-track-${timestamp}`,
+        },
+      });
+
+      await prisma.userTrack.create({
+        data: { userId: user.id, trackId: trackInLibrary.id },
+      });
+
+      // With scope='all', should return both tracks
+      const result = await searchTracks("Track", 10, undefined, true, user.id, "all");
+      const trackIds = result.results.filter((r) => r.type === "track").map((r) => r.id);
+      expect(trackIds).toContain(trackInLibrary.id);
+      expect(trackIds).toContain(trackNotInLibrary.id);
     });
 
     it("should return all tracks when userId is not provided (backward compat)", async () => {
@@ -670,14 +725,14 @@ describe("Search Utilities", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // User A should see album A but not album B
-      const resultA = await searchAlbums("Library Album", 10, undefined, true, userA.id);
+      // User A should see album A but not album B with scope='library'
+      const resultA = await searchAlbums("Library Album", 10, undefined, true, userA.id, "library");
       const albumIdsA = resultA.results.filter((r) => r.type === "album").map((r) => r.id);
       expect(albumIdsA).toContain(albumA.id);
       expect(albumIdsA).not.toContain(albumB.id);
 
-      // User B should see album B but not album A
-      const resultB = await searchAlbums("Library Album", 10, undefined, true, userB.id);
+      // User B should see album B but not album A with scope='library'
+      const resultB = await searchAlbums("Library Album", 10, undefined, true, userB.id, "library");
       const albumIdsB = resultB.results.filter((r) => r.type === "album").map((r) => r.id);
       expect(albumIdsB).toContain(albumB.id);
       expect(albumIdsB).not.toContain(albumA.id);
@@ -737,14 +792,28 @@ describe("Search Utilities", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // User A should see artist A but not artist B
-      const resultA = await searchArtists("Library Artist", 10, undefined, true, userA.id);
+      // User A should see artist A but not artist B with scope='library'
+      const resultA = await searchArtists(
+        "Library Artist",
+        10,
+        undefined,
+        true,
+        userA.id,
+        "library",
+      );
       const artistIdsA = resultA.results.filter((r) => r.type === "artist").map((r) => r.id);
       expect(artistIdsA).toContain(artistA.id);
       expect(artistIdsA).not.toContain(artistB.id);
 
-      // User B should see artist B but not artist A
-      const resultB = await searchArtists("Library Artist", 10, undefined, true, userB.id);
+      // User B should see artist B but not artist A with scope='library'
+      const resultB = await searchArtists(
+        "Library Artist",
+        10,
+        undefined,
+        true,
+        userB.id,
+        "library",
+      );
       const artistIdsB = resultB.results.filter((r) => r.type === "artist").map((r) => r.id);
       expect(artistIdsB).toContain(artistB.id);
       expect(artistIdsB).not.toContain(artistA.id);

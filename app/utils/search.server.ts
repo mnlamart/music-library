@@ -196,7 +196,8 @@ async function enrichTrackSearchResults(
  * @param limit - Pre-validated limit (1-100)
  * @param cursor - Pre-validated cursor (optional)
  * @param usePrefix - Whether to use prefix matching
- * @param userId - Optional user ID to scope results to the user's library via UserTrack
+ * @param userId - Optional user ID for Personal Play Boost
+ * @param scope - Search scope: 'library' (filter by userId) or 'all' (show all tracks)
  * @returns Search results with pagination
  */
 export async function searchTracks(
@@ -205,6 +206,7 @@ export async function searchTracks(
   cursor?: string,
   usePrefix: boolean = true,
   userId?: string,
+  scope: "library" | "all" = "all",
 ): Promise<SearchResponse> {
   if (!query || !query.trim()) {
     return emptySearchResponse(limit);
@@ -223,9 +225,10 @@ export async function searchTracks(
   const sqlEscapedFtsQuery = ftsQuery.replace(/'/g, "''");
 
   const escapedUserId = userId ? userId.replace(/'/g, "''") : null;
-  const userTrackJoin = escapedUserId
-    ? `JOIN "UserTrack" ut ON ut."trackId" = t.id AND ut."userId" = '${escapedUserId}' AND ut."isActive" = true`
-    : "";
+  const userTrackJoin =
+    escapedUserId && scope === "library"
+      ? `JOIN "UserTrack" ut ON ut."trackId" = t.id AND ut."userId" = '${escapedUserId}' AND ut."isActive" = true`
+      : "";
 
   // Personal Play Boost (ADR-028): load/cache lifetime play_completed counts for
   // the current user, then subtract a bounded boost from FTS rank (lower = better).
@@ -328,6 +331,7 @@ export async function searchAlbums(
   cursor?: string,
   usePrefix: boolean = true,
   userId?: string,
+  scope: "library" | "all" = "all",
 ): Promise<SearchResponse> {
   if (!query.trim()) {
     return emptySearchResponse(limit);
@@ -345,9 +349,10 @@ export async function searchAlbums(
   const prefixPattern = `${escapeLikeLiterals(normalizedQuery)}%`;
   const sqlEscapedFtsQuery = ftsQuery.replace(/'/g, "''");
 
-  const albumUserJoin = userId
-    ? `AND EXISTS (SELECT 1 FROM "Track" t2 JOIN "UserTrack" ut2 ON ut2."trackId" = t2.id WHERE t2."albumId" = alb.id AND ut2."userId" = '${userId.replace(/'/g, "''")}' AND ut2."isActive" = true)`
-    : "";
+  const albumUserJoin =
+    userId && scope === "library"
+      ? `AND EXISTS (SELECT 1 FROM "Track" t2 JOIN "UserTrack" ut2 ON ut2."trackId" = t2.id WHERE t2."albumId" = alb.id AND ut2."userId" = '${userId.replace(/'/g, "''")}' AND ut2."isActive" = true)`
+      : "";
 
   const cursorFilter = curA
     ? cursorClause(curA, "relevance_rank", "fts_rank", "alb.name", "alb.id")
@@ -431,6 +436,7 @@ export async function searchArtists(
   cursor?: string,
   usePrefix: boolean = true,
   userId?: string,
+  scope: "library" | "all" = "all",
 ): Promise<SearchResponse> {
   if (!query.trim()) {
     return emptySearchResponse(limit);
@@ -448,9 +454,10 @@ export async function searchArtists(
   const prefixPattern = `${escapeLikeLiterals(normalizedQuery)}%`;
   const sqlEscapedFtsQuery = ftsQuery.replace(/'/g, "''");
 
-  const artistUserJoin = userId
-    ? `AND EXISTS (SELECT 1 FROM "Track" t2 JOIN "UserTrack" ut2 ON ut2."trackId" = t2.id WHERE t2."artistId" = a.id AND ut2."userId" = '${userId.replace(/'/g, "''")}' AND ut2."isActive" = true)`
-    : "";
+  const artistUserJoin =
+    userId && scope === "library"
+      ? `AND EXISTS (SELECT 1 FROM "Track" t2 JOIN "UserTrack" ut2 ON ut2."trackId" = t2.id WHERE t2."artistId" = a.id AND ut2."userId" = '${userId.replace(/'/g, "''")}' AND ut2."isActive" = true)`
+      : "";
 
   const cursorFilter = curAr
     ? cursorClause(curAr, "relevance_rank", "fts_rank", "a.name", "a.id")
@@ -633,6 +640,7 @@ export async function searchAll(
   type?: "all" | "tracks" | "albums" | "artists" | "playlists",
   usePrefix: boolean = true,
   userId?: string,
+  scope: "library" | "all" = "all",
 ): Promise<SearchResponse> {
   if (!query.trim()) {
     return emptySearchResponse(limit);
@@ -648,19 +656,19 @@ export async function searchAll(
   // Search all types in parallel
   const [tracksResult, albumsResult, artistsResult, playlistsResult] = await Promise.all([
     trackLimit > 0
-      ? searchTracks(query, trackLimit, cursor, usePrefix, userId)
+      ? searchTracks(query, trackLimit, cursor, usePrefix, userId, scope)
       : Promise.resolve({
           results: [],
           pagination: { limit: 0, hasNext: false, nextCursor: null },
         }),
     albumLimit > 0
-      ? searchAlbums(query, albumLimit, cursor, usePrefix, userId)
+      ? searchAlbums(query, albumLimit, cursor, usePrefix, userId, scope)
       : Promise.resolve({
           results: [],
           pagination: { limit: 0, hasNext: false, nextCursor: null },
         }),
     artistLimit > 0
-      ? searchArtists(query, artistLimit, cursor, usePrefix, userId)
+      ? searchArtists(query, artistLimit, cursor, usePrefix, userId, scope)
       : Promise.resolve({
           results: [],
           pagination: { limit: 0, hasNext: false, nextCursor: null },

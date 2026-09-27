@@ -2,11 +2,12 @@
  * Search results — mixed feed with horizontal cards, sorted by relevance
  */
 
-import { Link } from "react-router";
+import { Form, Link } from "react-router";
 import { InfiniteScrollSentinel } from "#app/components/infinite-scroll-sentinel.tsx";
 import { TrackListItem } from "#app/components/track-list-item.tsx";
 import { type SearchResult, type TrackSearchResult } from "#app/types/search.ts";
 import { mapSearchTrackToListItem } from "#app/utils/map-search-track.ts";
+import { Button } from "./ui/button.tsx";
 import { Icon } from "./ui/icon.tsx";
 
 interface SearchPlaylist {
@@ -23,10 +24,23 @@ interface SearchResultsProps {
   hasNext?: boolean;
   isLoading?: boolean;
   playlists?: SearchPlaylist[];
+  scope?: "library" | "all";
 }
 
 const EMPTY_RESULTS: SearchResult[] = [];
 const EMPTY_PLAYLISTS: SearchPlaylist[] = [];
+
+function AddToLibraryButton({ trackId }: { trackId: string }) {
+  return (
+    <Form method="post" action="/resources/track-library">
+      <input type="hidden" name="trackId" value={trackId} />
+      <input type="hidden" name="action" value="add" />
+      <Button type="submit" variant="ghost" size="icon" className="h-8 w-8" title="Add to Library">
+        <Icon name="plus" className="h-4 w-4" />
+      </Button>
+    </Form>
+  );
+}
 
 /** Per-entity configuration — single source of truth for links, icons, subtitles */
 const ENTITY_CONFIG: Record<
@@ -94,6 +108,7 @@ export function SearchResults({
   hasNext = false,
   isLoading = false,
   playlists = EMPTY_PLAYLISTS,
+  scope = "all",
 }: SearchResultsProps) {
   if (results.length === 0 && !isLoading && query.trim()) {
     return (
@@ -120,6 +135,9 @@ export function SearchResults({
           const currentTrackIndex = trackIndex;
           trackIndex += 1;
 
+          const isInLibrary = Boolean(result.addedAt);
+          const showAddToLibrary = scope === "all" && !isInLibrary;
+
           return (
             <TrackListItem
               key={`track-${result.id}`}
@@ -132,6 +150,9 @@ export function SearchResults({
               usePlaybackIndex={false}
               playlistContext={{ type: "track", trackId: result.id }}
               showDuration
+              itemActionsContent={
+                showAddToLibrary ? <AddToLibraryButton trackId={result.id} /> : undefined
+              }
             />
           );
         }

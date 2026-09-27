@@ -22,6 +22,7 @@ import { prisma } from "#app/utils/db.server.ts";
 import { type Route } from "./+types/search.ts";
 
 const RECENT_SEARCHES_KEY = "music-library:recent-searches";
+const SEARCH_SCOPE_KEY = "music-library:search-scope";
 const MAX_RECENT = 8;
 
 function getRecentSearches(): string[] {
@@ -33,6 +34,22 @@ function getRecentSearches(): string[] {
   } catch {
     return [];
   }
+}
+
+function getSearchScope(): "library" | "all" {
+  if (typeof window === "undefined") return "all";
+  try {
+    const raw = localStorage.getItem(SEARCH_SCOPE_KEY);
+    if (raw === "library" || raw === "all") return raw;
+    return "all";
+  } catch {
+    return "all";
+  }
+}
+
+function setSearchScope(scope: "library" | "all") {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SEARCH_SCOPE_KEY, scope);
 }
 
 function addRecentSearch(query: string) {
@@ -94,6 +111,7 @@ export default function SearchPage() {
 
   const [query, setQuery] = useState(initialQuery);
   const [activeType, setActiveType] = useState(initialType);
+  const [activeScope, setActiveScope] = useState<"library" | "all">(() => getSearchScope());
   const [recentSearches, setRecentSearches] = useState<string[]>(() => getRecentSearches());
 
   const searchData = fetcher.data as SearchResponse | undefined;
@@ -138,7 +156,7 @@ export default function SearchPage() {
 
   // Debounced search
   const doSearch = useCallback(
-    (q: string, type: string) => {
+    (q: string, type: string, scope: "library" | "all") => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
 
       // Reset accumulated results for new search
@@ -151,7 +169,7 @@ export default function SearchPage() {
       }
 
       debounceRef.current = setTimeout(() => {
-        const params = new URLSearchParams({ q: q.trim(), type });
+        const params = new URLSearchParams({ q: q.trim(), type, scope });
         fetcher.load(`/api/search?${params}`);
       }, 400);
     },
@@ -161,13 +179,20 @@ export default function SearchPage() {
   // Handle input changes
   const handleInputChange = (value: string) => {
     setQuery(value);
-    doSearch(value, activeType);
+    doSearch(value, activeType, activeScope);
   };
 
   // Handle type filter change
   const handleTypeChange = (type: string) => {
     setActiveType(type);
-    doSearch(query, type);
+    doSearch(query, type, activeScope);
+  };
+
+  // Handle scope change
+  const handleScopeChange = (scope: "library" | "all") => {
+    setActiveScope(scope);
+    setSearchScope(scope);
+    doSearch(query, activeType, scope);
   };
 
   // Handle cancel / back
@@ -197,7 +222,7 @@ export default function SearchPage() {
     setRecentSearches(getRecentSearches());
     setAccumulated([]);
     isLoadMore.current = false;
-    const params = new URLSearchParams({ q, type: activeType });
+    const params = new URLSearchParams({ q, type: activeType, scope: activeScope });
     navigate(`/search?${params}`, { replace: true });
     fetcher.load(`/api/search?${params}`);
   };
@@ -210,6 +235,7 @@ export default function SearchPage() {
     const params = new URLSearchParams({
       q: query.trim(),
       type: activeType,
+      scope: activeScope,
       cursor,
     });
     fetcher.load(`/api/search?${params}`);
@@ -264,6 +290,30 @@ export default function SearchPage() {
                 </button>
               )}
             </form>
+          </div>
+
+          {/* Scope toggle - above type filters */}
+          <div className="container flex gap-2 border-b pb-2 pt-1">
+            <button
+              onClick={() => handleScopeChange("all")}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                activeScope === "all"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              }`}
+            >
+              All Tracks
+            </button>
+            <button
+              onClick={() => handleScopeChange("library")}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                activeScope === "library"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              }`}
+            >
+              My Library
+            </button>
           </div>
 
           {/* Type filter pills */}
@@ -339,6 +389,7 @@ export default function SearchPage() {
                 hasNext={hasNext}
                 isLoading={isLoading}
                 playlists={playlists}
+                scope={activeScope}
               />
             )}
 
