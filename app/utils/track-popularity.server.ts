@@ -31,7 +31,7 @@ export async function getTrackPlayCounts(trackIds: string[]): Promise<Map<string
   }
 
   return cachified({
-    key: `track-play-counts:${trackIds.sort().join(",")}`,
+    key: `track-play-counts:${[...trackIds].sort().join(",")}`,
     cache: lruCache,
     ttl: POPULARITY_CACHE_TTL,
     async getFreshValue() {
@@ -73,7 +73,7 @@ export async function getTrackLikeCounts(trackIds: string[]): Promise<Map<string
   }
 
   return cachified({
-    key: `track-like-counts:${trackIds.sort().join(",")}`,
+    key: `track-like-counts:${[...trackIds].sort().join(",")}`,
     cache: lruCache,
     ttl: POPULARITY_CACHE_TTL,
     async getFreshValue() {
@@ -117,7 +117,7 @@ export async function getUserTrackPlayCounts(
   }
 
   return cachified({
-    key: `user-track-play-counts:${userId}:${trackIds.sort().join(",")}`,
+    key: `user-track-play-counts:${userId}:${[...trackIds].sort().join(",")}`,
     cache: lruCache,
     ttl: POPULARITY_CACHE_TTL,
     async getFreshValue() {

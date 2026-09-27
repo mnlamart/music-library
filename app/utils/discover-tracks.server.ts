@@ -11,7 +11,7 @@ import {
 } from "#app/utils/discover.ts";
 import { type SortDirection } from "#app/utils/sort-direction.ts";
 import { getPlayCompletedCountsByTrack } from "#app/features/listening-insights/play-completed-counts.server.ts";
-import { getTrackPopularityStats } from "#app/utils/track-popularity.server.ts";
+import { getTrackPopularityStats, getTrackPlayCounts } from "#app/utils/track-popularity.server.ts";
 
 // Re-export shared types and functions for server use
 export {
@@ -171,18 +171,17 @@ async function listDiscoverTracksByPlayCount({
   limit: number;
   now: Date;
 }): Promise<ListDiscoverTracksResult> {
-  const counts = await getPlayCompletedCountsByTrack({
-    userId,
-    window: "ever",
-    now,
-  });
-
+  // Get all tracks first
   const allTracks = await prisma.track.findMany({
     select: {
       id: true,
       createdAt: true,
     },
   });
+
+  // Get GLOBAL play counts (across all users) for sorting
+  const trackIds = allTracks.map((t) => t.id);
+  const counts = await getTrackPlayCounts(trackIds);
 
   const sorted = [...allTracks].sort((a, b) => {
     const countA = counts.get(a.id) ?? 0;

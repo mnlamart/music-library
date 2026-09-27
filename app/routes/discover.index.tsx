@@ -118,6 +118,10 @@ export async function action({ request }: Route.ActionArgs) {
   return data({ success: false, message: "Invalid request" });
 }
 
+export async function clientAction(args: Route.ClientActionArgs) {
+  return action(args);
+}
+
 type DiscoverTrackListItemProps = {
   track: DiscoverTrack;
   index: number;
