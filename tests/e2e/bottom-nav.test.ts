@@ -53,7 +53,8 @@ test.describe("Bottom Navigation", () => {
     await expect(searchLink).toHaveAttribute("aria-current", "page");
   });
 
-  test("discover tab is active on discover page", async ({ page }) => {
+  test("discover tab is active on discover page", async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin();
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/discover");
 
@@ -63,7 +64,8 @@ test.describe("Bottom Navigation", () => {
     await expect(page).toHaveURL(/\/discover/);
   });
 
-  test("clicking tabs navigates to correct pages", async ({ page }) => {
+  test("clicking tabs navigates to correct pages", async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin();
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/");
     await dismissInstallBanner(page);
