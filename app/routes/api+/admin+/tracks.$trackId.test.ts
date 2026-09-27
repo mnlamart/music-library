@@ -136,8 +136,6 @@ describe("DELETE /api/admin/tracks/:trackId", () => {
       data: {
         success: true,
         trackId: track.id,
-        objectsDeleted: 1,
-        objectsPreserved: 0,
       },
     });
     expect(deleteFile).toHaveBeenCalledTimes(1);
@@ -167,8 +165,6 @@ describe("DELETE /api/admin/tracks/:trackId", () => {
       data: {
         success: true,
         trackId: duplicate.track.id,
-        objectsDeleted: 0,
-        objectsPreserved: 1,
       },
     });
     expect(deleteFile).not.toHaveBeenCalled();
@@ -219,8 +215,6 @@ describe("DELETE /api/admin/tracks/:trackId", () => {
       data: {
         success: true,
         trackId: doomed.track.id,
-        objectsDeleted: 0,
-        objectsPreserved: 1,
       },
     });
     expect(deleteFile).not.toHaveBeenCalled();
