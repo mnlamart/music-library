@@ -1,5 +1,5 @@
 import { prisma } from "#app/utils/db.server.ts";
-import { deleteFile } from "#app/utils/storage.server.ts";
+import { deleteUnreferencedObjectKeys } from "#app/utils/audio-cleanup.server.ts";
 import { scheduleQueueTick } from "#app/features/audio-archive/worker.server.ts";
 
 const MAX_ROWS = 500;
@@ -295,22 +295,6 @@ export async function getDeleteImpact(trackIds: string[]): Promise<DeleteImpact>
     userTracksCount: userTracks,
     playlistReferencesCount: playlistRefs,
   };
-}
-
-async function deleteUnreferencedObjectKeys(objectKeys: string[]): Promise<void> {
-  for (const objectKey of [...new Set(objectKeys)]) {
-    const stillReferenced = await prisma.trackAudioFile.count({
-      where: { objectKey },
-    });
-    if (stillReferenced > 0) {
-      continue;
-    }
-    try {
-      await deleteFile(objectKey);
-    } catch (error) {
-      console.error(`Failed to delete file ${objectKey}:`, error);
-    }
-  }
 }
 
 export async function deleteTracks(trackIds: string[]): Promise<{ deleted: number }> {
