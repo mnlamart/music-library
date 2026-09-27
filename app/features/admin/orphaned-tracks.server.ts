@@ -1,5 +1,5 @@
 import { prisma } from "#app/utils/db.server.ts";
-import { deleteFile } from "#app/utils/storage.server.ts";
+import { deleteUnreferencedObjectKeys } from "#app/utils/audio-cleanup.server.ts";
 import { scheduleQueueTick } from "#app/features/audio-archive/worker.server.ts";
 
 const MAX_ROWS = 500;
@@ -117,9 +117,7 @@ export async function getTracksWithoutAudio(
 ): Promise<TrackWithoutAudio[]> {
   const where = {
     audioFiles: { none: {} },
-    ...(serviceFilter && serviceFilter !== "all"
-      ? { service: { name: serviceFilter } }
-      : {}),
+    ...(serviceFilter && serviceFilter !== "all" ? { service: { name: serviceFilter } } : {}),
   };
 
   const tracks = await prisma.track.findMany({
@@ -186,13 +184,15 @@ export async function getTracksWithFailedJobs(
 }
 
 export async function getOrphanedAudioFiles(): Promise<OrphanedAudioFile[]> {
-  const orphaned = await prisma.$queryRaw<Array<{
-    id: string;
-    objectKey: string;
-    fileSize: number | null;
-    format: string | null;
-    uploadedAt: Date;
-  }>>`
+  const orphaned = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      objectKey: string;
+      fileSize: number | null;
+      format: string | null;
+      uploadedAt: Date;
+    }>
+  >`
     SELECT taf.id, taf.objectKey, taf.fileSize, taf.format, taf.uploadedAt
     FROM TrackAudioFile taf
     LEFT JOIN Track t ON taf.trackId = t.id
@@ -200,17 +200,13 @@ export async function getOrphanedAudioFiles(): Promise<OrphanedAudioFile[]> {
     ORDER BY taf.uploadedAt DESC
     LIMIT ${MAX_ROWS}
   `;
-  
+
   return orphaned;
 }
 
-export async function getUnusedTracks(
-  ageDays: number | null = 30,
-): Promise<UnusedTrack[]> {
+export async function getUnusedTracks(ageDays: number | null = 30): Promise<UnusedTrack[]> {
   const ageFilter =
-    ageDays !== null
-      ? new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000)
-      : new Date(0);
+    ageDays !== null ? new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000) : new Date(0);
 
   const tracks = await prisma.track.findMany({
     where: {
@@ -311,17 +307,14 @@ export async function deleteTracks(trackIds: string[]): Promise<{ deleted: numbe
     select: { objectKey: true },
   });
 
+  // Cascade-delete first, then re-count remaining TrackAudioFile rows.
+  // persistTrackAudio can reuse the same objectKey for another track; a
+  // pre-delete cleanup would wipe audio still needed for playback.
   const result = await prisma.track.deleteMany({
     where: { id: { in: trackIds } },
   });
 
-  for (const file of audioFiles) {
-    try {
-      await deleteFile(file.objectKey);
-    } catch (error) {
-      console.error(`Failed to delete file ${file.objectKey}:`, error);
-    }
-  }
+  await deleteUnreferencedObjectKeys(audioFiles.map((file) => file.objectKey));
 
   return { deleted: result.count };
 }
@@ -336,26 +329,27 @@ export async function cleanupOrphanedAudioFiles(fileIds: string[]): Promise<{ de
     select: { id: true, objectKey: true, trackId: true },
   });
 
-  const trackIds = [...new Set(allFiles.map(f => f.trackId))];
+  const trackIds = [...new Set(allFiles.map((f) => f.trackId))];
   const existingTracks = await prisma.track.findMany({
     where: { id: { in: trackIds } },
     select: { id: true },
   });
 
-  const existingTrackIds = new Set(existingTracks.map(t => t.id));
-  const orphanedFiles = allFiles.filter(f => !existingTrackIds.has(f.trackId));
+  const existingTrackIds = new Set(existingTracks.map((t) => t.id));
+  const orphanedFiles = allFiles.filter((f) => !existingTrackIds.has(f.trackId));
 
   let deleted = 0;
 
   for (const file of orphanedFiles) {
     try {
-      await deleteFile(file.objectKey);
       await prisma.trackAudioFile.delete({ where: { id: file.id } });
       deleted++;
     } catch (error) {
       console.error(`Failed to cleanup orphaned file ${file.objectKey}:`, error);
     }
   }
+
+  await deleteUnreferencedObjectKeys(orphanedFiles.map((file) => file.objectKey));
 
   return { deleted };
 }
