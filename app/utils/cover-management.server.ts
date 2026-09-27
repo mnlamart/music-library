@@ -102,6 +102,47 @@ export async function calculateImageHash(buffer: Buffer): Promise<string> {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+type AlbumLookup = {
+  id: string;
+  mergedIntoId: string | null;
+};
+
+type AlbumDb = {
+  album: {
+    findUnique: (args: {
+      where: { id: string };
+      select: { id: true; mergedIntoId: true };
+    }) => Promise<AlbumLookup | null>;
+  };
+};
+
+/**
+ * Follow mergedIntoId until we reach the living album.
+ * Upload/import must not keep attaching tracks to a merged-away source.
+ */
+async function resolveCanonicalAlbum(db: AlbumDb, album: AlbumLookup): Promise<{ id: string }> {
+  const seen = new Set<string>();
+  let current = album;
+
+  while (current.mergedIntoId) {
+    if (seen.has(current.id)) {
+      break;
+    }
+    seen.add(current.id);
+
+    const next = await db.album.findUnique({
+      where: { id: current.mergedIntoId },
+      select: { id: true, mergedIntoId: true },
+    });
+    if (!next) {
+      break;
+    }
+    current = next;
+  }
+
+  return { id: current.id };
+}
+
 /**
  * Get or create an Album record
  * Uses (artistId, name) as unique identifier
@@ -123,6 +164,7 @@ export async function getOrCreateAlbum(
     },
     select: {
       id: true,
+      mergedIntoId: true,
     },
   });
 
@@ -136,11 +178,12 @@ export async function getOrCreateAlbum(
       },
       select: {
         id: true,
+        mergedIntoId: true,
       },
     });
   }
 
-  return album;
+  return resolveCanonicalAlbum(prisma, album);
 }
 
 /**
@@ -164,6 +207,7 @@ export async function getOrCreateAlbumTx(
     },
     select: {
       id: true,
+      mergedIntoId: true,
     },
   });
 
@@ -177,11 +221,12 @@ export async function getOrCreateAlbumTx(
       },
       select: {
         id: true,
+        mergedIntoId: true,
       },
     });
   }
 
-  return album;
+  return resolveCanonicalAlbum(tx, album);
 }
 
 /**
