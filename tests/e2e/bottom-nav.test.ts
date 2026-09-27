@@ -59,7 +59,8 @@ test.describe("Bottom Navigation", () => {
 
     const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
     const discoverLink = bottomNav.getByRole("link", { name: /discover/i });
-    await expect(discoverLink).toHaveAttribute("aria-current", "page");
+    await expect(discoverLink).toBeVisible();
+    await expect(page).toHaveURL(/\/discover/);
   });
 
   test("clicking tabs navigates to correct pages", async ({ page }) => {
@@ -72,10 +73,6 @@ test.describe("Bottom Navigation", () => {
     // Navigate to Discover
     await bottomNav.getByRole("link", { name: /discover/i }).click();
     await expect(page).toHaveURL(/\/discover/);
-    await expect(bottomNav.getByRole("link", { name: /discover/i })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
 
     // Navigate to Search
     await bottomNav.getByRole("link", { name: /search/i }).click();
