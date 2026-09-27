@@ -296,6 +296,7 @@ export default function SearchPage() {
           <div className="container flex gap-2 border-b pb-2 pt-1">
             <button
               onClick={() => handleScopeChange("all")}
+              aria-label="Search all tracks"
               className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
                 activeScope === "all"
                   ? "bg-primary text-primary-foreground"
@@ -306,6 +307,7 @@ export default function SearchPage() {
             </button>
             <button
               onClick={() => handleScopeChange("library")}
+              aria-label="Search my library"
               className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
                 activeScope === "library"
                   ? "bg-primary text-primary-foreground"
@@ -322,6 +324,7 @@ export default function SearchPage() {
               <button
                 key={f.value}
                 onClick={() => handleTypeChange(f.value)}
+                aria-label={`Filter by ${f.label.toLowerCase()}`}
                 className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
                   activeType === f.value
                     ? "bg-primary text-primary-foreground"
