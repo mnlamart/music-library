@@ -30,6 +30,8 @@ model User {
   onRepeatSnapshots   OnRepeatSnapshot[]
   roles               Role[]            @relation("RoleToUser")
   playerState         PlayerState?
+  securityEvents      SecurityEvent[]
+  securityEventsAsTarget SecurityEvent[] @relation("SecurityEventTarget")
 }
 
 model PlayerState {
@@ -512,4 +514,24 @@ model YoutubeCookie {
   updatedBy String   // userId who uploaded the cookie
   valid     Boolean  @default(true)
   createdAt DateTime @default(now())
+}
+
+model SecurityEvent {
+  id            String   @id @default(cuid())
+  eventType     String   // login_success, login_failed, account_disabled, etc.
+  ipHash        String?  // SHA-256 hash of IP (first 16 chars), nullable for system events
+  userId        String?  // nullable for failed login attempts
+  targetUserId  String?  // for admin actions on other users
+  metadata      String?  // JSON string for flexible event data
+  perpetual     Boolean  @default(false) // if true, never delete (critical audit events)
+  createdAt     DateTime @default(now())
+  
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  targetUser    User?    @relation("SecurityEventTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  
+  @@index([eventType])
+  @@index([ipHash])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([perpetual])
 }
