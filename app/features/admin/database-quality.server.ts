@@ -3,8 +3,12 @@
  */
 
 import { prisma } from "#app/utils/db.server.ts";
-import { METRIC_WEIGHTS, type MetricTarget, METRIC_TARGETS, formatBytes } from "./database-quality.ts";
-
+import {
+  METRIC_WEIGHTS,
+  type MetricTarget,
+  METRIC_TARGETS,
+  formatBytes,
+} from "./database-quality.ts";
 
 export function getHealthColor(percentage: number): "green" | "yellow" | "red" {
   if (percentage >= 90) return "green";
@@ -27,7 +31,6 @@ export interface QualityMetrics {
   genre: number;
   lyrics: number;
 }
-
 
 export function calculateHealthScore(metrics: QualityMetrics): number {
   return (
@@ -80,10 +83,12 @@ export async function getMetadataIssues(): Promise<MetadataIssues> {
     }),
     prisma.track.count({
       where: {
-        year: {
-          not: null,
-          OR: [{ lt: 1850 }, { gt: currentYear + 1 }],
-        },
+        AND: [
+          { year: { not: null } },
+          {
+            OR: [{ year: { lt: 1850 } }, { year: { gt: currentYear + 1 } }],
+          },
+        ],
       },
     }),
     prisma.artist.count({
