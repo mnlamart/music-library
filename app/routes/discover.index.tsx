@@ -28,6 +28,7 @@ import {
 } from "#app/utils/discover.ts";
 import { listDiscoverTracks } from "#app/utils/discover-tracks.server.ts";
 import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { type Route } from "./+types/discover.index.ts";
 
 export async function loader({ request, url }: Route.LoaderArgs) {
@@ -119,7 +120,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export async function clientAction(args: Route.ClientActionArgs) {
-  return action(args);
+  return proxyClientActionToServer(args);
 }
 
 type DiscoverTrackListItemProps = {
