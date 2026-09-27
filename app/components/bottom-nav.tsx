@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useNavigate } from "react-router";
+import { NavLink, useNavigate } from "react-router";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { cn } from "#app/utils/misc.tsx";
 
@@ -20,18 +20,10 @@ const tabs: TabConfig[] = [
 
 export function BottomNav() {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const handleSearchClick = (e: React.MouseEvent) => {
     e.preventDefault();
     void navigate("/search");
-  };
-
-  const isTabActive = (tabTo: string) => {
-    if (tabTo === "/") {
-      return location.pathname === "/";
-    }
-    return location.pathname.startsWith(tabTo);
   };
 
   return (
@@ -41,32 +33,35 @@ export function BottomNav() {
       aria-label="Main navigation"
     >
       <ul className="flex h-16 items-center justify-around">
-        {tabs.map((tab) => {
-          const isActive = isTabActive(tab.to);
-          return (
-            <li key={tab.to} className="flex-1">
-              <NavLink
-                to={tab.to}
-                end={tab.to === "/"}
-                onClick={tab.to === "/search" ? handleSearchClick : undefined}
-                aria-label={tab.ariaLabel || tab.label}
-                aria-current={isActive ? "page" : undefined}
-                prefetch="intent"
-                className={cn(
+        {tabs.map((tab) => (
+          <li key={tab.to} className="flex-1">
+            <NavLink
+              to={tab.to}
+              end={tab.to === "/"}
+              viewTransition={false}
+              onClick={tab.to === "/search" ? handleSearchClick : undefined}
+              aria-label={tab.ariaLabel || tab.label}
+              prefetch="intent"
+              className={({ isActive }) =>
+                cn(
                   "flex h-full flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
                   isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon
-                  name={tab.icon as Parameters<typeof Icon>[0]["name"]}
-                  size="lg"
-                  className={cn(isActive && "text-foreground")}
-                />
-                <span>{tab.label}</span>
-              </NavLink>
-            </li>
-          );
-        })}
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    name={tab.icon as Parameters<typeof Icon>[0]["name"]}
+                    size="lg"
+                    className={cn(isActive && "text-foreground")}
+                  />
+                  <span>{tab.label}</span>
+                </>
+              )}
+            </NavLink>
+          </li>
+        ))}
       </ul>
     </nav>
   );
