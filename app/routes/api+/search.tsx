@@ -75,8 +75,13 @@ export async function loader({ request, url }: Route.LoaderArgs) {
 
   const usePrefix = url.searchParams.get("prefix") !== "false";
 
-  // Get the authenticated user ID if available (needed for playlist search)
-  const userId = (await getUserId(request)) ?? undefined;
+  // Get the authenticated user ID if available
+  const rawUserId = (await getUserId(request)) ?? undefined;
+
+  // Use scope to determine whether to filter by userId:
+  // - 'library': filter by user's library (pass userId)
+  // - 'all': show all tracks (pass undefined)
+  const userId = scopeResult.data === "library" ? rawUserId : undefined;
 
   try {
     const results = await searchWithCache(
@@ -86,7 +91,6 @@ export async function loader({ request, url }: Route.LoaderArgs) {
       typeResult.data,
       usePrefix,
       userId,
-      scopeResult.data,
     );
     return Response.json(results);
   } catch (error) {
