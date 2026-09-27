@@ -90,3 +90,33 @@ CREATE INDEX "Artist_mergedIntoId_fkey_idx" ON "Artist"("mergedIntoId");
 
 -- Foreign key constraints for Album merge self-relation
 CREATE INDEX "Album_mergedIntoId_fkey_idx" ON "Album"("mergedIntoId");
+
+-- Insert curator role and permissions
+INSERT INTO Role VALUES('curator_role_id_00000000000','curator','Trusted user who can edit track/artist/album metadata',strftime('%s','now') * 1000,strftime('%s','now') * 1000);
+
+-- Insert permissions for curator role
+INSERT INTO Permission VALUES('perm_metadata_update_any','update','metadata','any','Edit any track/artist/album metadata',strftime('%s','now') * 1000,strftime('%s','now') * 1000);
+INSERT INTO Permission VALUES('perm_metadata_history_read','read','metadata-history','any','Read edit history for tracks/artists/albums',strftime('%s','now') * 1000,strftime('%s','now') * 1000);
+INSERT INTO Permission VALUES('perm_metadata_restore_any','restore','metadata','any','Restore track/artist/album to previous versions',strftime('%s','now') * 1000,strftime('%s','now') * 1000);
+INSERT INTO Permission VALUES('perm_artist_update_any','update','artist','any','Edit any artist metadata',strftime('%s','now') * 1000,strftime('%s','now') * 1000);
+INSERT INTO Permission VALUES('perm_artist_merge_any','merge','artist','any','Merge duplicate artists',strftime('%s','now') * 1000,strftime('%s','now') * 1000);
+INSERT INTO Permission VALUES('perm_album_update_any','update','album','any','Edit any album metadata',strftime('%s','now') * 1000,strftime('%s','now') * 1000);
+INSERT INTO Permission VALUES('perm_album_merge_any','merge','album','any','Merge duplicate albums',strftime('%s','now') * 1000,strftime('%s','now') * 1000);
+
+-- Link permissions to curator role
+INSERT INTO _PermissionToRole VALUES('perm_metadata_update_any','curator_role_id_00000000000');
+INSERT INTO _PermissionToRole VALUES('perm_metadata_history_read','curator_role_id_00000000000');
+INSERT INTO _PermissionToRole VALUES('perm_metadata_restore_any','curator_role_id_00000000000');
+INSERT INTO _PermissionToRole VALUES('perm_artist_update_any','curator_role_id_00000000000');
+INSERT INTO _PermissionToRole VALUES('perm_artist_merge_any','curator_role_id_00000000000');
+INSERT INTO _PermissionToRole VALUES('perm_album_update_any','curator_role_id_00000000000');
+INSERT INTO _PermissionToRole VALUES('perm_album_merge_any','curator_role_id_00000000000');
+
+-- Also link these permissions to admin role
+INSERT INTO _PermissionToRole VALUES('perm_metadata_update_any','clnf2zvlw000gpcour6dyyuh6');
+INSERT INTO _PermissionToRole VALUES('perm_metadata_history_read','clnf2zvlw000gpcour6dyyuh6');
+INSERT INTO _PermissionToRole VALUES('perm_metadata_restore_any','clnf2zvlw000gpcour6dyyuh6');
+INSERT INTO _PermissionToRole VALUES('perm_artist_update_any','clnf2zvlw000gpcour6dyyuh6');
+INSERT INTO _PermissionToRole VALUES('perm_artist_merge_any','clnf2zvlw000gpcour6dyyuh6');
+INSERT INTO _PermissionToRole VALUES('perm_album_update_any','clnf2zvlw000gpcour6dyyuh6');
+INSERT INTO _PermissionToRole VALUES('perm_album_merge_any','clnf2zvlw000gpcour6dyyuh6');
