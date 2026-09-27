@@ -2,6 +2,7 @@ import { useState, useCallback, memo, type PointerEvent, type ReactNode } from "
 import { useAudioPlayer } from "#app/components/audio-player-provider";
 import { TrackThumbnail } from "#app/components/track-thumbnail";
 import { Button } from "#app/components/ui/button";
+import { Checkbox } from "#app/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -96,6 +97,12 @@ interface TrackListItemProps {
   /** When set, offline pin/remove actions appear inside the three-dot menu (PWA offline storage) */
   offlineDownloadTrack?: OfflineDownloadTrack;
   offlineDownloadPlaylistId?: string;
+  /** When true, show a checkbox for bulk selection */
+  showCheckbox?: boolean;
+  /** When true, the track is selected */
+  isSelected?: boolean;
+  /** Callback when checkbox is toggled */
+  onToggleSelection?: (trackId: string) => void;
 }
 
 /**
@@ -150,6 +157,9 @@ export const TrackListItem = memo(function TrackListItem({
   showAudioFileDownload = false,
   offlineDownloadTrack,
   offlineDownloadPlaylistId,
+  showCheckbox = false,
+  isSelected = false,
+  onToggleSelection,
 }: TrackListItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionsSheetOpen, setIsActionsSheetOpen] = useState(false);
@@ -290,8 +300,24 @@ export const TrackListItem = memo(function TrackListItem({
         aria-label={`Track ${index + 1}: ${track.title} by ${track.artist.name}${isDeleted ? " (Deleted from YouTube)" : ""}`}
         style={hasAudioFiles ? { cursor: "pointer" } : undefined}
       >
+        {/* Checkbox for bulk selection */}
+        {showCheckbox && (
+          <div className="w-8 flex items-center justify-center min-w-8">
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => {
+                if (onToggleSelection) {
+                  onToggleSelection(track.id);
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Select ${track.title}`}
+            />
+          </div>
+        )}
+
         {/* Track Number / Play Button */}
-        {!isCompact && (
+        {!isCompact && !showCheckbox && (
           <div className="w-8 flex items-center justify-center min-w-8">
             {hasAudioFiles && (isHovered || isCurrentlyPlaying) ? (
               <Button
