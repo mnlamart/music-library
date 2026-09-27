@@ -88,6 +88,9 @@ test.describe("Bottom Navigation", () => {
     await page.getByRole("button", { name: /back/i }).click();
     await expect(page).not.toHaveURL(/\/search/);
 
+    // Wait for bottom nav to be visible and clickable again
+    await expect(bottomNav.getByRole("link", { name: /^home$/i })).toBeVisible();
+
     // Navigate back to Home
     await bottomNav.getByRole("link", { name: /^home$/i }).click();
     await expect(page).toHaveURL(/\/(\?|$)/);
@@ -140,8 +143,8 @@ test.describe("Bottom Navigation", () => {
     await expect(menu).not.toBeVisible();
 
     const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
-    await expect(bottomNav.getByRole("link", { name: /my library/i })).toBeVisible();
+    await expect(bottomNav.getByRole("link", { name: /my music library/i })).toBeVisible();
     await expect(bottomNav.getByRole("link", { name: /my playlists/i })).toBeVisible();
-    await expect(bottomNav.getByRole("link", { name: /history/i })).toBeVisible();
+    await expect(bottomNav.getByRole("link", { name: /listening history/i })).toBeVisible();
   });
 });
