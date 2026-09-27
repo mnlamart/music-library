@@ -2,7 +2,7 @@ import { data } from "react-router";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireUserWithRole } from "#app/utils/permissions.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
-import { deleteFile } from "#app/utils/storage.server.ts";
+import { deleteUnreferencedObjectKeys } from "#app/utils/audio-cleanup.server.ts";
 import { type Route } from "./+types/tracks.$trackId.ts";
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -33,60 +33,20 @@ export async function action({ request, params }: Route.ActionArgs) {
     throw data({ error: "Track not found" }, { status: 404 });
   }
 
-  // Decide S3 cleanup only after the track (and its TrackAudioFile rows) are
-  // gone. A pre-delete refcount races with persistTrackAudio, which can reuse
-  // this objectKey for a new track between the count and deleteFile.
-  const objectKeys = [...new Set(track.audioFiles.map((audioFile) => audioFile.objectKey))];
+  const audioFiles = track.audioFiles;
 
+  // Cascade-delete first, then re-count remaining TrackAudioFile rows.
+  // persistTrackAudio can reuse the same objectKey for another track; a
+  // pre-delete cleanup would wipe audio still needed for playback.
   await prisma.track.delete({
     where: { id: trackId },
   });
 
-  const objectKeysToDelete: string[] = [];
-  const objectKeysPreserved: string[] = [];
-
-  for (const objectKey of objectKeys) {
-    const stillReferenced = await prisma.trackAudioFile.count({
-      where: { objectKey },
-    });
-
-    if (stillReferenced > 0) {
-      objectKeysPreserved.push(objectKey);
-      console.log(
-        `⚠️ Preserving S3 object (used by ${stillReferenced} other track${stillReferenced > 1 ? "s" : ""}): ${objectKey}`,
-      );
-      continue;
-    }
-
-    objectKeysToDelete.push(objectKey);
-  }
-
-  for (const objectKey of objectKeysToDelete) {
-    try {
-      await deleteFile(objectKey);
-      console.log(`✅ Deleted S3 object: ${objectKey}`);
-    } catch (error) {
-      console.error(`❌ Failed to delete S3 object ${objectKey}:`, error);
-      // Continue even if S3 deletion fails - track is already deleted from DB
-    }
-  }
-
-  // Log summary
-  if (objectKeysPreserved.length > 0 && objectKeysToDelete.length > 0) {
-    console.log(
-      `📊 Track deletion summary: Deleted ${objectKeysToDelete.length} S3 object(s), preserved ${objectKeysPreserved.length} shared object(s)`,
-    );
-  } else if (objectKeysPreserved.length > 0) {
-    console.log(
-      `📊 Track deletion summary: All ${objectKeysPreserved.length} S3 object(s) preserved (shared with other tracks)`,
-    );
-  }
+  await deleteUnreferencedObjectKeys(audioFiles.map((file) => file.objectKey));
 
   return data({
     success: true,
     trackId,
-    objectsDeleted: objectKeysToDelete.length,
-    objectsPreserved: objectKeysPreserved.length,
   });
 }
 
