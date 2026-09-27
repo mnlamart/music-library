@@ -12,7 +12,10 @@ import { isOfflineEnvironment } from "#app/features/offline-app/is-offline-envir
 import { getOfflineStorage } from "#app/features/offline-storage/offline-storage.client.ts";
 import { offlineSummaryToFullTrack } from "#app/features/offline-storage/offline-track-summary.client.ts";
 import { isQueueCacheEnabled } from "#app/features/offline-storage/queue-cache-preference.client.ts";
-import { prefetchPlaybackAudioUrl } from "#app/features/offline-storage/resolve-playback-url.client.ts";
+import {
+  peekCachedPlaybackUrl,
+  prefetchPlaybackAudioUrl,
+} from "#app/features/offline-storage/resolve-playback-url.client.ts";
 import {
   collectHydrationIds,
   fetchPlaybackBatch,
@@ -62,16 +65,20 @@ import { useOnlineStatus } from "#app/hooks/use-online-status.ts";
 import { type FullTrack, type QueueTrack } from "#app/types/frontend/shared";
 import { isPlayableTrack } from "#app/utils/playable-track";
 import {
+  defaultPlaylistTrackSortDirection,
   parsePlaylistTrackSort,
   type PlaylistTrackSortOption,
 } from "#app/utils/playlist-track-sort.ts";
 import {
   DEFAULT_LIBRARY_SORT,
+  defaultLibrarySortDirection,
   parseLibrarySort,
   type LibrarySortOption,
 } from "#app/features/listening-insights/heavy-rotation.ts";
+import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
 import { AudioPlayer } from "./audio-player";
 import { InstallAppBanner } from "./pwa/install-app-banner";
+import { toast } from "./ui/use-toast";
 
 type Track = FullTrack;
 
@@ -96,6 +103,8 @@ interface PlaylistContext {
   sort?: PlaylistTrackSortOption;
   /** Active library sort; only meaningful for library context. */
   librarySort?: LibrarySortOption;
+  /** Asc/desc for the active library or playlist sort. */
+  sortDirection?: SortDirection;
 }
 
 interface AudioPlayerContextType {
@@ -160,6 +169,23 @@ function librarySortOrDefault(sort: LibrarySortOption | undefined): LibrarySortO
   return sort ?? DEFAULT_LIBRARY_SORT;
 }
 
+function playlistSortDirectionOrDefault(
+  sort: PlaylistTrackSortOption | undefined,
+  direction: SortDirection | undefined,
+): SortDirection {
+  return parseSortDirection(
+    direction,
+    defaultPlaylistTrackSortDirection(playlistSortOrCustom(sort)),
+  );
+}
+
+function librarySortDirectionOrDefault(
+  sort: LibrarySortOption | undefined,
+  direction: SortDirection | undefined,
+): SortDirection {
+  return parseSortDirection(direction, defaultLibrarySortDirection(librarySortOrDefault(sort)));
+}
+
 function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boolean {
   if (!a || a.type !== b.type) return false;
   if (a.playlistId !== b.playlistId) return false;
@@ -168,10 +194,18 @@ function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boole
   if (a.trackId !== b.trackId) return false;
   if (a.snapshotId !== b.snapshotId) return false;
   if (a.type === "playlist") {
-    return playlistSortOrCustom(a.sort) === playlistSortOrCustom(b.sort);
+    return (
+      playlistSortOrCustom(a.sort) === playlistSortOrCustom(b.sort) &&
+      playlistSortDirectionOrDefault(a.sort, a.sortDirection) ===
+        playlistSortDirectionOrDefault(b.sort, b.sortDirection)
+    );
   }
   if (a.type === "library") {
-    return librarySortOrDefault(a.librarySort) === librarySortOrDefault(b.librarySort);
+    return (
+      librarySortOrDefault(a.librarySort) === librarySortOrDefault(b.librarySort) &&
+      librarySortDirectionOrDefault(a.librarySort, a.sortDirection) ===
+        librarySortDirectionOrDefault(b.librarySort, b.sortDirection)
+    );
   }
   return true;
 }
@@ -179,16 +213,23 @@ function isSamePlayContext(a: PlaylistContext | null, b: PlaylistContext): boole
 function playlistContextFromJson(context: PlayContextJson | null): PlaylistContext | null {
   if (!context) return null;
   if (context.type === "playlist") {
+    const sort = parsePlaylistTrackSort(context.sort);
     return {
       type: "playlist",
       playlistId: context.playlistId,
-      sort: parsePlaylistTrackSort(context.sort),
+      sort,
+      sortDirection: parseSortDirection(context.direction, defaultPlaylistTrackSortDirection(sort)),
     };
   }
   if (context.type === "library") {
+    const librarySort = parseLibrarySort(context.sort);
     return {
       type: "library",
-      librarySort: parseLibrarySort(context.sort),
+      librarySort,
+      sortDirection: parseSortDirection(
+        context.direction,
+        defaultLibrarySortDirection(librarySort),
+      ),
     };
   }
   return context;
@@ -196,13 +237,18 @@ function playlistContextFromJson(context: PlayContextJson | null): PlaylistConte
 
 function toQueueSpineContext(context: PlaylistContext): QueueSpineContext | null {
   if (context.type === "library") {
-    return { type: "library", sort: librarySortOrDefault(context.librarySort) };
+    return {
+      type: "library",
+      sort: librarySortOrDefault(context.librarySort),
+      direction: librarySortDirectionOrDefault(context.librarySort, context.sortDirection),
+    };
   }
   if (context.type === "playlist" && context.playlistId) {
     return {
       type: "playlist",
       playlistId: context.playlistId,
       sort: playlistSortOrCustom(context.sort),
+      direction: playlistSortDirectionOrDefault(context.sort, context.sortDirection),
     };
   }
   if (context.type === "artist" && context.artistId) {
@@ -225,13 +271,22 @@ function playContextToJson(context: PlaylistContext | null): PlayContextJson | n
   if (!context) return null;
   if (context.type === "library") {
     const sort = librarySortOrDefault(context.librarySort);
-    return sort === DEFAULT_LIBRARY_SORT ? { type: "library" } : { type: "library", sort };
+    const direction = librarySortDirectionOrDefault(context.librarySort, context.sortDirection);
+    return {
+      type: "library",
+      ...(sort !== DEFAULT_LIBRARY_SORT ? { sort } : {}),
+      ...(direction !== defaultLibrarySortDirection(sort) ? { direction } : {}),
+    };
   }
   if (context.type === "playlist" && context.playlistId) {
     const sort = playlistSortOrCustom(context.sort);
-    return sort === "custom"
-      ? { type: "playlist", playlistId: context.playlistId }
-      : { type: "playlist", playlistId: context.playlistId, sort };
+    const direction = playlistSortDirectionOrDefault(context.sort, context.sortDirection);
+    return {
+      type: "playlist",
+      playlistId: context.playlistId,
+      ...(sort !== "custom" ? { sort } : {}),
+      ...(direction !== defaultPlaylistTrackSortDirection(sort) ? { direction } : {}),
+    };
   }
   if (context.type === "artist" && context.artistId) {
     return { type: "artist", artistId: context.artistId };
@@ -284,6 +339,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   const playbackCacheRef = useRef(new PlaybackHydrationCache());
   const playlistFetchEpochRef = useRef(0);
   const wantsAutoPlayRef = useRef(false);
+  const unlockAutoplayRef = useRef<((trackId: string, cachedUrl: string) => boolean) | null>(null);
   const upNextPlayNextCountRef = useRef(0);
 
   // Throttle scroll-driven hydration: accumulate IDs during rapid scrolling,
@@ -589,16 +645,44 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     [beginPlayback, buildShuffledOrder, hydrateAround, loadSpineForContext, rememberTrack],
   );
 
-  const playResolvedTrack = useCallback(
-    async (queueTrack: QueueTrack) => {
-      await hydrateAround(queueTrack.id);
+  const resolvePlayableTrack = useCallback(
+    async (queueTrack: QueueTrack): Promise<FullTrack | null> => {
+      try {
+        await hydrateAround(queueTrack.id);
+      } catch {
+        toast({
+          title: "Playback failed",
+          description: "Could not load the next track. Check your connection and try again.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
       const fullTrack = resolveFullTrack(playbackCacheRef.current, queueTrack);
-      if (!isPlayableTrack(fullTrack)) return;
+      if (!isPlayableTrack(fullTrack)) {
+        toast({
+          title: "Playback failed",
+          description: "This track is unavailable. Try another track.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      return fullTrack;
+    },
+    [hydrateAround],
+  );
+
+  const playResolvedTrack = useCallback(
+    async (queueTrack: QueueTrack): Promise<boolean> => {
+      const fullTrack = await resolvePlayableTrack(queueTrack);
+      if (!fullTrack) return false;
 
       beginPlayback();
       setCurrentTrack(fullTrack);
+      return true;
     },
-    [beginPlayback, hydrateAround],
+    [beginPlayback, resolvePlayableTrack],
   );
 
   const playTrack = useCallback(
@@ -981,19 +1065,56 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       const queueTrack = getTrackAtTarget(navigationState, target);
       if (!queueTrack) return;
 
-      const nextState = advanceAfterPlay(navigationState, target);
-      setUpNext(nextState.upNext);
-      if (target.zone === "upNext" && target.index < upNextPlayNextCount) {
-        setUpNextPlayNextCount((count) => {
-          const next = Math.max(0, count - 1);
-          upNextPlayNextCountRef.current = next;
-          return next;
-        });
+      // Try to get the prefetched URL synchronously. If it exists, we can apply
+      // it and call play() within the user gesture, satisfying autoplay policy.
+      const cachedUrl = peekCachedPlaybackUrl(queueTrack.id);
+      let appliedSynchronously = false;
+
+      if (cachedUrl && unlockAutoplayRef.current) {
+        // Apply the prefetched source and play synchronously within the gesture
+        appliedSynchronously = unlockAutoplayRef.current(queueTrack.id, cachedUrl);
       }
-      setSpinePosition(nextState.spinePosition);
-      void playResolvedTrack(queueTrack);
+
+      if (!appliedSynchronously) {
+        // No cached URL or sync application failed - set autoplay intent for async flow
+        wantsAutoPlayRef.current = true;
+      }
+
+      // Resolve the full track and update queue state. Even if we played synchronously,
+      // we still need the full track metadata for the UI.
+      void (async () => {
+        const fullTrack = await resolvePlayableTrack(queueTrack);
+        if (!fullTrack) {
+          // Hydration failed - clear autoplay intent
+          wantsAutoPlayRef.current = false;
+          return;
+        }
+
+        const nextState = advanceAfterPlay(navigationState, target);
+        setUpNext(nextState.upNext);
+        if (target.zone === "upNext" && target.index < upNextPlayNextCount) {
+          setUpNextPlayNextCount((count) => {
+            const next = Math.max(0, count - 1);
+            upNextPlayNextCountRef.current = next;
+            return next;
+          });
+        }
+        setSpinePosition(nextState.spinePosition);
+
+        if (!appliedSynchronously) {
+          // Async flow - increment token to trigger autoplay effect
+          setPlaybackToken((token) => token + 1);
+          if (hydrationTimerRef.current) {
+            clearTimeout(hydrationTimerRef.current);
+            hydrationTimerRef.current = null;
+          }
+          pendingHydrationIdsRef.current.clear();
+        }
+
+        setCurrentTrack(fullTrack);
+      })();
     },
-    [navigationState, playResolvedTrack, upNextPlayNextCount],
+    [navigationState, resolvePlayableTrack, upNextPlayNextCount],
   );
 
   const playNext = useCallback(() => {
@@ -1017,27 +1138,62 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
       noteUserQueueMutation();
 
-      const nextState = jumpToTarget(navigationState, target);
-      setUpNext(nextState.upNext);
+      // Try to get the prefetched URL synchronously. If it exists, we can apply
+      // it and call play() within the user gesture, satisfying autoplay policy.
+      const cachedUrl = peekCachedPlaybackUrl(queueTrack.id);
+      let appliedSynchronously = false;
 
-      if (target.zone === "upNext") {
-        // Discarding 0..target.index drops the clicked track and everything before
-        // it. Play-next items sit at the front of Up Next, so decrement the count
-        // by however many of them fall inside the discarded range.
-        const playNextDiscarded = Math.min(target.index + 1, upNextPlayNextCount);
-        if (playNextDiscarded > 0) {
-          setUpNextPlayNextCount((count) => {
-            const next = Math.max(0, count - playNextDiscarded);
-            upNextPlayNextCountRef.current = next;
-            return next;
-          });
-        }
+      if (cachedUrl && unlockAutoplayRef.current) {
+        // Apply the prefetched source and play synchronously within the gesture
+        appliedSynchronously = unlockAutoplayRef.current(queueTrack.id, cachedUrl);
       }
 
-      setSpinePosition(nextState.spinePosition);
-      void playResolvedTrack(queueTrack);
+      if (!appliedSynchronously) {
+        // No cached URL or sync application failed - set autoplay intent for async flow
+        wantsAutoPlayRef.current = true;
+      }
+
+      void (async () => {
+        const fullTrack = await resolvePlayableTrack(queueTrack);
+        if (!fullTrack) {
+          // Hydration failed - clear autoplay intent
+          wantsAutoPlayRef.current = false;
+          return;
+        }
+
+        const nextState = jumpToTarget(navigationState, target);
+        setUpNext(nextState.upNext);
+
+        if (target.zone === "upNext") {
+          // Discarding 0..target.index drops the clicked track and everything before
+          // it. Play-next items sit at the front of Up Next, so decrement the count
+          // by however many of them fall inside the discarded range.
+          const playNextDiscarded = Math.min(target.index + 1, upNextPlayNextCount);
+          if (playNextDiscarded > 0) {
+            setUpNextPlayNextCount((count) => {
+              const next = Math.max(0, count - playNextDiscarded);
+              upNextPlayNextCountRef.current = next;
+              return next;
+            });
+          }
+        }
+
+        setSpinePosition(nextState.spinePosition);
+
+        if (!appliedSynchronously) {
+          // Async flow - increment token to trigger autoplay effect
+          setPlaybackToken((token) => token + 1);
+          if (hydrationTimerRef.current) {
+            clearTimeout(hydrationTimerRef.current);
+            hydrationTimerRef.current = null;
+          }
+          pendingHydrationIdsRef.current.clear();
+        }
+
+        setCurrentTrack(fullTrack);
+      })();
     },
-    [navigationState, noteUserQueueMutation, playResolvedTrack, upNextPlayNextCount],
+    [navigationState, noteUserQueueMutation, resolvePlayableTrack, upNextPlayNextCount],
   );
 
   const startQueuePlayback = useCallback(() => {
@@ -1139,7 +1295,12 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     const storage = getOfflineStorage();
 
     void (async () => {
-      await hydrateAround(currentTrackId);
+      try {
+        await hydrateAround(currentTrackId);
+      } catch (error) {
+        console.warn("Queue auto-cache hydration failed:", error);
+        return;
+      }
       const ids = collectHydrationIds(navigationState, currentTrackId);
 
       for (const id of ids) {
@@ -1559,6 +1720,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         isShuffleEnabled={isShuffleEnabled}
         playbackToken={playbackToken}
         wantsAutoPlayRef={wantsAutoPlayRef}
+        unlockAutoplayRef={unlockAutoplayRef}
       />
     </AudioPlayerContext.Provider>
   );

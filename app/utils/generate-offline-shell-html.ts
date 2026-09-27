@@ -63,8 +63,8 @@ export const OFFLINE_SHELL_ENV_BOOTSTRAP = `try {
 
 export const OFFLINE_SHELL_SPLASH_HTML = `<div id="offline-shell-splash" role="status" aria-live="polite" style="display:flex;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;text-align:center;font-family:system-ui,-apple-system,sans-serif;color:inherit;background:inherit">
   <div style="margin-bottom:1.5rem;line-height:1.1">
-    <span style="display:block;font-size:2.25rem;font-weight:300">epic</span>
-    <span style="display:block;font-size:2.25rem;font-weight:700">music</span>
+    <span style="display:block;font-size:2.25rem;font-weight:300">7D</span>
+    <span style="display:block;font-size:2.25rem;font-weight:700">Music</span>
   </div>
   <p id="offline-shell-status" style="margin:0;font-size:1rem;color:#737373">Loading…</p>
 </div>`;

@@ -5,6 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { LOCAL_SERVICE } from "#app/constants/services";
 import { getOrCreateArtistTx, extractArtistMetadata } from "#app/utils/artist-management.server";
+import { calculateAudioHash } from "#app/utils/audio-file-management.server";
 import { extractAudioMetadata } from "#app/utils/audio-metadata.server";
 import { findOrCreateCoverImageTx, getOrCreateAlbumTx } from "#app/utils/cover-management.server";
 import { getDatabaseUrl } from "#app/utils/database-url.server.ts";
@@ -468,11 +469,13 @@ async function seedAudioFiles(userId: string) {
             });
 
             // Create audio file record
+            const contentHash = await calculateAudioHash(fileBuffer);
             await tx.trackAudioFile.create({
               data: {
                 trackId: track.id,
                 serviceId: localService.id,
                 objectKey,
+                contentHash,
                 fileName: fileName,
                 fileSize: stats.size,
                 mimeType: extractedMetadata.mimeType || "audio/flac",

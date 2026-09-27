@@ -58,6 +58,20 @@ describe("sortByPlayCompletedCount", () => {
     ]);
   });
 
+  test("orders by completed-play count ascending when requested", () => {
+    const counts = new Map([
+      ["t-a", 1],
+      ["t-b", 5],
+      ["t-c", 3],
+    ]);
+    expect(sortByPlayCompletedCount(rows, counts, "asc").map((r) => r.trackId)).toEqual([
+      "t-d",
+      "t-a",
+      "t-c",
+      "t-b",
+    ]);
+  });
+
   test("places zero-count tracks after tracks with counts", () => {
     const counts = new Map([["t-a", 2]]);
     const ordered = sortByPlayCompletedCount(rows, counts);

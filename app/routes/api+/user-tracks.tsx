@@ -1,8 +1,12 @@
-import { parseLibrarySort } from "#app/features/listening-insights/index.ts";
+import {
+  defaultLibrarySortDirection,
+  parseLibrarySort,
+} from "#app/features/listening-insights/index.ts";
 import { listLibraryUserTracks } from "#app/features/listening-insights/library-tracks.server.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
 import { parseHasAudioOnlyParam } from "#app/utils/library-user-tracks.server.ts";
+import { parseSortDirection } from "#app/utils/sort-direction.ts";
 
 export async function loader({ request, url }: { request: Request; url: URL }) {
   try {
@@ -13,6 +17,10 @@ export async function loader({ request, url }: { request: Request; url: URL }) {
     const limit = parseInt(limitParam || String(LIBRARY_TRACKS_PAGE_SIZE));
     const hasAudioParam = url.searchParams.get("hasAudio");
     const sort = parseLibrarySort(url.searchParams.get("sort"));
+    const direction = parseSortDirection(
+      url.searchParams.get("dir"),
+      defaultLibrarySortDirection(sort),
+    );
 
     if (isNaN(limit) || limit < 1 || limit > 100) {
       return Response.json({ error: "Invalid limit parameter" }, { status: 400 });
@@ -27,6 +35,7 @@ export async function loader({ request, url }: { request: Request; url: URL }) {
     const { userTracks, pagination } = await listLibraryUserTracks({
       userId,
       sort,
+      direction,
       hasAudioOnly,
       cursor,
       limit,

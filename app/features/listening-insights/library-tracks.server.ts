@@ -2,7 +2,9 @@ import { type QueueTrack } from "#app/types/frontend/shared.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
 import { buildLibraryUserTracksWhere } from "#app/utils/library-user-tracks.server.ts";
+import { type SortDirection } from "#app/utils/sort-direction.ts";
 import {
+  defaultLibrarySortDirection,
   librarySortToWindow,
   sortByPlayCompletedCount,
   type LibrarySortOption,
@@ -93,11 +95,13 @@ export type ListLibraryUserTracksResult = {
 export async function listLibraryQueueSpineTracks({
   userId,
   sort,
+  direction = defaultLibrarySortDirection(sort),
   hasAudioOnly = true,
   now = new Date(),
 }: {
   userId: string;
   sort: LibrarySortOption;
+  direction?: SortDirection;
   hasAudioOnly?: boolean;
   now?: Date;
 }): Promise<QueueTrack[]> {
@@ -110,7 +114,7 @@ export async function listLibraryQueueSpineTracks({
       select: {
         track: { select: QUEUE_TRACK_SELECT },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: direction }, { id: direction }],
     });
     return userTracks.map((userTrack) => userTrack.track);
   }
@@ -126,7 +130,7 @@ export async function listLibraryQueueSpineTracks({
     },
   });
 
-  return sortByPlayCompletedCount(sortable, counts).map((row) => row.track);
+  return sortByPlayCompletedCount(sortable, counts, direction).map((row) => row.track);
 }
 
 /**
@@ -136,6 +140,7 @@ export async function listLibraryQueueSpineTracks({
 export async function listLibraryUserTracks({
   userId,
   sort,
+  direction = defaultLibrarySortDirection(sort),
   hasAudioOnly = false,
   cursor,
   limit = LIBRARY_TRACKS_PAGE_SIZE,
@@ -143,6 +148,7 @@ export async function listLibraryUserTracks({
 }: {
   userId: string;
   sort: LibrarySortOption;
+  direction?: SortDirection;
   hasAudioOnly?: boolean;
   cursor?: string | null;
   limit?: number;
@@ -159,7 +165,7 @@ export async function listLibraryUserTracks({
         createdAt: true,
         track: { select: LIBRARY_TRACK_SELECT },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: direction }, { id: direction }],
       take: limit,
       cursor: cursor ? { id: cursor } : undefined,
       skip: cursor ? 1 : undefined,
@@ -185,7 +191,7 @@ export async function listLibraryUserTracks({
     select: { id: true, trackId: true, createdAt: true },
   });
 
-  const ordered = sortByPlayCompletedCount(sortable, counts);
+  const ordered = sortByPlayCompletedCount(sortable, counts, direction);
 
   let start = 0;
   if (cursor) {

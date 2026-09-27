@@ -3,6 +3,7 @@ import { useVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/rea
 import { useCallback, useEffect, useRef } from "react";
 import { data, useSearchParams } from "react-router";
 import { OfflineLibraryView } from "#app/components/offline/offline-library-view.tsx";
+import { SortDirectionToggle } from "#app/components/sort-direction-toggle.tsx";
 import { TrackListItem } from "#app/components/track-list-item";
 import { Checkbox } from "#app/components/ui/checkbox.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
@@ -17,6 +18,7 @@ import {
 } from "#app/components/ui/select.tsx";
 import { TrackListSkeleton } from "#app/components/ui/track-list-skeleton";
 import {
+  defaultLibrarySortDirection,
   parseLibrarySort,
   type LibrarySortOption,
 } from "#app/features/listening-insights/index.ts";
@@ -26,6 +28,7 @@ import { requireUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
 import { parseHasAudioOnlyParam } from "#app/utils/library-user-tracks.server.ts";
+import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
 import { type Route } from "./+types/library.index.ts";
 
 // Define the track type
@@ -64,6 +67,7 @@ type LibraryTrackListItemProps = {
   userTrack: UserTrack;
   index: number;
   librarySort: LibrarySortOption;
+  sortDirection: SortDirection;
   playlists: Array<{
     id: string;
     title: string;
@@ -77,6 +81,7 @@ function LibraryTrackListItem({
   userTrack,
   index,
   librarySort,
+  sortDirection,
   playlists,
 }: LibraryTrackListItemProps) {
   return (
@@ -85,7 +90,7 @@ function LibraryTrackListItem({
       userTrack={userTrack}
       index={index}
       playlists={playlists}
-      playlistContext={{ type: "library", librarySort }}
+      playlistContext={{ type: "library", librarySort, sortDirection }}
       showAudioFileDownload
     />
   );
@@ -101,10 +106,15 @@ export async function loader({ request, url }: Route.LoaderArgs) {
   );
   const hasAudioOnly = parseHasAudioOnlyParam(url.searchParams);
   const sort = parseLibrarySort(url.searchParams.get("sort"));
+  const direction = parseSortDirection(
+    url.searchParams.get("dir"),
+    defaultLibrarySortDirection(sort),
+  );
 
   const { userTracks, pagination } = await listLibraryUserTracks({
     userId,
     sort,
+    direction,
     hasAudioOnly,
     cursor,
     limit,
@@ -129,6 +139,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     pagination,
     hasAudioOnly,
     sort,
+    direction,
     playlists,
   });
 }
@@ -145,6 +156,7 @@ export default function LibraryIndexRoute({
     pagination: { hasNext: false, nextCursor: null, limit: LIBRARY_TRACKS_PAGE_SIZE },
     hasAudioOnly: false,
     sort: "dateAdded" as LibrarySortOption,
+    direction: "desc" as SortDirection,
     playlists: [],
   };
   const {
@@ -153,6 +165,7 @@ export default function LibraryIndexRoute({
     playlists,
     hasAudioOnly = false,
     sort: loaderSort = "dateAdded",
+    direction: loaderDirection = "desc",
   } = safeLoaderData;
   const offline = "offline" in safeLoaderData && safeLoaderData.offline;
   const offlineTracks =
@@ -162,6 +175,10 @@ export default function LibraryIndexRoute({
   const pageSize = pagination?.limit ?? LIBRARY_TRACKS_PAGE_SIZE;
   const [searchParams, setSearchParams] = useSearchParams();
   const sort = parseLibrarySort(searchParams.get("sort") ?? loaderSort);
+  const direction = parseSortDirection(
+    searchParams.get("dir") ?? loaderDirection,
+    defaultLibrarySortDirection(sort),
+  );
   const parentRef = useRef<HTMLDivElement>(null);
 
   const scrollLibraryToTop = useCallback(() => {
@@ -194,10 +211,25 @@ export default function LibraryIndexRoute({
       } else {
         nextParams.set("sort", nextSort);
       }
+      nextParams.delete("dir");
       setSearchParams(nextParams, { preventScrollReset: true });
       scrollLibraryToTop();
     },
     [searchParams, setSearchParams, scrollLibraryToTop],
+  );
+
+  const handleDirectionChange = useCallback(
+    (next: SortDirection) => {
+      const nextParams = new URLSearchParams(searchParams);
+      if (next === defaultLibrarySortDirection(sort)) {
+        nextParams.delete("dir");
+      } else {
+        nextParams.set("dir", next);
+      }
+      setSearchParams(nextParams, { preventScrollReset: true });
+      scrollLibraryToTop();
+    },
+    [searchParams, setSearchParams, scrollLibraryToTop, sort],
   );
 
   // Use useInfiniteQuery for data fetching
@@ -211,7 +243,7 @@ export default function LibraryIndexRoute({
     isPending,
     status,
   } = useInfiniteQuery({
-    queryKey: ["user-tracks", { pageSize, hasAudioOnly, sort }],
+    queryKey: ["user-tracks", { pageSize, hasAudioOnly, sort, direction }],
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       params.set("limit", String(pageSize));
@@ -224,6 +256,9 @@ export default function LibraryIndexRoute({
       if (sort !== "dateAdded") {
         params.set("sort", sort);
       }
+      if (direction !== defaultLibrarySortDirection(sort)) {
+        params.set("dir", direction);
+      }
       const res = await fetch(`/api/user-tracks?${params}`);
       const json = (await res.json()) as {
         userTracks: UserTrack[];
@@ -234,7 +269,7 @@ export default function LibraryIndexRoute({
     getNextPageParam: (lastPage) => lastPage.pagination.nextCursor || undefined,
     initialPageParam: undefined as string | undefined,
     initialData:
-      sort === loaderSort
+      sort === loaderSort && direction === loaderDirection
         ? {
             pages: [
               {
@@ -325,16 +360,23 @@ export default function LibraryIndexRoute({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-bold">Music Library</h1>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Select value={sort} onValueChange={handleSortChange}>
-            <SelectTrigger className="w-full sm:w-56" aria-label="Sort library">
-              <SelectValue placeholder="Sort" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="dateAdded">Recently added</SelectItem>
-              <SelectItem value="mostPlayedMonth">Most played · this month</SelectItem>
-              <SelectItem value="mostPlayedEver">Most played · ever</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={sort} onValueChange={handleSortChange}>
+              <SelectTrigger className="w-full sm:w-56" aria-label="Sort library">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dateAdded">Recently added</SelectItem>
+                <SelectItem value="mostPlayedMonth">Most played · this month</SelectItem>
+                <SelectItem value="mostPlayedEver">Most played · ever</SelectItem>
+              </SelectContent>
+            </Select>
+            <SortDirectionToggle
+              value={direction}
+              onValueChange={handleDirectionChange}
+              aria-label="Library sort direction"
+            />
+          </div>
           <div className="flex items-center gap-2">
             <Checkbox
               id="has-audio-only"
@@ -446,6 +488,7 @@ export default function LibraryIndexRoute({
                       userTrack={item}
                       index={itemIndex}
                       librarySort={sort}
+                      sortDirection={direction}
                       playlists={playlists}
                     />
                   </div>

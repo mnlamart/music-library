@@ -89,13 +89,43 @@ test.describe("Bottom Navigation", () => {
     await expect(bottomNav).toBeVisible();
   });
 
-  test("search bar is not in the header", { tag: "@smoke" }, async ({ page }) => {
+  test("search is not in the header on mobile", { tag: "@smoke" }, async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/");
 
     const header = page.getByRole("banner");
-    // The search bar (searchbox) should NOT be in the header
+    // Header search is desktop-only; mobile uses the bottom nav Search tab
     await expect(header.getByRole("searchbox")).not.toBeVisible();
+    await expect(header.getByRole("link", { name: /^search$/i })).not.toBeVisible();
+    await expect(header.locator('a[href="/search"]')).not.toBeVisible();
+
+    const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
+    await expect(bottomNav.getByRole("link", { name: /search/i })).toBeVisible();
+  });
+
+  test("user menu hides bottom-nav routes on mobile", async ({ page, login }) => {
+    await login();
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto("/");
+
+    await page.getByRole("button", { name: /user menu/i }).click();
+    const menu = page.getByRole("menu");
+
+    await expect(menu.getByRole("menuitem", { name: /profile/i })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /downloads/i })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /my library/i })).not.toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /my playlists/i })).not.toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /history/i })).not.toBeVisible();
+
+    // Close the menu first — Radix sets aria-hidden on the rest of the page while open,
+    // which hides bottom-nav links from getByRole.
+    await page.keyboard.press("Escape");
+    await expect(menu).not.toBeVisible();
+
+    const bottomNav = page.getByRole("navigation", { name: /main navigation/i });
+    await expect(bottomNav.getByRole("link", { name: /my library/i })).toBeVisible();
+    await expect(bottomNav.getByRole("link", { name: /my playlists/i })).toBeVisible();
+    await expect(bottomNav.getByRole("link", { name: /history/i })).toBeVisible();
   });
 
   test("bottom nav stays fixed to the viewport while scrolling", async ({ page }) => {

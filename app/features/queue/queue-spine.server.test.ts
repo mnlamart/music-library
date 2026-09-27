@@ -26,7 +26,12 @@ describe("parseQueueSpineParams", () => {
     const params = new URLSearchParams("context=library&hasAudio=1");
     expect(parseQueueSpineParams(params)).toEqual({
       ok: true,
-      value: { context: "library", hasAudioOnly: true, sort: "dateAdded" },
+      value: {
+        context: "library",
+        hasAudioOnly: true,
+        sort: "dateAdded",
+        direction: "desc",
+      },
     });
   });
 
@@ -34,7 +39,25 @@ describe("parseQueueSpineParams", () => {
     const params = new URLSearchParams("context=library&hasAudio=1&sort=mostPlayedMonth");
     expect(parseQueueSpineParams(params)).toEqual({
       ok: true,
-      value: { context: "library", hasAudioOnly: true, sort: "mostPlayedMonth" },
+      value: {
+        context: "library",
+        hasAudioOnly: true,
+        sort: "mostPlayedMonth",
+        direction: "desc",
+      },
+    });
+  });
+
+  test("accepts library context with ascending direction", () => {
+    const params = new URLSearchParams("context=library&hasAudio=1&dir=asc");
+    expect(parseQueueSpineParams(params)).toEqual({
+      ok: true,
+      value: {
+        context: "library",
+        hasAudioOnly: true,
+        sort: "dateAdded",
+        direction: "asc",
+      },
     });
   });
 
@@ -42,7 +65,12 @@ describe("parseQueueSpineParams", () => {
     const params = new URLSearchParams("context=library&hasAudio=1&sort=nope");
     expect(parseQueueSpineParams(params)).toEqual({
       ok: true,
-      value: { context: "library", hasAudioOnly: true, sort: "dateAdded" },
+      value: {
+        context: "library",
+        hasAudioOnly: true,
+        sort: "dateAdded",
+        direction: "desc",
+      },
     });
   });
 
@@ -82,7 +110,12 @@ describe("parseQueueSpineParams", () => {
     const params = new URLSearchParams("context=playlist&playlistId=pl-1");
     expect(parseQueueSpineParams(params)).toEqual({
       ok: true,
-      value: { context: "playlist", playlistId: "pl-1", sort: "custom" },
+      value: {
+        context: "playlist",
+        playlistId: "pl-1",
+        sort: "custom",
+        direction: "asc",
+      },
     });
   });
 
@@ -90,7 +123,25 @@ describe("parseQueueSpineParams", () => {
     const params = new URLSearchParams("context=playlist&playlistId=pl-1&sort=title");
     expect(parseQueueSpineParams(params)).toEqual({
       ok: true,
-      value: { context: "playlist", playlistId: "pl-1", sort: "title" },
+      value: {
+        context: "playlist",
+        playlistId: "pl-1",
+        sort: "title",
+        direction: "asc",
+      },
+    });
+  });
+
+  test("accepts playlist context with descending direction", () => {
+    const params = new URLSearchParams("context=playlist&playlistId=pl-1&sort=title&dir=desc");
+    expect(parseQueueSpineParams(params)).toEqual({
+      ok: true,
+      value: {
+        context: "playlist",
+        playlistId: "pl-1",
+        sort: "title",
+        direction: "desc",
+      },
     });
   });
 
@@ -98,7 +149,12 @@ describe("parseQueueSpineParams", () => {
     const params = new URLSearchParams("context=playlist&playlistId=pl-1&sort=nope");
     expect(parseQueueSpineParams(params)).toEqual({
       ok: true,
-      value: { context: "playlist", playlistId: "pl-1", sort: "custom" },
+      value: {
+        context: "playlist",
+        playlistId: "pl-1",
+        sort: "custom",
+        direction: "asc",
+      },
     });
   });
 
@@ -179,6 +235,7 @@ describe("fetchQueueSpine", () => {
       context: "library",
       hasAudioOnly: true,
       sort: "dateAdded",
+      direction: "desc",
     });
 
     expect(prisma.userTrack.findMany).toHaveBeenCalledWith(
@@ -206,6 +263,7 @@ describe("fetchQueueSpine", () => {
       context: "library",
       hasAudioOnly: true,
       sort: "dateAdded",
+      direction: "desc",
     });
 
     expect(result).toEqual({ tracks: [], total: 0 });
@@ -229,6 +287,7 @@ describe("fetchQueueSpine", () => {
       context: "playlist",
       playlistId: "pl-1",
       sort: "custom",
+      direction: "asc",
     });
 
     expect(prisma.userPlaylistTrack.findMany).toHaveBeenCalledWith(
@@ -287,6 +346,7 @@ describe("fetchQueueSpine", () => {
       context: "playlist",
       playlistId: "pl-1",
       sort: "title",
+      direction: "asc",
     });
 
     expect(result.tracks.map((track) => track.id)).toEqual(["track-a", "track-z"]);

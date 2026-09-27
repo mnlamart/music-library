@@ -39,7 +39,10 @@ test.describe("Offline mode", () => {
     await emulateOfflineLoaderRequests(page);
 
     await navigateOfflineClient(page, async () => {
-      await Promise.all([page.waitForURL("/"), page.getByRole("link", { name: /epic/i }).click()]);
+      await Promise.all([
+        page.waitForURL("/"),
+        page.getByRole("link", { name: /7d music/i }).click(),
+      ]);
     });
 
     await expect(page.getByRole("status")).toContainText(

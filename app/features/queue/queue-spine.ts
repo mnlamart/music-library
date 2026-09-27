@@ -1,6 +1,7 @@
 import { type FullTrack, type QueueTrack } from "#app/types/frontend/shared.ts";
 import { type LibrarySortOption } from "#app/features/listening-insights/heavy-rotation.ts";
 import { type PlaylistTrackSortOption } from "#app/utils/playlist-track-sort.ts";
+import { type SortDirection } from "#app/utils/sort-direction.ts";
 
 export class AuthExpiredError extends Error {
   constructor() {
@@ -10,8 +11,13 @@ export class AuthExpiredError extends Error {
 }
 
 export type QueueSpineContext =
-  | { type: "library"; sort?: LibrarySortOption }
-  | { type: "playlist"; playlistId: string; sort?: PlaylistTrackSortOption }
+  | { type: "library"; sort?: LibrarySortOption; direction?: SortDirection }
+  | {
+      type: "playlist";
+      playlistId: string;
+      sort?: PlaylistTrackSortOption;
+      direction?: SortDirection;
+    }
   | { type: "artist"; artistId: string }
   | { type: "album"; albumId: string }
   | { type: "track"; trackId: string }
@@ -33,6 +39,9 @@ export async function fetchQueueSpine(context: QueueSpineContext): Promise<Queue
     if (context.sort && context.sort !== "dateAdded") {
       params.set("sort", context.sort);
     }
+    if (context.direction && context.direction !== "desc") {
+      params.set("dir", context.direction);
+    }
     url = `/api/queue-spine?${params.toString()}`;
   } else if (context.type === "playlist") {
     const params = new URLSearchParams({
@@ -41,6 +50,9 @@ export async function fetchQueueSpine(context: QueueSpineContext): Promise<Queue
     });
     if (context.sort && context.sort !== "custom") {
       params.set("sort", context.sort);
+    }
+    if (context.direction) {
+      params.set("dir", context.direction);
     }
     url = `/api/queue-spine?${params.toString()}`;
   } else if (context.type === "artist") {

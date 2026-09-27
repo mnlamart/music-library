@@ -1,16 +1,19 @@
 import { listLibraryQueueSpineTracks } from "#app/features/listening-insights/library-tracks.server.ts";
 import {
   DEFAULT_LIBRARY_SORT,
+  defaultLibrarySortDirection,
   parseLibrarySort,
   type LibrarySortOption,
 } from "#app/features/listening-insights/heavy-rotation.ts";
 import { type QueueTrack } from "#app/types/frontend/shared.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import {
+  defaultPlaylistTrackSortDirection,
   parsePlaylistTrackSort,
   sortPlaylistTracks,
   type PlaylistTrackSortOption,
 } from "#app/utils/playlist-track-sort.ts";
+import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
 
 export const QUEUE_TRACK_SELECT = {
   id: true,
@@ -27,12 +30,14 @@ type LibrarySpineParams = {
   context: "library";
   hasAudioOnly: true;
   sort: LibrarySortOption;
+  direction: SortDirection;
 };
 
 type PlaylistSpineParams = {
   context: "playlist";
   playlistId: string;
   sort: PlaylistTrackSortOption;
+  direction: SortDirection;
 };
 
 type ArtistSpineParams = {
@@ -73,12 +78,14 @@ export function parseQueueSpineParams(searchParams: URLSearchParams): ParseResul
       return { ok: false, error: "Invalid hasAudio parameter" };
     }
 
+    const sort = parseLibrarySort(searchParams.get("sort") ?? DEFAULT_LIBRARY_SORT);
     return {
       ok: true,
       value: {
         context: "library",
         hasAudioOnly: true,
-        sort: parseLibrarySort(searchParams.get("sort") ?? DEFAULT_LIBRARY_SORT),
+        sort,
+        direction: parseSortDirection(searchParams.get("dir"), defaultLibrarySortDirection(sort)),
       },
     };
   }
@@ -89,12 +96,17 @@ export function parseQueueSpineParams(searchParams: URLSearchParams): ParseResul
       return { ok: false, error: "Playlist ID is required" };
     }
 
+    const sort = parsePlaylistTrackSort(searchParams.get("sort"));
     return {
       ok: true,
       value: {
         context: "playlist",
         playlistId,
-        sort: parsePlaylistTrackSort(searchParams.get("sort")),
+        sort,
+        direction: parseSortDirection(
+          searchParams.get("dir"),
+          defaultPlaylistTrackSortDirection(sort),
+        ),
       },
     };
   }
@@ -158,6 +170,7 @@ export async function fetchQueueSpine(
     const tracks = await listLibraryQueueSpineTracks({
       userId,
       sort: params.sort,
+      direction: params.direction,
       hasAudioOnly: params.hasAudioOnly,
     });
     return { tracks, total: tracks.length };
@@ -182,7 +195,7 @@ export async function fetchQueueSpine(
       orderBy: { position: "asc" },
     });
 
-    const sorted = sortPlaylistTracks(playlistTracks, params.sort);
+    const sorted = sortPlaylistTracks(playlistTracks, params.sort, params.direction);
     const tracks = sorted.map((playlistTrack) => ({
       id: playlistTrack.track.id,
       title: playlistTrack.track.title,

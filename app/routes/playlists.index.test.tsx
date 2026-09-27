@@ -19,6 +19,7 @@ type LoaderData = {
   playlists: PlaylistRow[];
   pagination: { limit: number; hasNext: boolean; nextCursor: string | null };
   sort: string;
+  direction: string;
   q: string;
 };
 
@@ -160,6 +161,34 @@ describe("playlists index loader", () => {
     );
 
     expect(playlists.map((p) => p.title)).toEqual(["Alpha", "Bravo", "Charlie"]);
+  });
+
+  test("sorts by name descending when dir=desc", async () => {
+    const { userId, cookie } = await createUserCookie();
+    await createPlaylist({ userId, title: "Bravo" });
+    await createPlaylist({ userId, title: "Alpha" });
+    await createPlaylist({ userId, title: "Charlie" });
+
+    const { playlists } = readData(
+      await playlistsLoader(
+        pageRequest(cookie, "http://localhost/playlists?sort=name&dir=desc") as never,
+      ),
+    );
+
+    expect(playlists.map((p) => p.title)).toEqual(["Charlie", "Bravo", "Alpha"]);
+  });
+
+  test("sorts by updatedAt ascending when dir=asc", async () => {
+    const { userId, cookie } = await createUserCookie();
+    await createPlaylist({ userId, title: "Oldest", updatedAt: at(10) });
+    await createPlaylist({ userId, title: "Newest", updatedAt: at(30) });
+    await createPlaylist({ userId, title: "Middle", updatedAt: at(20) });
+
+    const { playlists } = readData(
+      await playlistsLoader(pageRequest(cookie, "http://localhost/playlists?dir=asc") as never),
+    );
+
+    expect(playlists.map((p) => p.title)).toEqual(["Oldest", "Middle", "Newest"]);
   });
 
   test("sorts by createdAt descending", async () => {

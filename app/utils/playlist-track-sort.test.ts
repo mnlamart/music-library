@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { parsePlaylistTrackSort, sortPlaylistTracks } from "./playlist-track-sort.ts";
+import {
+  defaultPlaylistTrackSortDirection,
+  parsePlaylistTrackSort,
+  sortPlaylistTracks,
+} from "./playlist-track-sort.ts";
 
 const tracks = [
   {
@@ -34,32 +38,67 @@ describe("parsePlaylistTrackSort", () => {
   });
 });
 
+describe("defaultPlaylistTrackSortDirection", () => {
+  test("uses asc for title/artist/duration and desc for dateAdded", () => {
+    expect(defaultPlaylistTrackSortDirection("title")).toBe("asc");
+    expect(defaultPlaylistTrackSortDirection("artist")).toBe("asc");
+    expect(defaultPlaylistTrackSortDirection("duration")).toBe("asc");
+    expect(defaultPlaylistTrackSortDirection("dateAdded")).toBe("desc");
+    expect(defaultPlaylistTrackSortDirection("custom")).toBe("asc");
+  });
+});
+
 describe("sortPlaylistTracks", () => {
-  test("sorts by playlist position for custom", () => {
+  test("sorts by playlist position for custom and ignores direction", () => {
     expect(sortPlaylistTracks(tracks, "custom").map((t) => t.id)).toEqual(["pt-2", "pt-1", "pt-3"]);
-  });
-
-  test("sorts by title", () => {
-    expect(sortPlaylistTracks(tracks, "title").map((t) => t.id)).toEqual(["pt-2", "pt-3", "pt-1"]);
-  });
-
-  test("sorts by artist", () => {
-    expect(sortPlaylistTracks(tracks, "artist").map((t) => t.id)).toEqual(["pt-2", "pt-1", "pt-3"]);
-  });
-
-  test("sorts by duration with nulls last", () => {
-    expect(sortPlaylistTracks(tracks, "duration").map((t) => t.id)).toEqual([
+    expect(sortPlaylistTracks(tracks, "custom", "desc").map((t) => t.id)).toEqual([
       "pt-2",
       "pt-1",
       "pt-3",
     ]);
   });
 
-  test("sorts by date added newest first", () => {
+  test("sorts by title ascending by default and descending when requested", () => {
+    expect(sortPlaylistTracks(tracks, "title").map((t) => t.id)).toEqual(["pt-2", "pt-3", "pt-1"]);
+    expect(sortPlaylistTracks(tracks, "title", "desc").map((t) => t.id)).toEqual([
+      "pt-1",
+      "pt-3",
+      "pt-2",
+    ]);
+  });
+
+  test("sorts by artist ascending by default and descending when requested", () => {
+    expect(sortPlaylistTracks(tracks, "artist").map((t) => t.id)).toEqual(["pt-2", "pt-1", "pt-3"]);
+    expect(sortPlaylistTracks(tracks, "artist", "desc").map((t) => t.id)).toEqual([
+      "pt-3",
+      "pt-1",
+      "pt-2",
+    ]);
+  });
+
+  test("sorts by duration with nulls last in both directions", () => {
+    expect(sortPlaylistTracks(tracks, "duration").map((t) => t.id)).toEqual([
+      "pt-2",
+      "pt-1",
+      "pt-3",
+    ]);
+    expect(sortPlaylistTracks(tracks, "duration", "desc").map((t) => t.id)).toEqual([
+      "pt-1",
+      "pt-2",
+      "pt-3",
+    ]);
+  });
+
+  test("sorts by date added newest first by default and oldest first when ascending", () => {
     expect(sortPlaylistTracks(tracks, "dateAdded").map((t) => t.id)).toEqual([
       "pt-2",
       "pt-1",
       "pt-3",
+    ]);
+    expect(sortPlaylistTracks(tracks, "dateAdded", "asc").map((t) => t.id)).toEqual([
+      "pt-3",
+      "pt-1",
+      "pt-2",
     ]);
   });
 });

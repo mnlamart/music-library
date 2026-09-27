@@ -8,16 +8,19 @@ import { type PlayContextJson, type PlayerStateData } from "./player-state.ts";
 
 const playlistSortSchema = z.enum(PLAYLIST_TRACK_SORT_OPTIONS);
 const librarySortSchema = z.enum(LIBRARY_SORT_OPTIONS);
+const sortDirectionSchema = z.enum(["asc", "desc"]);
 
 const playContextSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("library"),
     sort: librarySortSchema.optional(),
+    direction: sortDirectionSchema.optional(),
   }),
   z.object({
     type: z.literal("playlist"),
     playlistId: z.string().min(1),
     sort: playlistSortSchema.optional(),
+    direction: sortDirectionSchema.optional(),
   }),
   z.object({ type: z.literal("artist"), artistId: z.string().min(1) }),
   z.object({ type: z.literal("album"), albumId: z.string().min(1) }),

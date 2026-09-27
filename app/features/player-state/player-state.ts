@@ -11,12 +11,16 @@ export type PlayContextJson =
       type: "library";
       /** Omitted or `dateAdded` means newest-added library order. */
       sort?: "dateAdded" | "mostPlayedMonth" | "mostPlayedEver";
+      /** Omitted means the default direction for the chosen sort (desc). */
+      direction?: "asc" | "desc";
     }
   | {
       type: "playlist";
       playlistId: string;
       /** Omitted or `custom` means playlist position order. */
       sort?: "custom" | "title" | "artist" | "duration" | "dateAdded";
+      /** Omitted means the default direction for the chosen sort. */
+      direction?: "asc" | "desc";
     }
   | { type: "artist"; artistId: string }
   | { type: "album"; albumId: string }
