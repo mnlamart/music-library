@@ -1,0 +1,317 @@
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { prisma } from "#app/utils/db.server.ts";
+import { requireUserId } from "#app/utils/auth.server.ts";
+import { action } from "./albums.$id.edit.tsx";
+
+vi.mock("#app/utils/auth.server.ts", () => ({
+  requireUserId: vi.fn(),
+}));
+
+describe("POST /api/metadata/albums/:id/edit", () => {
+  let mockUserId: string;
+
+  beforeEach(async () => {
+    mockUserId = "test-user-id";
+    vi.mocked(requireUserId).mockResolvedValue(mockUserId);
+    await prisma.album.deleteMany();
+    await prisma.artist.deleteMany();
+    await prisma.user.deleteMany();
+  });
+
+  test("curator can edit album", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
+        roles: { connect: { name: "curator" } },
+      },
+    });
+
+    const artist = await prisma.artist.create({
+      data: {
+        name: "Artist",
+        normalizedName: "artist",
+      },
+    });
+
+    const album = await prisma.album.create({
+      data: {
+        name: "Original Album",
+        artistId: artist.id,
+      },
+    });
+
+    const request = new Request(`http://localhost/api/metadata/albums/${album.id}/edit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Updated Album",
+        artistId: artist.id,
+        year: 2024,
+        comment: "Fixing album name",
+      }),
+    });
+
+    const result = await action({ request, params: { id: album.id } } as any);
+    const data = result.data;
+
+    expect(data.album.name).toBe("Updated Album");
+    expect(data.album.year).toBe(2024);
+    expect(data.edit).toBeDefined();
+    expect(data.edit.comment).toBe("Fixing album name");
+    expect(data.edit.editedBy).toBe(mockUserId);
+
+    const albumInDb = await prisma.album.findUnique({ where: { id: album.id } });
+    expect(albumInDb?.name).toBe("Updated Album");
+    expect(albumInDb?.year).toBe(2024);
+  });
+
+  test("can change album artist", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
+        roles: { connect: { name: "curator" } },
+      },
+    });
+
+    const artist1 = await prisma.artist.create({
+      data: {
+        name: "Artist 1",
+        normalizedName: "artist1",
+      },
+    });
+
+    const artist2 = await prisma.artist.create({
+      data: {
+        name: "Artist 2",
+        normalizedName: "artist2",
+      },
+    });
+
+    const album = await prisma.album.create({
+      data: {
+        name: "Album",
+        artistId: artist1.id,
+      },
+    });
+
+    const request = new Request(`http://localhost/api/metadata/albums/${album.id}/edit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Album",
+        artistId: artist2.id,
+        comment: "Moving to correct artist",
+      }),
+    });
+
+    const result = await action({ request, params: { id: album.id } } as any);
+    const data = result.data;
+
+    expect(data.album.artistId).toBe(artist2.id);
+
+    const albumInDb = await prisma.album.findUnique({ where: { id: album.id } });
+    expect(albumInDb?.artistId).toBe(artist2.id);
+  });
+
+  test("regular user cannot edit album", async () => {
+    await prisma.role.upsert({
+      where: { name: "user" },
+      update: {},
+      create: { name: "user", description: "User" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "user@test.com",
+        username: "user",
+        roles: { connect: { name: "user" } },
+      },
+    });
+
+    const artist = await prisma.artist.create({
+      data: {
+        name: "Artist",
+        normalizedName: "artist",
+      },
+    });
+
+    const album = await prisma.album.create({
+      data: {
+        name: "Album",
+        artistId: artist.id,
+      },
+    });
+
+    const request = new Request(`http://localhost/api/metadata/albums/${album.id}/edit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Updated Album",
+        artistId: artist.id,
+        comment: "Trying to edit",
+      }),
+    });
+
+    await expect(action({ request, params: { id: album.id } } as any)).rejects.toThrow();
+  });
+
+  test("requires name and artistId fields", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
+        roles: { connect: { name: "curator" } },
+      },
+    });
+
+    const artist = await prisma.artist.create({
+      data: {
+        name: "Artist",
+        normalizedName: "artist",
+      },
+    });
+
+    const album = await prisma.album.create({
+      data: {
+        name: "Album",
+        artistId: artist.id,
+      },
+    });
+
+    const request = new Request(`http://localhost/api/metadata/albums/${album.id}/edit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        year: 2024,
+      }),
+    });
+
+    await expect(action({ request, params: { id: album.id } } as any)).rejects.toThrow();
+  });
+
+  test("creates edit history entry", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
+        roles: { connect: { name: "curator" } },
+      },
+    });
+
+    const artist = await prisma.artist.create({
+      data: {
+        name: "Artist",
+        normalizedName: "artist",
+      },
+    });
+
+    const album = await prisma.album.create({
+      data: {
+        name: "Original Album",
+        artistId: artist.id,
+        year: 2020,
+      },
+    });
+
+    const request = new Request(`http://localhost/api/metadata/albums/${album.id}/edit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Updated Album",
+        artistId: artist.id,
+        year: 2024,
+        comment: "Test edit",
+      }),
+    });
+
+    await action({ request, params: { id: album.id } } as any);
+
+    const edits = await prisma.albumEdit.findMany({
+      where: { albumId: album.id },
+      orderBy: { editedAt: "desc" },
+    });
+
+    expect(edits).toHaveLength(1);
+    expect(edits[0]?.name).toBe("Updated Album");
+    expect(edits[0]?.year).toBe(2024);
+    expect(edits[0]?.comment).toBe("Test edit");
+  });
+
+  test("returns 404 for non-existent album", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
+        roles: { connect: { name: "curator" } },
+      },
+    });
+
+    const artist = await prisma.artist.create({
+      data: {
+        name: "Artist",
+        normalizedName: "artist",
+      },
+    });
+
+    const request = new Request("http://localhost/api/metadata/albums/nonexistent/edit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Updated Album",
+        artistId: artist.id,
+      }),
+    });
+
+    await expect(action({ request, params: { id: "nonexistent" } } as any)).rejects.toThrow();
+  });
+});

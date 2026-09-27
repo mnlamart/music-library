@@ -32,9 +32,9 @@ model User {
   playerState         PlayerState?
   securityEvents      SecurityEvent[]
   securityEventsAsTarget SecurityEvent[] @relation("SecurityEventTarget")
-  trackEdits          TrackEdit[]
-  artistEdits         ArtistEdit[]
-  albumEdits          AlbumEdit[]
+  trackEdits          TrackEdit[]       @relation("TrackEditUser")
+  artistEdits         ArtistEdit[]      @relation("ArtistEditUser")
+  albumEdits          AlbumEdit[]       @relation("AlbumEditUser")
 }
 
 model PlayerState {
@@ -213,7 +213,7 @@ model Passkey {
 model Artist {
   id             String   @id @default(cuid())
   name           String
-  normalizedName String   @unique
+  normalizedName String
   bio            String?
   imageUrl       String?
   website        String?
@@ -229,7 +229,7 @@ model Artist {
   mergedIntoId   String?
   mergedAt       DateTime?
   mergedBy       String?
-  mergedArtist   Artist?  @relation("ArtistMerge", fields: [mergedIntoId], references: [id])
+  mergedArtist   Artist?  @relation("ArtistMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
   mergedFrom     Artist[] @relation("ArtistMerge")
 
   @@index([normalizedName])
@@ -270,10 +270,9 @@ model Album {
   mergedIntoId String?
   mergedAt     DateTime?
   mergedBy     String?
-  mergedAlbum  Album?   @relation("AlbumMerge", fields: [mergedIntoId], references: [id])
+  mergedAlbum  Album?   @relation("AlbumMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
   mergedFrom   Album[]  @relation("AlbumMerge")
 
-  @@unique([artistId, name]) // Unique album identifier
   @@index([artistId, name])
   @@index([artistId])
   @@index([mergedIntoId])
@@ -558,14 +557,16 @@ model SecurityEvent {
   @@index([perpetual])
 }
 
+// Edit history tables - full snapshot approach for easier querying
+
 model TrackEdit {
   id          String   @id @default(cuid())
   trackId     String
   track       Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
   editedBy    String
-  user        User     @relation(fields: [editedBy], references: [id], onDelete: Cascade)
+  user        User     @relation("TrackEditUser", fields: [editedBy], references: [id], onDelete: Cascade)
   editedAt    DateTime @default(now())
-  comment     String?
+  comment     String?  // Why this edit was made
   
   // Full snapshot of all editable fields
   title       String
@@ -594,7 +595,7 @@ model ArtistEdit {
   artistId  String
   artist    Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
   editedBy  String
-  user      User     @relation(fields: [editedBy], references: [id], onDelete: Cascade)
+  user      User     @relation("ArtistEditUser", fields: [editedBy], references: [id], onDelete: Cascade)
   editedAt  DateTime @default(now())
   comment   String?
   
@@ -615,7 +616,7 @@ model AlbumEdit {
   albumId      String
   album        Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
   editedBy     String
-  user         User     @relation(fields: [editedBy], references: [id], onDelete: Cascade)
+  user         User     @relation("AlbumEditUser", fields: [editedBy], references: [id], onDelete: Cascade)
   editedAt     DateTime @default(now())
   comment      String?
   

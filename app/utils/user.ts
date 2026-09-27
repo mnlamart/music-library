@@ -23,9 +23,9 @@ export function useUser() {
   return maybeUser;
 }
 
-type Action = "create" | "read" | "update" | "delete";
-type Entity = "user" | "note";
-type Access = "own" | "any" | "own,any" | "any,own";
+type Action = "create" | "read" | "update" | "delete" | "merge" | "restore";
+type Entity = "user" | "note" | "metadata" | "artist" | "album";
+type Access = "own" | "any" | "own,any" | "any,own" | "history";
 export type PermissionString = `${Action}:${Entity}` | `${Action}:${Entity}:${Access}`;
 
 export function parsePermissionString(permissionString: PermissionString) {

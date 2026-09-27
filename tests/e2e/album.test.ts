@@ -48,20 +48,23 @@ test.describe("Album Page", () => {
     expect(artist).not.toBeNull();
     if (!artist) return;
 
-    const album = await testPrisma.album.upsert({
+    let album = await testPrisma.album.findFirst({
       where: {
-        artistId_name: {
-          artistId: artist.id,
-          name: "Album Page Album",
-        },
-      },
-      update: {},
-      create: {
-        name: "Album Page Album",
         artistId: artist.id,
+        name: "Album Page Album",
       },
       select: { id: true, name: true },
     });
+
+    if (!album) {
+      album = await testPrisma.album.create({
+        data: {
+          name: "Album Page Album",
+          artistId: artist.id,
+        },
+        select: { id: true, name: true },
+      });
+    }
 
     await testPrisma.track.updateMany({
       where: { id: { in: [firstTrack.id, secondTrack.id] } },

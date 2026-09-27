@@ -1,8 +1,11 @@
 import { data, Link } from "react-router";
+import { useState } from "react";
+import { AlbumEditDialog } from "#app/components/album-edit-dialog.tsx";
 import { Breadcrumbs, type BreadcrumbHandle } from "#app/components/breadcrumbs.tsx";
 import { MusicEntityHeader } from "#app/components/music-entity-header.tsx";
 import { OfflineRouteBlocker } from "#app/components/offline/offline-route-blocker.tsx";
 import { TrackListItem } from "#app/components/track-list-item.tsx";
+import { Button } from "#app/components/ui/button.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { getUserId } from "#app/utils/auth.server.ts";
 import { getAlbumTitle } from "#app/utils/breadcrumb-utils.ts";
@@ -11,6 +14,7 @@ import {
   loadLibraryStatusByTrackId,
   loadUserPlaylists,
 } from "#app/utils/track-list-loader.server.ts";
+import { useOptionalUser, userHasPermission } from "#app/utils/user.ts";
 import { type Route } from "./+types/albums.$albumId.ts";
 
 export const handle: BreadcrumbHandle = {
@@ -85,6 +89,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
   const { album, playlists } = loaderData;
+  const user = useOptionalUser();
+  const canEdit = userHasPermission(user, "update:album:any");
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const coverImageUrl = album.coverImage ? `/resources/images/${album.coverImage.objectKey}` : null;
 
   return (
@@ -111,6 +118,17 @@ export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
               <span>
                 {album.tracks.length} track{album.tracks.length !== 1 ? "s" : ""}
               </span>
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditDialogOpen(true)}
+                  className="ml-auto"
+                >
+                  <Icon name="pencil-1" className="mr-2 h-4 w-4" />
+                  Edit Album
+                </Button>
+              )}
             </div>
           }
         />
@@ -149,6 +167,19 @@ export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
             <Icon name="camera" className="mb-4 h-12 w-12 text-muted-foreground" />
             <p className="text-muted-foreground">No tracks in this album yet.</p>
           </div>
+        )}
+
+        {canEdit && (
+          <AlbumEditDialog
+            album={{
+              ...album,
+              artistId: album.artist.id,
+              coverImageId: album.coverImage?.objectKey || null,
+            }}
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
+            onSaved={() => window.location.reload()}
+          />
         )}
       </div>
     </OfflineRouteBlocker>

@@ -13,6 +13,7 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/upload-audio.tsx",
   "api+/upload-audio-batch.tsx",
   "api+/extract-metadata.tsx",
+  "api+/metadata+/tracks+/bulk-edit.tsx",
   "_auth+/webauthn+/registration.ts",
   "_auth+/webauthn+/authentication.ts",
 ]);
