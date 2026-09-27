@@ -1,33 +1,29 @@
 import { prisma } from "#app/utils/db.server.ts";
+import {
+  DISCOVER_TRACKS_PAGE_SIZE,
+  DISCOVER_SORT_OPTIONS,
+  DEFAULT_DISCOVER_SORT,
+  parseDiscoverSort,
+  defaultDiscoverSortDirection,
+  type DiscoverSortOption,
+  type DiscoverTrack,
+  type TrackPopularityStats,
+} from "#app/utils/discover.ts";
 import { type SortDirection } from "#app/utils/sort-direction.ts";
 import { getPlayCompletedCountsByTrack } from "#app/features/listening-insights/play-completed-counts.server.ts";
+import { getTrackPopularityStats } from "#app/utils/track-popularity.server.ts";
 
-export const DISCOVER_TRACKS_PAGE_SIZE = 50;
-
-export const DISCOVER_SORT_OPTIONS = [
-  "recentlyAdded",
-  "mostPlayed",
-  "mostLiked",
-  "titleAZ",
-  "artistAZ",
-] as const;
-
-export type DiscoverSortOption = (typeof DISCOVER_SORT_OPTIONS)[number];
-
-export const DEFAULT_DISCOVER_SORT: DiscoverSortOption = "recentlyAdded";
-
-export function defaultDiscoverSortDirection(sort: DiscoverSortOption): SortDirection {
-  if (sort === "recentlyAdded" || sort === "mostPlayed" || sort === "mostLiked") {
-    return "desc";
-  }
-  return "asc";
-}
-
-export function parseDiscoverSort(raw: string | null | undefined): DiscoverSortOption {
-  return DISCOVER_SORT_OPTIONS.includes(raw as DiscoverSortOption)
-    ? (raw as DiscoverSortOption)
-    : DEFAULT_DISCOVER_SORT;
-}
+// Re-export shared types and functions for server use
+export {
+  DISCOVER_TRACKS_PAGE_SIZE,
+  DISCOVER_SORT_OPTIONS,
+  DEFAULT_DISCOVER_SORT,
+  parseDiscoverSort,
+  defaultDiscoverSortDirection,
+  type DiscoverSortOption,
+  type DiscoverTrack,
+  type TrackPopularityStats,
+};
 
 const TRACK_SELECT = {
   id: true,
@@ -64,39 +60,6 @@ const TRACK_SELECT = {
     },
   },
 } as const;
-
-type TrackWithDetails = {
-  id: string;
-  title: string;
-  duration: number | null;
-  serviceUrl: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  releaseDate: Date | null;
-  originalDate: Date | null;
-  artist: {
-    id: string;
-    name: string;
-  };
-  coverImage: {
-    objectKey: string;
-  } | null;
-  service: {
-    name: string;
-    displayName: string;
-    logoUrl: string | null;
-  } | null;
-  audioFiles: Array<{
-    id: string;
-    format: string | null;
-    objectKey: string;
-  }>;
-};
-
-export type DiscoverTrack = TrackWithDetails & {
-  isInUserLibrary: boolean;
-  userTrackCreatedAt: Date | null;
-};
 
 export type ListDiscoverTracksResult = {
   tracks: DiscoverTrack[];
@@ -159,10 +122,14 @@ export async function listDiscoverTracks({
 
   const userTrackMap = new Map(userTracks.map((ut) => [ut.trackId, ut.createdAt]));
 
+  // Fetch popularity stats for all tracks
+  const popularityStatsMap = await getTrackPopularityStats(trackIds, userId);
+
   const tracks: DiscoverTrack[] = tracksRaw.map((track) => ({
     ...track,
     isInUserLibrary: userTrackMap.has(track.id),
     userTrackCreatedAt: userTrackMap.get(track.id) ?? null,
+    popularityStats: popularityStatsMap.get(track.id),
   }));
 
   return {
@@ -178,7 +145,7 @@ export async function listDiscoverTracks({
 function getOrderByForSort(
   sort: DiscoverSortOption,
   direction: SortDirection,
-): Array<{ [key: string]: string }> {
+): Array<{ [key: string]: string | { [key: string]: string } }> {
   switch (sort) {
     case "recentlyAdded":
       return [{ createdAt: direction }, { id: direction }];
@@ -270,17 +237,21 @@ async function listDiscoverTracksByPlayCount({
   const userTrackMap = new Map(userTracks.map((ut) => [ut.trackId, ut.createdAt]));
   const trackMap = new Map(tracksRaw.map((t) => [t.id, t]));
 
-  const tracks: DiscoverTrack[] = pageIds
-    .map((id) => {
-      const track = trackMap.get(id);
-      if (!track) return null;
-      return {
+  // Fetch popularity stats for all tracks in this page
+  const popularityStatsMap = await getTrackPopularityStats(pageIds, userId);
+
+  const tracks: DiscoverTrack[] = [];
+  for (const id of pageIds) {
+    const track = trackMap.get(id);
+    if (track) {
+      tracks.push({
         ...track,
         isInUserLibrary: userTrackMap.has(id),
         userTrackCreatedAt: userTrackMap.get(id) ?? null,
-      };
-    })
-    .filter((t): t is DiscoverTrack => t !== null);
+        popularityStats: popularityStatsMap.get(id),
+      });
+    }
+  }
 
   return {
     tracks,
@@ -376,17 +347,21 @@ async function listDiscoverTracksByUserCount({
   const userTrackMap = new Map(userTracks.map((ut) => [ut.trackId, ut.createdAt]));
   const trackMap = new Map(tracksRaw.map((t) => [t.id, t]));
 
-  const tracks: DiscoverTrack[] = pageIds
-    .map((id) => {
-      const track = trackMap.get(id);
-      if (!track) return null;
-      return {
+  // Fetch popularity stats for all tracks in this page
+  const popularityStatsMap = await getTrackPopularityStats(pageIds, userId);
+
+  const tracks: DiscoverTrack[] = [];
+  for (const id of pageIds) {
+    const track = trackMap.get(id);
+    if (track) {
+      tracks.push({
         ...track,
         isInUserLibrary: userTrackMap.has(id),
         userTrackCreatedAt: userTrackMap.get(id) ?? null,
-      };
-    })
-    .filter((t): t is DiscoverTrack => t !== null);
+        popularityStats: popularityStatsMap.get(id),
+      });
+    }
+  }
 
   return {
     tracks,

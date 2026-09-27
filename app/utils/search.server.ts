@@ -17,6 +17,7 @@ import {
   getLifetimePlayCompletedCounts,
   personalPlayBoostCaseSql,
 } from "#app/utils/personal-play-boost.server.ts";
+import { getTrackPopularityStats } from "#app/utils/track-popularity.server.ts";
 
 // ── Cursor pagination helpers ──
 
@@ -148,6 +149,9 @@ async function enrichTrackSearchResults(
 
   const enrichedById = new Map(enrichedRows.map((row) => [row.id, row]));
 
+  // Fetch popularity stats for all tracks
+  const popularityStatsMap = await getTrackPopularityStats(trackIds, userId);
+
   return tracks.map((track) => {
     const enriched = enrichedById.get(track.id);
     if (!enriched) {
@@ -157,6 +161,7 @@ async function enrichTrackSearchResults(
         coverImage: null,
         service: null,
         audioFiles: [],
+        popularityStats: popularityStatsMap.get(track.id),
       };
     }
 
@@ -172,6 +177,7 @@ async function enrichTrackSearchResults(
         : null,
       audioFiles: enriched.audioFiles,
       addedAt: enriched.userTracks?.[0]?.createdAt.toISOString(),
+      popularityStats: popularityStatsMap.get(track.id),
     };
   });
 }

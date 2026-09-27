@@ -31,6 +31,18 @@ export function OnboardingHome({ youtubeConnected, isAdmin }: OnboardingHomeProp
               {primaryLabel}
             </Link>
           </Button>
+          <div className="mt-8 border-t pt-8">
+            <p className="text-muted-foreground mb-4 text-sm">or</p>
+            <Button asChild variant="outline" size="lg">
+              <Link to="/discover">
+                <Icon name="globe" className="mr-2 h-4 w-4" />
+                Explore Global Library
+              </Link>
+            </Button>
+            <p className="text-muted-foreground mt-3 text-sm">
+              Browse popular tracks from our community catalog
+            </p>
+          </div>
           {isAdmin ? (
             <div className="mt-10 border-t pt-8">
               <p className="text-muted-foreground mb-4 text-sm">or</p>

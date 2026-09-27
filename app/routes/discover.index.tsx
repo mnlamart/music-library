@@ -20,13 +20,13 @@ import { toast } from "#app/components/ui/use-toast.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import {
-  defaultDiscoverSortDirection,
-  parseDiscoverSort,
-  listDiscoverTracks,
   DISCOVER_TRACKS_PAGE_SIZE,
+  parseDiscoverSort,
+  defaultDiscoverSortDirection,
   type DiscoverSortOption,
   type DiscoverTrack,
-} from "#app/utils/discover-tracks.server.ts";
+} from "#app/utils/discover.ts";
+import { listDiscoverTracks } from "#app/utils/discover-tracks.server.ts";
 import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
 import { type Route } from "./+types/discover.index.ts";
 
@@ -203,7 +203,13 @@ function DiscoverTrackListItem({ track, index, playlists }: DiscoverTrackListIte
 }
 
 export default function DiscoverIndexRoute({ loaderData }: Route.ComponentProps) {
-  const { tracks, pagination, sort: loaderSort, direction: loaderDirection, playlists } = loaderData;
+  const {
+    tracks,
+    pagination,
+    sort: loaderSort,
+    direction: loaderDirection,
+    playlists,
+  } = loaderData;
 
   const pageSize = pagination.limit ?? DISCOVER_TRACKS_PAGE_SIZE;
   const [searchParams, setSearchParams] = useSearchParams();

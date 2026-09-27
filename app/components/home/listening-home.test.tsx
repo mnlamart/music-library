@@ -96,6 +96,16 @@ test("does not show Home title, pick-up copy, or Play library button", async () 
   expect(screen.queryByRole("button", { name: /play library/i })).not.toBeInTheDocument();
 });
 
+test("shows Explore Music section with link to discover", async () => {
+  renderListening({ showArchivingBanner: false });
+
+  const exploreHeading = await screen.findByRole("heading", { name: /explore music/i });
+  expect(exploreHeading).toBeInTheDocument();
+
+  const discoverLink = screen.getByRole("link", { name: /browse discover/i });
+  expect(discoverLink).toHaveAttribute("href", "/discover");
+});
+
 test("shows archiving banner in gray mode", async () => {
   renderListening({
     showArchivingBanner: true,
