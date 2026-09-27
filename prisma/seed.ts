@@ -74,6 +74,122 @@ async function seed() {
   });
   console.timeEnd(`🎵 Seeded services`);
 
+  // Seed Roles and Permissions
+  console.time(`🔐 Seeded curator role and permissions`);
+
+  // Create metadata permissions
+  const metadataUpdateAny = await prisma.permission.upsert({
+    where: { action_entity_access: { action: "update", entity: "metadata", access: "any" } },
+    update: {},
+    create: {
+      action: "update",
+      entity: "metadata",
+      access: "any",
+      description: "Update metadata on any track",
+    },
+  });
+
+  const metadataHistoryReadAny = await prisma.permission.upsert({
+    where: { action_entity_access: { action: "read", entity: "metadata:history", access: "any" } },
+    update: {},
+    create: {
+      action: "read",
+      entity: "metadata:history",
+      access: "any",
+      description: "Read metadata edit history",
+    },
+  });
+
+  const metadataRestoreAny = await prisma.permission.upsert({
+    where: { action_entity_access: { action: "restore", entity: "metadata", access: "any" } },
+    update: {},
+    create: {
+      action: "restore",
+      entity: "metadata",
+      access: "any",
+      description: "Restore metadata from history",
+    },
+  });
+
+  const artistUpdateAny = await prisma.permission.upsert({
+    where: { action_entity_access: { action: "update", entity: "artist", access: "any" } },
+    update: {},
+    create: {
+      action: "update",
+      entity: "artist",
+      access: "any",
+      description: "Update any artist",
+    },
+  });
+
+  const artistMergeAny = await prisma.permission.upsert({
+    where: { action_entity_access: { action: "merge", entity: "artist", access: "any" } },
+    update: {},
+    create: {
+      action: "merge",
+      entity: "artist",
+      access: "any",
+      description: "Merge artists",
+    },
+  });
+
+  const albumUpdateAny = await prisma.permission.upsert({
+    where: { action_entity_access: { action: "update", entity: "album", access: "any" } },
+    update: {},
+    create: {
+      action: "update",
+      entity: "album",
+      access: "any",
+      description: "Update any album",
+    },
+  });
+
+  const albumMergeAny = await prisma.permission.upsert({
+    where: { action_entity_access: { action: "merge", entity: "album", access: "any" } },
+    update: {},
+    create: {
+      action: "merge",
+      entity: "album",
+      access: "any",
+      description: "Merge albums",
+    },
+  });
+
+  // Create curator role with all required permissions
+  await prisma.role.upsert({
+    where: { name: "curator" },
+    update: {
+      permissions: {
+        connect: [
+          { id: metadataUpdateAny.id },
+          { id: metadataHistoryReadAny.id },
+          { id: metadataRestoreAny.id },
+          { id: artistUpdateAny.id },
+          { id: artistMergeAny.id },
+          { id: albumUpdateAny.id },
+          { id: albumMergeAny.id },
+        ],
+      },
+    },
+    create: {
+      name: "curator",
+      description: "Can edit track metadata, manage artists and albums, and view edit history",
+      permissions: {
+        connect: [
+          { id: metadataUpdateAny.id },
+          { id: metadataHistoryReadAny.id },
+          { id: metadataRestoreAny.id },
+          { id: artistUpdateAny.id },
+          { id: artistMergeAny.id },
+          { id: albumUpdateAny.id },
+          { id: albumMergeAny.id },
+        ],
+      },
+    },
+  });
+
+  console.timeEnd(`🔐 Seeded curator role and permissions`);
+
   const totalUsers = 5;
   console.time(`👤 Created ${totalUsers} users...`);
   const userImages = await getUserImages();
