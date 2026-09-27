@@ -177,6 +177,12 @@ export default function AdminOverviewRoute({ loaderData }: Route.ComponentProps)
             YouTube cookies
           </Link>
           <Link
+            to="/admin/missing-covers"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            Missing covers
+          </Link>
+          <Link
             to="/admin/orphaned-tracks"
             className="text-muted-foreground hover:text-foreground text-sm underline"
           >
