@@ -1,10 +1,12 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/react-virtual";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { data, useSearchParams } from "react-router";
+import { BulkEditDialog } from "#app/components/bulk-edit-dialog";
 import { OfflineLibraryView } from "#app/components/offline/offline-library-view.tsx";
 import { SortDirectionToggle } from "#app/components/sort-direction-toggle.tsx";
 import { TrackListItem } from "#app/components/track-list-item";
+import { TrackListSelectionControls } from "#app/components/track-list-selection-controls";
 import { Checkbox } from "#app/components/ui/checkbox.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { Label } from "#app/components/ui/label.tsx";
@@ -29,6 +31,7 @@ import { prisma } from "#app/utils/db.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
 import { parseHasAudioOnlyParam } from "#app/utils/library-user-tracks.server.ts";
 import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
+import { userIsCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { type Route } from "./+types/library.index.ts";
 
 // Define the track type
@@ -74,6 +77,9 @@ type LibraryTrackListItemProps = {
     description: string | null;
     _count: { tracks: number };
   }>;
+  showCheckbox?: boolean;
+  isSelected?: boolean;
+  onToggleSelection?: (trackId: string) => void;
 };
 
 function LibraryTrackListItem({
@@ -83,6 +89,9 @@ function LibraryTrackListItem({
   librarySort,
   sortDirection,
   playlists,
+  showCheckbox = false,
+  isSelected = false,
+  onToggleSelection,
 }: LibraryTrackListItemProps) {
   return (
     <TrackListItem
@@ -92,6 +101,9 @@ function LibraryTrackListItem({
       playlists={playlists}
       playlistContext={{ type: "library", librarySort, sortDirection }}
       showAudioFileDownload
+      showCheckbox={showCheckbox}
+      isSelected={isSelected}
+      onToggleSelection={onToggleSelection}
     />
   );
 }
@@ -134,6 +146,8 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     orderBy: { updatedAt: "desc" },
   });
 
+  const isCurator = await userIsCuratorOrAdmin(userId);
+
   return data({
     userTracks,
     pagination,
@@ -141,6 +155,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     sort,
     direction,
     playlists,
+    isCurator,
   });
 }
 
@@ -158,6 +173,7 @@ export default function LibraryIndexRoute({
     sort: "dateAdded" as LibrarySortOption,
     direction: "desc" as SortDirection,
     playlists: [],
+    isCurator: false,
   };
   const {
     userTracks,
@@ -166,6 +182,7 @@ export default function LibraryIndexRoute({
     hasAudioOnly = false,
     sort: loaderSort = "dateAdded",
     direction: loaderDirection = "desc",
+    isCurator = false,
   } = safeLoaderData;
   const offline = "offline" in safeLoaderData && safeLoaderData.offline;
   const offlineTracks =
@@ -180,6 +197,10 @@ export default function LibraryIndexRoute({
     defaultLibrarySortDirection(sort),
   );
   const parentRef = useRef<HTMLDivElement>(null);
+
+  // Selection state for bulk editing
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
 
   const scrollLibraryToTop = useCallback(() => {
     const viewport = parentRef.current?.querySelector("[data-radix-scroll-area-viewport]");
@@ -289,6 +310,34 @@ export default function LibraryIndexRoute({
   // Flatten all pages into a single array
   const allItems = queryData?.pages.flatMap((page) => page.userTracks) || [];
 
+  // Selection handlers for bulk editing
+  const handleSelectAll = useCallback(() => {
+    setSelectedTrackIds(new Set(allItems.map((item) => item.id)));
+  }, [allItems]);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedTrackIds(new Set());
+  }, []);
+
+  const handleToggleSelection = useCallback((trackId: string) => {
+    setSelectedTrackIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleBulkEditSuccess = useCallback(() => {
+    setSelectedTrackIds(new Set());
+    setBulkEditOpen(false);
+    // Refetch the data to show updated tracks
+    window.location.reload();
+  }, []);
+
   // Virtualization setup with sticky header support
   const virtualizer = useVirtualizer({
     count: 1 + allItems.length + (hasNextPage ? 1 : 0), // 1 for header + items + 1 for loading indicator
@@ -390,6 +439,19 @@ export default function LibraryIndexRoute({
         </div>
       </div>
 
+      {/* Selection Controls for Bulk Editing */}
+      {isCurator && allItems.length > 0 && (
+        <TrackListSelectionControls
+          selectedCount={selectedTrackIds.size}
+          totalCount={allItems.length}
+          allSelected={selectedTrackIds.size === allItems.length && allItems.length > 0}
+          onSelectAll={handleSelectAll}
+          onDeselectAll={handleDeselectAll}
+          onBulkEdit={() => setBulkEditOpen(true)}
+          isCurator={isCurator}
+        />
+      )}
+
       {allItems.length === 0 && !isFetching ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Icon name="file-text" className="h-12 w-12 text-muted-foreground mb-4" />
@@ -490,6 +552,9 @@ export default function LibraryIndexRoute({
                       librarySort={sort}
                       sortDirection={direction}
                       playlists={playlists}
+                      showCheckbox={isCurator}
+                      isSelected={selectedTrackIds.has(item.id)}
+                      onToggleSelection={handleToggleSelection}
                     />
                   </div>
                 );
@@ -497,6 +562,16 @@ export default function LibraryIndexRoute({
             </div>
           </ScrollArea>
         </div>
+      )}
+
+      {/* Bulk Edit Dialog */}
+      {isCurator && (
+        <BulkEditDialog
+          trackIds={Array.from(selectedTrackIds)}
+          open={bulkEditOpen}
+          onClose={() => setBulkEditOpen(false)}
+          onSuccess={handleBulkEditSuccess}
+        />
       )}
     </div>
   );
