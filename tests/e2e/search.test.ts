@@ -28,11 +28,11 @@ test.describe("Global Search", () => {
     await page.goto("/search");
 
     // Type filter pills should be visible
-    await expect(page.getByRole("button", { name: "All" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Tracks" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Albums" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Artists" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Playlists" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Filter by all" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Filter by tracks" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Filter by albums" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Filter by artists" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Filter by playlists" })).toBeVisible();
   });
 
   test("can filter search by type", async ({ page, loginAsAdmin }) => {
@@ -40,7 +40,7 @@ test.describe("Global Search", () => {
     await page.goto("/search");
 
     // Click the Tracks filter pill
-    await page.getByRole("button", { name: "Tracks" }).click();
+    await page.getByRole("button", { name: "Filter by tracks" }).click();
 
     // Type something to trigger search
     const searchInput = page.getByPlaceholder(/what do you want to listen to/i);
