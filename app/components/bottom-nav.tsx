@@ -40,6 +40,7 @@ export function BottomNav() {
               end={tab.to === "/"}
               onClick={tab.to === "/search" ? handleSearchClick : undefined}
               aria-label={tab.ariaLabel || tab.label}
+              prefetch="intent"
               className={({ isActive }) =>
                 cn(
                   "flex h-full flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors",
