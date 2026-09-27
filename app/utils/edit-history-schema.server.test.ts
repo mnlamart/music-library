@@ -391,7 +391,7 @@ describe("Edit History Schema", () => {
       );
 
       expect(permissionKeys).toContain("update:metadata:any");
-      expect(permissionKeys).toContain("read:metadata:history:any");
+      expect(permissionKeys).toContain("read:metadata-history:any");
       expect(permissionKeys).toContain("restore:metadata:any");
       expect(permissionKeys).toContain("update:artist:any");
       expect(permissionKeys).toContain("merge:artist:any");
