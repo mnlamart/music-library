@@ -32,6 +32,7 @@ model User {
   playerState         PlayerState?
   securityEvents      SecurityEvent[]
   securityEventsAsTarget SecurityEvent[] @relation("SecurityEventTarget")
+  trackEdits          TrackEdit[]
 }
 
 model PlayerState {
@@ -295,6 +296,7 @@ model Track {
   audioFiles              TrackAudioFile[]
   archiveJob              ArchiveJob?
   onRepeatSnapshotTracks  OnRepeatSnapshotTrack[]
+  edits                   TrackEdit[]
 
   @@unique([serviceId, externalId])
   @@index([serviceId, externalId])
@@ -303,6 +305,40 @@ model Track {
   @@index([albumId])
   @@index([coverImageId])
   @@index([artistId])
+}
+
+// Track edit history for metadata changes
+model TrackEdit {
+  id           String    @id @default(cuid())
+  trackId      String
+  track        Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  editedBy     String
+  editor       User      @relation(fields: [editedBy], references: [id], onDelete: Cascade)
+  comment      String?
+  
+  // Snapshot of all metadata fields at the time of this edit
+  title        String
+  artistId     String
+  albumId      String?
+  genre        String?
+  year         Int?
+  trackNumber  Int?
+  albumArtist  String?
+  bpm          Int?
+  label        String?
+  isrc         String?
+  releaseDate  DateTime?
+  originalDate DateTime?
+  originalYear Int?
+  totalTracks  Int?
+  totalDiscs   Int?
+  lyrics       String?
+  
+  editedAt     DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+
+  @@index([trackId, editedAt])
+  @@index([editedBy])
 }
 
 model UserPlaylist {
