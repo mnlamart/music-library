@@ -1,10 +1,15 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import { requireUserId } from "#app/utils/auth.server.ts";
+import { userIsCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { loader } from "./track-details.tsx";
 
 vi.mock("#app/utils/auth.server.ts", () => ({
   requireUserId: vi.fn(),
+}));
+
+vi.mock("#app/utils/curator.server.ts", () => ({
+  userIsCuratorOrAdmin: vi.fn(),
 }));
 
 vi.mock("#app/utils/db.server.ts", () => ({
@@ -26,6 +31,7 @@ describe("track-details loader", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(requireUserId).mockResolvedValue("user-1");
+    vi.mocked(userIsCuratorOrAdmin).mockResolvedValue(false);
   });
 
   test("returns 401 when unauthenticated", async () => {
@@ -67,6 +73,7 @@ describe("track-details loader", () => {
       id: "track-1",
       title: "Test Song",
       artist: { id: "artist-1", name: "Test Artist" },
+      albumRecord: null,
       duration: 180,
       createdAt: new Date("2025-01-01"),
       releaseDate: new Date("2009-10-25T06:57:33.000Z"),
@@ -74,6 +81,17 @@ describe("track-details loader", () => {
       coverImage: { objectKey: "covers/test.jpg" },
       service: { displayName: "YouTube" },
       serviceUrl: "https://youtube.com/watch?v=abc",
+      genre: null,
+      year: null,
+      trackNumber: null,
+      albumArtist: null,
+      bpm: null,
+      label: null,
+      isrc: null,
+      originalYear: null,
+      totalTracks: null,
+      totalDiscs: null,
+      lyrics: null,
     };
     vi.mocked(prisma.track.findUnique).mockResolvedValue(mockTrack as any);
 
@@ -81,7 +99,7 @@ describe("track-details loader", () => {
       request: makeRequest("trackId=track-1"),
     } as never);
 
-    expect(response.data).toEqual({ track: mockTrack });
+    expect(response.data).toEqual({ track: mockTrack, isCurator: false });
     expect(prisma.track.findUnique).toHaveBeenCalledWith({
       where: { id: "track-1" },
       select: expect.objectContaining({
@@ -104,6 +122,7 @@ describe("track-details loader", () => {
       id: "track-1",
       title: "Local Track",
       artist: { id: "artist-1", name: "Artist" },
+      albumRecord: null,
       duration: null,
       createdAt: new Date("2025-01-01"),
       releaseDate: null,
@@ -111,6 +130,17 @@ describe("track-details loader", () => {
       coverImage: null,
       service: null,
       serviceUrl: null,
+      genre: null,
+      year: null,
+      trackNumber: null,
+      albumArtist: null,
+      bpm: null,
+      label: null,
+      isrc: null,
+      originalYear: null,
+      totalTracks: null,
+      totalDiscs: null,
+      lyrics: null,
     };
     vi.mocked(prisma.track.findUnique).mockResolvedValue(mockTrack as any);
 
@@ -118,6 +148,6 @@ describe("track-details loader", () => {
       request: makeRequest("trackId=track-1"),
     } as never);
 
-    expect(response.data).toEqual({ track: mockTrack });
+    expect(response.data).toEqual({ track: mockTrack, isCurator: false });
   });
 });
