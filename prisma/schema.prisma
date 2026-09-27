@@ -513,3 +513,17 @@ model YoutubeCookie {
   valid     Boolean  @default(true)
   createdAt DateTime @default(now())
 }
+
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  type      String
+  userId    String?
+  ipHash    String
+  userAgent String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([userId, createdAt])
+  @@index([ipHash, createdAt])
+}
