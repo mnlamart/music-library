@@ -211,26 +211,25 @@ model Passkey {
 // See migration: 20251204000000_add_fts5_search
 
 model Artist {
-  id             String   @id @default(cuid())
+  id             String        @id @default(cuid())
   name           String
-  normalizedName String   @unique
+  normalizedName String        @unique
   bio            String?
   imageUrl       String?
   website        String?
   genre          String?
   country        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   tracks         Track[]
   albums         Album[]
   edits          ArtistEdit[]
-  
   // Merge tracking
   mergedIntoId   String?
   mergedAt       DateTime?
   mergedBy       String?
-  mergedArtist   Artist?  @relation("ArtistMerge", fields: [mergedIntoId], references: [id])
-  mergedFrom     Artist[] @relation("ArtistMerge")
+  mergedArtist   Artist?       @relation("ArtistMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     Artist[]      @relation("ArtistMerge")
 
   @@index([normalizedName])
   @@index([name])
@@ -265,13 +264,12 @@ model Album {
   updatedAt    DateTime    @updatedAt
   tracks       Track[]
   edits        AlbumEdit[]
-  
   // Merge tracking
   mergedIntoId String?
   mergedAt     DateTime?
   mergedBy     String?
-  mergedAlbum  Album?   @relation("AlbumMerge", fields: [mergedIntoId], references: [id])
-  mergedFrom   Album[]  @relation("AlbumMerge")
+  mergedAlbum  Album?      @relation("AlbumMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   Album[]     @relation("AlbumMerge")
 
   @@unique([artistId, name]) // Unique album identifier
   @@index([artistId, name])
@@ -311,12 +309,12 @@ model Track {
   updatedAt             DateTime               @updatedAt
   servicePlaylistTracks ServicePlaylistTrack[]
   service               Service                @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  playlists               UserPlaylistTrack[]
-  userTracks              UserTrack[]
-  audioFiles              TrackAudioFile[]
-  archiveJob              ArchiveJob?
-  onRepeatSnapshotTracks  OnRepeatSnapshotTrack[]
-  edits                   TrackEdit[]
+  playlists             UserPlaylistTrack[]
+  userTracks            UserTrack[]
+  audioFiles            TrackAudioFile[]
+  archiveJob            ArchiveJob?
+  onRepeatSnapshotTracks OnRepeatSnapshotTrack[]
+  edits                 TrackEdit[]
 
   @@unique([serviceId, externalId])
   @@index([serviceId, externalId])
@@ -538,52 +536,32 @@ model YoutubeCookie {
   createdAt DateTime @default(now())
 }
 
-model SecurityEvent {
-  id            String   @id @default(cuid())
-  eventType     String   // login_success, login_failed, account_disabled, etc.
-  ipHash        String?  // SHA-256 hash of IP (first 16 chars), nullable for system events
-  userId        String?  // nullable for failed login attempts
-  targetUserId  String?  // for admin actions on other users
-  metadata      String?  // JSON string for flexible event data
-  perpetual     Boolean  @default(false) // if true, never delete (critical audit events)
-  createdAt     DateTime @default(now())
-  
-  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  targetUser    User?    @relation("SecurityEventTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
-  
-  @@index([eventType])
-  @@index([ipHash])
-  @@index([userId])
-  @@index([createdAt])
-  @@index([perpetual])
-}
-
 model TrackEdit {
-  id          String   @id @default(cuid())
-  trackId     String
-  track       Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
-  editedBy    String
-  user        User     @relation(fields: [editedBy], references: [id], onDelete: Cascade)
-  editedAt    DateTime @default(now())
-  comment     String?
+  id           String    @id @default(cuid())
+  trackId      String
+  track        Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  editedBy     String
+  user         User      @relation(fields: [editedBy], references: [id], onDelete: Cascade)
+  editedAt     DateTime  @default(now())
+  comment      String?   // Why this edit was made
   
   // Full snapshot of all editable fields
-  title       String
-  artistId    String
-  albumId     String?
-  genre       String?
-  year        Int?
-  trackNumber Int?
-  albumArtist String?
-  bpm         Int?
-  label       String?
-  isrc        String?
-  releaseDate DateTime?
+  title        String
+  artistId     String
+  albumId      String?
+  genre        String?
+  year         Int?
+  trackNumber  Int?
+  albumArtist  String?
+  bpm          Int?
+  label        String?
+  isrc         String?
+  releaseDate  DateTime?
   originalDate DateTime?
   originalYear Int?
-  totalTracks Int?
-  totalDiscs  Int?
-  lyrics      String?
+  totalTracks  Int?
+  totalDiscs   Int?
+  lyrics       String?
   
   @@index([trackId, editedAt])
   @@index([editedBy])
@@ -627,4 +605,24 @@ model AlbumEdit {
   
   @@index([albumId, editedAt])
   @@index([editedBy])
+}
+
+model SecurityEvent {
+  id            String   @id @default(cuid())
+  eventType     String   // login_success, login_failed, account_disabled, etc.
+  ipHash        String?  // SHA-256 hash of IP (first 16 chars), nullable for system events
+  userId        String?  // nullable for failed login attempts
+  targetUserId  String?  // for admin actions on other users
+  metadata      String?  // JSON string for flexible event data
+  perpetual     Boolean  @default(false) // if true, never delete (critical audit events)
+  createdAt     DateTime @default(now())
+  
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  targetUser    User?    @relation("SecurityEventTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  
+  @@index([eventType])
+  @@index([ipHash])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([perpetual])
 }
