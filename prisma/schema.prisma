@@ -32,6 +32,9 @@ model User {
   playerState         PlayerState?
   securityEvents      SecurityEvent[]
   securityEventsAsTarget SecurityEvent[] @relation("SecurityEventTarget")
+  trackEdits          TrackEdit[]
+  artistEdits         ArtistEdit[]
+  albumEdits          AlbumEdit[]
 }
 
 model PlayerState {
@@ -208,21 +211,29 @@ model Passkey {
 // See migration: 20251204000000_add_fts5_search
 
 model Artist {
-  id             String   @id @default(cuid())
+  id             String        @id @default(cuid())
   name           String
-  normalizedName String   @unique
+  normalizedName String        @unique
   bio            String?
   imageUrl       String?
   website        String?
   genre          String?
   country        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   tracks         Track[]
   albums         Album[]
+  edits          ArtistEdit[]
+  // Merge tracking
+  mergedIntoId   String?
+  mergedAt       DateTime?
+  mergedBy       String?
+  mergedArtist   Artist?       @relation("ArtistMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     Artist[]      @relation("ArtistMerge")
 
   @@index([normalizedName])
   @@index([name])
+  @@index([mergedIntoId])
 }
 
 model CoverImage {
@@ -252,10 +263,18 @@ model Album {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   tracks       Track[]
+  edits        AlbumEdit[]
+  // Merge tracking
+  mergedIntoId String?
+  mergedAt     DateTime?
+  mergedBy     String?
+  mergedAlbum  Album?      @relation("AlbumMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   Album[]     @relation("AlbumMerge")
 
   @@unique([artistId, name]) // Unique album identifier
   @@index([artistId, name])
   @@index([artistId])
+  @@index([mergedIntoId])
 }
 
 model Track {
@@ -290,11 +309,12 @@ model Track {
   updatedAt             DateTime               @updatedAt
   servicePlaylistTracks ServicePlaylistTrack[]
   service               Service                @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  playlists               UserPlaylistTrack[]
-  userTracks              UserTrack[]
-  audioFiles              TrackAudioFile[]
-  archiveJob              ArchiveJob?
-  onRepeatSnapshotTracks  OnRepeatSnapshotTrack[]
+  playlists             UserPlaylistTrack[]
+  userTracks            UserTrack[]
+  audioFiles            TrackAudioFile[]
+  archiveJob            ArchiveJob?
+  onRepeatSnapshotTracks OnRepeatSnapshotTrack[]
+  edits                 TrackEdit[]
 
   @@unique([serviceId, externalId])
   @@index([serviceId, externalId])
@@ -514,6 +534,77 @@ model YoutubeCookie {
   updatedBy String   // userId who uploaded the cookie
   valid     Boolean  @default(true)
   createdAt DateTime @default(now())
+}
+
+model TrackEdit {
+  id           String    @id @default(cuid())
+  trackId      String
+  track        Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  editedBy     String
+  user         User      @relation(fields: [editedBy], references: [id], onDelete: Cascade)
+  editedAt     DateTime  @default(now())
+  comment      String?   // Why this edit was made
+  
+  // Full snapshot of all editable fields
+  title        String
+  artistId     String
+  albumId      String?
+  genre        String?
+  year         Int?
+  trackNumber  Int?
+  albumArtist  String?
+  bpm          Int?
+  label        String?
+  isrc         String?
+  releaseDate  DateTime?
+  originalDate DateTime?
+  originalYear Int?
+  totalTracks  Int?
+  totalDiscs   Int?
+  lyrics       String?
+  
+  @@index([trackId, editedAt])
+  @@index([editedBy])
+}
+
+model ArtistEdit {
+  id        String   @id @default(cuid())
+  artistId  String
+  artist    Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  editedBy  String
+  user      User     @relation(fields: [editedBy], references: [id], onDelete: Cascade)
+  editedAt  DateTime @default(now())
+  comment   String?
+  
+  // Full snapshot
+  name      String
+  bio       String?
+  imageUrl  String?
+  website   String?
+  genre     String?
+  country   String?
+  
+  @@index([artistId, editedAt])
+  @@index([editedBy])
+}
+
+model AlbumEdit {
+  id           String   @id @default(cuid())
+  albumId      String
+  album        Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  editedBy     String
+  user         User     @relation(fields: [editedBy], references: [id], onDelete: Cascade)
+  editedAt     DateTime @default(now())
+  comment      String?
+  
+  // Full snapshot
+  name         String
+  artistId     String
+  year         Int?
+  coverImageId String?
+  
+  @@index([albumId, editedAt])
+  @@index([editedBy])
 }
 
 model SecurityEvent {
