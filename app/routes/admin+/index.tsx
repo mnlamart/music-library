@@ -171,6 +171,12 @@ export default function AdminOverviewRoute({ loaderData }: Route.ComponentProps)
             Audio queue
           </Link>
           <Link
+            to="/admin/db-backup"
+            className="text-muted-foreground hover:text-foreground text-sm underline"
+          >
+            DB backups
+          </Link>
+          <Link
             to="/music/admin/fingerprint-failures"
             className="text-muted-foreground hover:text-foreground text-sm underline"
           >

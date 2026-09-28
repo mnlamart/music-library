@@ -108,6 +108,15 @@ export function UserDropdown() {
           )}
           {isAdmin && (
             <DropdownMenuItem asChild>
+              <Link prefetch="intent" to="/admin/db-backup">
+                <Icon className="text-body-md" name="download">
+                  Database Backups
+                </Icon>
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {isAdmin && (
+            <DropdownMenuItem asChild>
               <Link prefetch="intent" to="/music/admin/fingerprint-failures">
                 <Icon className="text-body-md" name="magnifying-glass">
                   Fingerprint Failures
