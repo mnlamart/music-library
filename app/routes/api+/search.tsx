@@ -75,13 +75,11 @@ export async function loader({ request, url }: Route.LoaderArgs) {
 
   const usePrefix = url.searchParams.get("prefix") !== "false";
 
-  // Get the authenticated user ID if available
-  const rawUserId = (await getUserId(request)) ?? undefined;
-
-  // Use scope to determine whether to filter by userId:
-  // - 'library': filter by user's library (pass userId)
-  // - 'all': show all tracks (pass undefined)
-  const userId = scopeResult.data === "library" ? rawUserId : undefined;
+  // Always pass the authenticated userId (Personal Play Boost) and the
+  // requested scope separately. searchTracks only applies the UserTrack JOIN
+  // when scope === "library"; omitting scope defaults it to "all" and the
+  // My Library toggle silently returns the full catalog.
+  const userId = (await getUserId(request)) ?? undefined;
 
   try {
     const results = await searchWithCache(
@@ -91,6 +89,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
       typeResult.data,
       usePrefix,
       userId,
+      scopeResult.data,
     );
     return Response.json(results);
   } catch (error) {

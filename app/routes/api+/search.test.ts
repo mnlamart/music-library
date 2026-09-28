@@ -33,7 +33,11 @@ describe("search API loader", () => {
     };
     expect(body.error).toBe("Invalid search parameters");
     expect(body.results).toEqual([]);
-    expect(body.pagination).toEqual({ limit: 20, hasNext: false, nextCursor: null });
+    expect(body.pagination).toEqual({
+      limit: 20,
+      hasNext: false,
+      nextCursor: null,
+    });
   });
 
   test("returns 400 with results shape when limit is invalid", async () => {
@@ -43,7 +47,10 @@ describe("search API loader", () => {
 
     expect(response.status).toBe(400);
     expect(searchWithCache).not.toHaveBeenCalled();
-    const body = (await response.json()) as { results: unknown[]; pagination: unknown };
+    const body = (await response.json()) as {
+      results: unknown[];
+      pagination: unknown;
+    };
     expect(body.results).toEqual([]);
     expect(body.pagination).toBeDefined();
   });
@@ -59,7 +66,7 @@ describe("search API loader", () => {
     } as never);
 
     expect(response.status).toBe(200);
-    expect(searchWithCache).toHaveBeenCalledWith("-", 20, undefined, "all", true, undefined);
+    expect(searchWithCache).toHaveBeenCalledWith("-", 20, undefined, "all", true, undefined, "all");
     const body = await response.json();
     expect(body).toHaveProperty("results");
     expect(body).toHaveProperty("pagination");
@@ -96,9 +103,65 @@ describe("search API loader", () => {
     } as never);
 
     expect(response.status).toBe(200);
-    expect(searchWithCache).toHaveBeenCalledWith("test", 20, undefined, "all", true, undefined);
+    expect(searchWithCache).toHaveBeenCalledWith(
+      "test",
+      20,
+      undefined,
+      "all",
+      true,
+      undefined,
+      "all",
+    );
     const body = await response.json();
     expect(body).toHaveProperty("results");
     expect(body).toHaveProperty("pagination");
+  });
+
+  test("passes scope=library and authenticated userId to searchWithCache", async () => {
+    const { getUserId } = await import("#app/utils/auth.server.ts");
+    vi.mocked(getUserId).mockResolvedValueOnce("user-kody");
+    vi.mocked(searchWithCache).mockResolvedValue({
+      results: [],
+      pagination: { limit: 20, hasNext: false, nextCursor: null },
+    });
+
+    const response = await loader({
+      ...makeRequest("http://localhost/api/search?q=beatles&scope=library"),
+    } as never);
+
+    expect(response.status).toBe(200);
+    expect(searchWithCache).toHaveBeenCalledWith(
+      "beatles",
+      20,
+      undefined,
+      "all",
+      true,
+      "user-kody",
+      "library",
+    );
+  });
+
+  test("passes scope=all with authenticated userId so Personal Play Boost still applies", async () => {
+    const { getUserId } = await import("#app/utils/auth.server.ts");
+    vi.mocked(getUserId).mockResolvedValueOnce("user-kody");
+    vi.mocked(searchWithCache).mockResolvedValue({
+      results: [],
+      pagination: { limit: 20, hasNext: false, nextCursor: null },
+    });
+
+    const response = await loader({
+      ...makeRequest("http://localhost/api/search?q=beatles&scope=all"),
+    } as never);
+
+    expect(response.status).toBe(200);
+    expect(searchWithCache).toHaveBeenCalledWith(
+      "beatles",
+      20,
+      undefined,
+      "all",
+      true,
+      "user-kody",
+      "all",
+    );
   });
 });
