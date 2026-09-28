@@ -180,6 +180,8 @@ These decisions emerged from the audio archiving implementation, architecture re
 
 14. **No `uploadAudioFile` wrapper** — Call `uploadFile` directly with `contentType: 'audio/mpeg'`. The wrapper adds no value — call site already has context, and generic `uploadFile` already accepts `contentType` and `metadata` cleanly.
 
+14b. **SQLite off-volume backups** — Automated `litefs export` on the LiteFS primary to a **separate** Tigris bucket (`BACKUP_BUCKET_NAME`), daily + weekly retention (~30 days), Telegram after exhausted retries, admin status + Backup now at `/admin/db-backup`. Restore is ops-only via `litefs import`. Cookies and `cache.db` are not included. See [ADR-029](./decisions/029-sqlite-off-volume-backups.md).
+
 ### Notifications
 
 15. **Telegram Bot API for admin alerts** — Chosen over email (RESEND has deliverability issues for system alerts), Discord webhook (adds a dependency), and in-app notifications (admin might not be logged in). Telegram is reliable, free, and the admin already uses it. Direct `fetch()` to `https://api.telegram.org/bot{TOKEN}/sendMessage` from the worker. Two env vars: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID`.
