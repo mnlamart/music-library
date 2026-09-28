@@ -34,6 +34,13 @@ if (process.env.AUDIO_ARCHIVE_ENABLED === "true") {
   });
 }
 
+// Start SQLite backup scheduler when BACKUP_BUCKET_NAME is set (ADR-029).
+if (process.env.BACKUP_BUCKET_NAME) {
+  void import("./features/db-backup/scheduler.server.ts").then(({ startBackupScheduler }) => {
+    startBackupScheduler();
+  });
+}
+
 const MODE = process.env.NODE_ENV ?? "development";
 
 type DocRequestArgs = Parameters<HandleDocumentRequestFunction>;

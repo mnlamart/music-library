@@ -26,6 +26,9 @@ const createConditionalSchema = (): z.ZodObject<any> => {
     AWS_REGION: isMocksEnabled ? z.string().optional() : z.string(),
     AWS_ENDPOINT_URL_S3: isMocksEnabled ? z.url().optional() : z.url(),
     BUCKET_NAME: isMocksEnabled ? z.string().optional() : z.string(),
+    // Separate Tigris bucket for SQLite backups (optional — scheduler no-ops when unset)
+    BACKUP_BUCKET_NAME: z.string().optional(),
+    BACKUP_HOUR_UTC: z.coerce.number().min(0).max(23).optional().default(3),
 
     // YouTube Data API Configuration (uses existing Google OAuth credentials)
     YOUTUBE_API_KEY: z.string().optional(),
