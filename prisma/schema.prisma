@@ -529,6 +529,18 @@ model WorkerState {
   updatedAt          DateTime  @updatedAt
 }
 
+/// Singleton status for automated SQLite backups (ADR-029).
+model BackupState {
+  id             String    @id @default("singleton")
+  lastStatus     String? // success | failure | running
+  lastAttemptAt  DateTime?
+  lastSuccessAt  DateTime?
+  lastError      String?
+  lastObjectKey  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
 model YoutubeCookie {
   id        String   @id @default(cuid())
   updatedAt DateTime @default(now())
