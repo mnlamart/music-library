@@ -19,11 +19,23 @@ import { updatePrimaryCacheValue } from "#app/routes/admin+/cache_.sqlite.server
 import { getInstanceInfo, getInstanceInfoSync } from "./litefs.server.ts";
 import { cachifiedTimingReporter, type Timings } from "./timing.server.ts";
 
-const CACHE_DATABASE_PATH = process.env.CACHE_DATABASE_PATH;
+const CACHE_DATABASE_PATH = (() => {
+  const basePath = process.env.CACHE_DATABASE_PATH;
+  if (!basePath) {
+    throw new Error("CACHE_DATABASE_PATH environment variable is required");
+  }
 
-if (!CACHE_DATABASE_PATH) {
-  throw new Error("CACHE_DATABASE_PATH environment variable is required");
-}
+  // In test mode with multiple vitest workers, use a unique cache database per worker
+  // to avoid SQLite file locking issues
+  if (process.env.VITEST_WORKER_ID) {
+    const workerId = process.env.VITEST_WORKER_ID;
+    const ext = path.extname(basePath);
+    const base = basePath.slice(0, -ext.length);
+    return `${base}-worker-${workerId}${ext}`;
+  }
+
+  return basePath;
+})();
 
 const cacheDb = remember("cacheDb", createDatabase);
 
