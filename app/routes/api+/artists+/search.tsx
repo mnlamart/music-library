@@ -18,6 +18,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Search artists by name (case-insensitive)
   const artists = await prisma.artist.findMany({
     where: {
+      mergedIntoId: null,
       normalizedName: {
         contains: searchQuery,
       },
