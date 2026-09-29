@@ -20,8 +20,8 @@ export function generateRoomCode(
 }
 
 /** True when the value matches length + charset (case-sensitive). */
-export function isValidRoomCode(code: string): boolean {
-  if (code.length !== ROOM_CODE_LENGTH) return false;
+export function isValidRoomCode(code: string | null | undefined): boolean {
+  if (typeof code !== "string" || code.length !== ROOM_CODE_LENGTH) return false;
   for (const char of code) {
     if (!ROOM_CODE_CHARSET.includes(char)) return false;
   }

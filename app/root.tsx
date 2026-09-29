@@ -273,13 +273,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 function usePartyRoomGuestShell() {
   // Prefer loader `guestShell` from `/rooms/:code` so logged-in hub is not forced into guest chrome
   // when child guest routes also match the URL. (Do not read `UIMatch.data` — not typed on RR matches.)
+  // IMPORTANT: call every hook unconditionally — returning before useMatches() broke Rules of Hooks
+  // when navigating /rooms → /rooms/:code after Create room (Safari: "t.length" / Chrome: reading 'length').
   const roomRouteData = useRouteLoaderData("routes/rooms.$code") as
     | { guestShell?: boolean }
     | undefined;
+  const matches = useMatches();
+
   if (roomRouteData?.guestShell === true) return true;
   if (roomRouteData?.guestShell === false) return false;
 
-  const matches = useMatches();
   return matches.some((match) => {
     const handle = match.handle as { partyRoomGuestShell?: boolean } | undefined;
     return handle?.partyRoomGuestShell === true;

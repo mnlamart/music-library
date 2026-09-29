@@ -32,6 +32,8 @@ test("isValidRoomCode rejects wrong length and bad chars", () => {
   expect(isValidRoomCode("ABCDEO")).toBe(false); // O excluded
   expect(isValidRoomCode("ABCDEI")).toBe(false); // I excluded
   expect(isValidRoomCode("abcdef")).toBe(false); // lowercase
+  expect(isValidRoomCode(null)).toBe(false);
+  expect(isValidRoomCode(undefined)).toBe(false);
 });
 
 test("parseRoomCodeInput accepts raw codes and join URLs", () => {

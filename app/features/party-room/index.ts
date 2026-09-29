@@ -81,8 +81,8 @@ export function splitRoomQueue(room: Pick<RoomSnapshot, "queue" | "playback">): 
   upcoming: RoomQueueItemDto[];
   nowPlaying: RoomQueueItemDto | null;
 } {
-  const { queue, playback } = room;
-  const idx = playback.currentIndex;
+  const queue = room.queue ?? [];
+  const idx = room.playback?.currentIndex ?? -1;
   if (queue.length === 0 || idx < 0) {
     return { history: [], upcoming: queue, nowPlaying: null };
   }
@@ -101,9 +101,9 @@ export function isCurrentHost(room: RoomSnapshot): boolean {
 export function canReclaimHost(room: RoomSnapshot): boolean {
   return Boolean(
     room.me &&
-      room.me.isOriginalHost &&
-      room.me.id !== room.currentHostParticipantId &&
-      room.status === "open",
+    room.me.isOriginalHost &&
+    room.me.id !== room.currentHostParticipantId &&
+    room.status === "open",
   );
 }
 
@@ -111,9 +111,9 @@ export function canReclaimHost(room: RoomSnapshot): boolean {
 export function canBecomeHost(room: RoomSnapshot): boolean {
   return Boolean(
     room.hostTakeoverAvailable &&
-      room.me &&
-      room.me.id !== room.currentHostParticipantId &&
-      room.me.role !== "host" &&
-      room.status === "open",
+    room.me &&
+    room.me.id !== room.currentHostParticipantId &&
+    room.me.role !== "host" &&
+    room.status === "open",
   );
 }
