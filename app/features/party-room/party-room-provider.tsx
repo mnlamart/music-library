@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  addPlaylistToRoomQueue,
   addTrackToRoomQueue,
   becomeHost,
   createRoom,
@@ -16,12 +17,15 @@ import {
   fetchCurrentRoom,
   fetchRoomQrDataUrl,
   joinRoom,
+  kickParticipant,
   leaveRoom,
   reclaimHost,
+  reorderRoomQueue,
   RoomApiError,
   ROOM_API,
   sendHostHeartbeat,
   sendRoomTransport,
+  setParticipantRole,
   updateRoomSettings,
   writeActiveRoomCode,
 } from "./api.client.ts";
@@ -34,7 +38,11 @@ import {
   isCurrentHost,
   parseRoomCodeInput,
 } from "./index.ts";
-import { ROOM_HOST_HEARTBEAT_INTERVAL_MS, type RoomDefaultJoinRole } from "./constants.ts";
+import {
+  ROOM_HOST_HEARTBEAT_INTERVAL_MS,
+  type RoomDefaultJoinRole,
+  type RoomRole,
+} from "./constants.ts";
 import { type RoomSnapshot, type RoomTransportAction } from "./types.ts";
 import { useOptionalUser } from "#app/utils/user.ts";
 
@@ -59,6 +67,10 @@ type PartyRoomContextValue = {
   reclaimHostNow: () => Promise<void>;
   setDefaultJoinRole: (role: RoomDefaultJoinRole) => Promise<void>;
   addTrack: (trackId: string) => Promise<void>;
+  addPlaylist: (playlistId: string) => Promise<void>;
+  reorderUpcoming: (orderedUpcomingIds: string[]) => Promise<void>;
+  setRole: (participantId: string, role: Exclude<RoomRole, "host">) => Promise<void>;
+  kick: (participantId: string) => Promise<void>;
   transport: (action: RoomTransportAction) => Promise<void>;
   clearError: () => void;
 };
@@ -309,6 +321,46 @@ export function PartyRoomProvider({
     [applyRoom, meUserId],
   );
 
+  const addPlaylist = useCallback(
+    async (playlistId: string) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await addPlaylistToRoomQueue(code, playlistId, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
+  const reorderUpcoming = useCallback(
+    async (orderedUpcomingIds: string[]) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await reorderRoomQueue(code, orderedUpcomingIds, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
+  const setRole = useCallback(
+    async (participantId: string, role: Exclude<RoomRole, "host">) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await setParticipantRole(code, participantId, role, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
+  const kick = useCallback(
+    async (participantId: string) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await kickParticipant(code, participantId, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
   const transport = useCallback(
     async (action: RoomTransportAction) => {
       const code = roomCodeRef.current;
@@ -341,6 +393,10 @@ export function PartyRoomProvider({
       reclaimHostNow,
       setDefaultJoinRole,
       addTrack,
+      addPlaylist,
+      reorderUpcoming,
+      setRole,
+      kick,
       transport,
       clearError: () => setError(null),
     };
@@ -358,6 +414,10 @@ export function PartyRoomProvider({
     reclaimHostNow,
     setDefaultJoinRole,
     addTrack,
+    addPlaylist,
+    reorderUpcoming,
+    setRole,
+    kick,
     transport,
   ]);
 

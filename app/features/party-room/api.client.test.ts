@@ -8,6 +8,7 @@ import {
   createRoom,
   fetchCurrentRoom,
   normalizeRoomSnapshot,
+  reorderRoomQueue,
   RoomApiError,
   reportRoomPlayEvent,
   writeActiveRoomCode,
@@ -226,6 +227,36 @@ describe("party-room api.client (backend #294 contract)", () => {
       "user-2",
     );
     expect(room.hostTakeoverAvailable).toBe(true);
+  });
+
+  it("reorders upcoming via POST /api/rooms/:code/queue intent reorder", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          roomId: "room-1",
+          code: "AB3K9Q",
+          status: "open",
+          defaultJoinRole: "listener",
+          roomVersion: 4,
+          currentIndex: 0,
+          isPlaying: false,
+          currentHostParticipantId: "host-1",
+          participants: [],
+          queue: [],
+          createdAt: new Date().toISOString(),
+          endedAt: null,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await reorderRoomQueue("AB3K9Q", ["q2", "q1"]);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/rooms/AB3K9Q/queue",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ intent: "reorder", orderedUpcomingIds: ["q2", "q1"] }),
+      }),
+    );
   });
 
   it("reportRoomPlayEvent posts to play-events", async () => {
