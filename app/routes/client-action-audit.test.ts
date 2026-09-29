@@ -28,6 +28,7 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/rooms+/$roomCode.reclaim-host.tsx",
   "api+/rooms+/$roomCode.queue.tsx",
   "api+/rooms+/$roomCode.play-events.tsx",
+  "api+/rooms+/$roomCode.audition.ts",
 ]);
 
 function walkFiles(dir: string): string[] {

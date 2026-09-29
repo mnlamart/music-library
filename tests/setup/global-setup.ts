@@ -2,10 +2,7 @@ import path from "node:path";
 import { type FullConfig } from "@playwright/test";
 import { execa } from "execa";
 import fsExtra from "fs-extra";
-
-// Set DATABASE_URL for the test process BEFORE any other imports
-// This ensures all prisma calls in tests use the test database
-export const BASE_DATABASE_PATH = path.join(process.cwd(), `./tests/prisma/base.db`);
+import { BASE_DATABASE_PATH } from "./base-database-path.ts";
 
 // DATABASE_URL is set via cross-env in npm scripts
 // This ensures it's available for both the test process and globalSetup
