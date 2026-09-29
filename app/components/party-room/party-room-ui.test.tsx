@@ -5,6 +5,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { GotACodeJoin } from "#app/components/party-room/got-a-code-join.tsx";
+import { GuestRoomLivePanel } from "#app/components/party-room/guest-room-live-panel.tsx";
 import { InRoomChip } from "#app/components/party-room/in-room-chip.tsx";
 import { HostFailoverControls } from "#app/components/party-room/host-failover-controls.tsx";
 import { AddToRoomQueueAction } from "#app/components/party-room/add-to-room-queue-action.tsx";
@@ -240,6 +241,36 @@ describe("Party Room UI affordances", () => {
     renderWithRouter(<RoomQueuePanel />);
     expect(screen.queryByText(/drag to reorder/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/drag to reorder/i)).not.toBeInTheDocument();
+  });
+
+  it("guest Room tab shows live queue reorder, Become host, and Leave", () => {
+    mockParty = {
+      ...mockParty,
+      showBecomeHost: true,
+      refresh: vi.fn(),
+      leave: vi.fn(),
+      room: {
+        id: "r1",
+        code: "AB3K9Q",
+        status: "open",
+        roomVersion: 2,
+        me: { id: "g1", role: "dj", userId: null, isGuest: true },
+        queue: [
+          queueItem("q0", 0, "Now"),
+          queueItem("q1", 1, "Guest Next"),
+          queueItem("q2", 2, "Guest Next B"),
+        ],
+        playback: { isPlaying: true, currentIndex: 0, currentTrackId: "track-q0" },
+      },
+    };
+    renderWithRouter(<GuestRoomLivePanel code="AB3K9Q" role="dj" displayName="Walkup" />);
+    expect(screen.getByRole("button", { name: /become host/i })).toBeInTheDocument();
+    expect(screen.getByText(/drag to reorder/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/drag to reorder guest next\./i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/drag to reorder guest next b/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /leave room/i })).toBeInTheDocument();
+    expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
+    expect(screen.getByText("Walkup")).toBeInTheDocument();
   });
 
   it("lets Host promote and kick other participants", async () => {

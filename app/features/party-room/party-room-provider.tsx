@@ -106,7 +106,24 @@ export function PartyRoomProvider({
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const applyRoom = useCallback((next: RoomSnapshot | null) => {
-    setRoom(next);
+    setRoom((prev) => {
+      if (!next) return null;
+      // SSE / shared snapshots often omit `me`. Keep the local seat when still present.
+      if (!next.me && prev?.me) {
+        const stillHere = next.participants.find((p) => p.id === prev.me!.id);
+        if (stillHere) {
+          return {
+            ...next,
+            me: {
+              ...prev.me,
+              ...stillHere,
+              isOriginalHost: stillHere.isOriginalHost || prev.me.isOriginalHost,
+            },
+          };
+        }
+      }
+      return next;
+    });
     roomCodeRef.current = next?.code ?? null;
     if (next?.code) writeActiveRoomCode(next.code);
   }, []);
