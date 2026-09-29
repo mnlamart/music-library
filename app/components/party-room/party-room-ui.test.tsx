@@ -9,12 +9,16 @@ import { InRoomChip } from "#app/components/party-room/in-room-chip.tsx";
 import { HostFailoverControls } from "#app/components/party-room/host-failover-controls.tsx";
 import { AddToRoomQueueAction } from "#app/components/party-room/add-to-room-queue-action.tsx";
 import { RoomQueuePanel } from "#app/components/party-room/room-queue-panel.tsx";
+import { RoomsHub } from "#app/components/party-room/rooms-hub.tsx";
 
 const join = vi.fn();
 const becomeHostNow = vi.fn();
 const reclaimHostNow = vi.fn();
 const addTrack = vi.fn();
+const addPlaylist = vi.fn();
 const reorderUpcoming = vi.fn();
+const setRole = vi.fn();
+const kick = vi.fn();
 
 const queueItem = (id: string, position: number, title: string) => ({
   id,
@@ -53,7 +57,10 @@ const baseParty = {
   reclaimHostNow,
   setDefaultJoinRole: vi.fn(),
   addTrack,
+  addPlaylist,
   reorderUpcoming,
+  setRole,
+  kick,
   transport: vi.fn(),
   clearError: vi.fn(),
 };
@@ -83,13 +90,19 @@ describe("Party Room UI affordances", () => {
       becomeHostNow,
       reclaimHostNow,
       addTrack,
+      addPlaylist,
       reorderUpcoming,
+      setRole,
+      kick,
     };
     join.mockReset();
     becomeHostNow.mockReset();
     reclaimHostNow.mockReset();
     addTrack.mockReset();
+    addPlaylist.mockReset();
     reorderUpcoming.mockReset();
+    setRole.mockReset();
+    kick.mockReset();
   });
 
   it("renders Got a code? join form when not in a room", () => {
@@ -227,5 +240,60 @@ describe("Party Room UI affordances", () => {
     renderWithRouter(<RoomQueuePanel />);
     expect(screen.queryByText(/drag to reorder/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/drag to reorder/i)).not.toBeInTheDocument();
+  });
+
+  it("lets Host promote and kick other participants", async () => {
+    setRole.mockResolvedValue(undefined);
+    kick.mockResolvedValue(undefined);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ playlists: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    mockParty = {
+      ...mockParty,
+      canManage: true,
+      isHost: true,
+      room: {
+        id: "r1",
+        code: "AB3K9Q",
+        status: "open",
+        roomVersion: 1,
+        defaultJoinRole: "listener",
+        me: { id: "p1", role: "host", userId: "u1" },
+        participants: [
+          {
+            id: "p1",
+            displayName: "Kody",
+            role: "host",
+            userId: "u1",
+            isGuest: false,
+            lastHeartbeatAt: null,
+            isOriginalHost: true,
+          },
+          {
+            id: "p2",
+            displayName: "Alex",
+            role: "listener",
+            userId: "u2",
+            isGuest: false,
+            lastHeartbeatAt: null,
+            isOriginalHost: false,
+          },
+        ],
+        queue: [],
+        playback: { isPlaying: false, currentIndex: 0, currentTrackId: null },
+        joinUrl: "/rooms/AB3K9Q",
+        qrDataUrl: null,
+      },
+    };
+    renderWithRouter(<RoomsHub />);
+    fireEvent.click(screen.getByRole("button", { name: /make dj/i }));
+    await waitFor(() => expect(setRole).toHaveBeenCalledWith("p2", "dj"));
+    fireEvent.click(screen.getByRole("button", { name: /kick/i }));
+    await waitFor(() => expect(kick).toHaveBeenCalledWith("p2"));
+    expect(screen.getByText(/add playlist to queue/i)).toBeInTheDocument();
+    vi.mocked(globalThis.fetch).mockRestore();
   });
 });

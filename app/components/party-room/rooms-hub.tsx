@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
+import { AddPlaylistToRoom } from "#app/components/party-room/add-playlist-to-room.tsx";
 import { HostFailoverControls } from "#app/components/party-room/host-failover-controls.tsx";
 import { RoomQueuePanel } from "#app/components/party-room/room-queue-panel.tsx";
 import { Button } from "#app/components/ui/button.tsx";
@@ -128,18 +129,93 @@ export function RoomsHub() {
             Participants ({room.participants?.length ?? 0})
           </h2>
           <ul className="divide-y divide-border rounded-md border border-border">
-            {(room.participants ?? []).map((p) => (
-              <li key={p.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span>
-                  {p.displayName}
-                  {p.id === room.me?.id ? " (you)" : ""}
-                  {p.isOriginalHost ? " · original host" : ""}
-                </span>
-                <span className="capitalize text-muted-foreground">{p.role}</span>
-              </li>
-            ))}
+            {(room.participants ?? []).map((p) => {
+              const isSelf = p.id === room.me?.id;
+              const canManageParticipant = party.canManage && !isSelf && p.role !== "host";
+              return (
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                >
+                  <span>
+                    {p.displayName}
+                    {isSelf ? " (you)" : ""}
+                    {p.isOriginalHost ? " · original host" : ""}
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="capitalize text-muted-foreground">{p.role}</span>
+                    {canManageParticipant ? (
+                      <>
+                        {p.role !== "dj" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void party
+                                .setRole(p.id, "dj")
+                                .then(() => toast({ title: `${p.displayName} is now a DJ` }))
+                                .catch((err: unknown) =>
+                                  toast({
+                                    title: "Could not change role",
+                                    description: err instanceof Error ? err.message : undefined,
+                                    variant: "destructive",
+                                  }),
+                                );
+                            }}
+                          >
+                            Make DJ
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void party
+                                .setRole(p.id, "listener")
+                                .then(() => toast({ title: `${p.displayName} is now a Listener` }))
+                                .catch((err: unknown) =>
+                                  toast({
+                                    title: "Could not change role",
+                                    description: err instanceof Error ? err.message : undefined,
+                                    variant: "destructive",
+                                  }),
+                                );
+                            }}
+                          >
+                            Make Listener
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            void party
+                              .kick(p.id)
+                              .then(() => toast({ title: `${p.displayName} removed` }))
+                              .catch((err: unknown) =>
+                                toast({
+                                  title: "Could not kick",
+                                  description: err instanceof Error ? err.message : undefined,
+                                  variant: "destructive",
+                                }),
+                              );
+                          }}
+                        >
+                          Kick
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
+
+        {party.canManage ? <AddPlaylistToRoom /> : null}
 
         <RoomQueuePanel />
       </div>
