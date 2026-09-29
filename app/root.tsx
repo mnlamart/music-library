@@ -10,6 +10,7 @@ import {
   Scripts,
   ScrollRestoration,
   useLoaderData,
+  useMatches,
 } from "react-router";
 import { HoneypotProvider } from "remix-utils/honeypot/react";
 import { useToast } from "#app/components/toaster.tsx";
@@ -265,9 +266,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
  * Player idle:  64px  (bottom nav only)
  * Player active: ~126px (bottom nav + mini-bar)
  */
+function usePartyRoomGuestShell() {
+  const matches = useMatches();
+  return matches.some((match) => {
+    const handle = match.handle as { partyRoomGuestShell?: boolean } | undefined;
+    return handle?.partyRoomGuestShell === true;
+  });
+}
+
 function ShellLayout() {
+  const guestShell = usePartyRoomGuestShell();
   const { isPlayerVisible } = useAudioPlayer();
-  const bottomBarHeight = isPlayerVisible ? "126px" : "64px";
+  const bottomBarHeight = guestShell ? "0px" : isPlayerVisible ? "126px" : "64px";
 
   useEffect(() => {
     document.body.style.setProperty("--bottom-bar-height", bottomBarHeight);
@@ -278,6 +288,24 @@ function ShellLayout() {
 
   const loaderData = useLoaderData<typeof loader>();
   const user = useOptionalUser();
+
+  // Party Room Guest Shell — minified chrome (Room + Search only); no library nav / personal player.
+  if (guestShell) {
+    return (
+      <div className="flex min-h-screen flex-col bg-gradient-to-b from-background via-background to-muted/30">
+        <OfflineStatusBanner />
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50"
+        >
+          Skip to content
+        </a>
+        <div className="flex flex-1 flex-col" id="main-content">
+          <Outlet />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col justify-between">
