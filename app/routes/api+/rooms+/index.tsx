@@ -2,6 +2,7 @@ import { requireUserId } from "#app/utils/auth.server.ts";
 import { DEFAULT_JOIN_ROLE } from "#app/features/party-room/constants.ts";
 import { createRoom, isDefaultJoinRole } from "#app/features/party-room/party-room.server.ts";
 import { partyRoomErrorResponse, readJsonBody } from "#app/features/party-room/request.server.ts";
+import { prisma } from "#app/utils/db.server.ts";
 
 export async function action({ request }: { request: Request }) {
   if (request.method !== "POST") {
@@ -11,7 +12,14 @@ export async function action({ request }: { request: Request }) {
   try {
     const userId = await requireUserId(request);
     const body = await readJsonBody(request);
-    const displayName = typeof body.displayName === "string" ? body.displayName : "Host";
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, username: true },
+    });
+    const displayName =
+      typeof body.displayName === "string" && body.displayName.trim()
+        ? body.displayName.trim()
+        : user?.name?.trim() || user?.username || "Host";
     const defaultJoinRole =
       typeof body.defaultJoinRole === "string" && isDefaultJoinRole(body.defaultJoinRole)
         ? body.defaultJoinRole

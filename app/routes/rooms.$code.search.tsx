@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useLoaderData } from "react-router";
+import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
 import { canAddTracks } from "#app/features/party-room/capabilities.ts";
 import { parseRoomCodeInput } from "#app/features/party-room/codes.ts";
 import { resolveRoomParticipantByCode } from "#app/features/party-room/participant-seat.server.ts";
@@ -41,6 +42,8 @@ export default function GuestSearchTab() {
   const [isPending, startTransition] = useTransition();
   const [audition, setAudition] = useState<AuditionState>(null);
   const [auditionError, setAuditionError] = useState<string | null>(null);
+  const [addMessage, setAddMessage] = useState<string | null>(null);
+  const [addingTrackId, setAddingTrackId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -143,6 +146,30 @@ export default function GuestSearchTab() {
     setAudition(null);
   }
 
+  async function addToQueue(track: Extract<SearchResult, { type: "track" }>) {
+    if (!canAdd) return;
+    setAddMessage(null);
+    setAddingTrackId(track.id);
+    try {
+      const res = await fetch(`/api/rooms/${encodeURIComponent(code)}/queue`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent: "add_track", trackId: track.id }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        setAddMessage(body?.error ?? "Could not add to queue");
+        return;
+      }
+      setAddMessage(`Added “${track.title}” to the room queue`);
+    } catch {
+      setAddMessage("Could not add to queue");
+    } finally {
+      setAddingTrackId(null);
+    }
+  }
+
   return (
     <div className="space-y-4 pb-28">
       <div className="space-y-1">
@@ -191,13 +218,25 @@ export default function GuestSearchTab() {
                     {result.albumName ? ` · ${result.albumName}` : ""}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void startAudition(result)}
-                  className="shrink-0 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted"
-                >
-                  Audition
-                </button>
+                <div className="flex shrink-0 gap-2">
+                  {canAdd ? (
+                    <button
+                      type="button"
+                      onClick={() => void addToQueue(result)}
+                      disabled={addingTrackId === result.id}
+                      className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                    >
+                      {addingTrackId === result.id ? "Adding…" : "Add"}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void startAudition(result)}
+                    className="rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+                  >
+                    Audition
+                  </button>
+                </div>
               </div>
             ) : result.type === "album" ? (
               <div>
@@ -216,6 +255,11 @@ export default function GuestSearchTab() {
 
       {!isPending && query.trim() && results.length === 0 && !error ? (
         <p className="text-sm text-muted-foreground">No has-audio matches.</p>
+      ) : null}
+      {addMessage ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          {addMessage}
+        </p>
       ) : null}
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
@@ -249,4 +293,8 @@ export default function GuestSearchTab() {
       </div>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  return <GeneralErrorBoundary />;
 }

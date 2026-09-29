@@ -427,6 +427,7 @@ export async function leaveRoom({ roomId, actor }: { roomId: string; actor: Part
   const updates: {
     emptySince?: Date | null;
     currentHostParticipantId?: string | null;
+    isPlaying?: boolean;
     roomVersion: { increment: number };
   } = { roomVersion: { increment: 1 } };
 
@@ -436,6 +437,7 @@ export async function leaveRoom({ roomId, actor }: { roomId: string; actor: Part
 
   if (room.currentHostParticipantId === participant.id) {
     updates.currentHostParticipantId = null;
+    updates.isPlaying = false;
   }
 
   await prisma.room.update({ where: { id: roomId }, data: updates });
@@ -594,42 +596,48 @@ export async function becomeHost({
   actor: ParticipantActor;
   now?: Date;
 }) {
-  const room = await prisma.room.findUnique({ where: { id: roomId } });
-  if (!room || room.status !== ROOM_STATUS.open) {
-    throw new PartyRoomError("not_found", "Room not found", 404);
-  }
   const participant = await requireParticipant(roomId, actor);
 
-  if (room.currentHostParticipantId) {
-    const currentHost = await prisma.roomParticipant.findUnique({
-      where: { id: room.currentHostParticipantId },
-    });
-    if (currentHost && !currentHost.leftAt) {
-      const silentFor = now.getTime() - currentHost.lastSeenAt.getTime();
-      if (silentFor < HOST_GRACE_MS) {
-        throw new PartyRoomError("host_still_present", "Current Host is still connected", 409);
-      }
-      await prisma.roomParticipant.update({
-        where: { id: currentHost.id },
-        data: { role: ROOM_ROLE.dj },
-      });
+  await prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({ where: { id: roomId } });
+    if (!room || room.status !== ROOM_STATUS.open) {
+      throw new PartyRoomError("not_found", "Room not found", 404);
     }
-  }
 
-  await prisma.$transaction([
-    prisma.roomParticipant.update({
+    // Another concurrent becomeHost may have already claimed the seat.
+    if (room.currentHostParticipantId === participant.id) {
+      return;
+    }
+
+    if (room.currentHostParticipantId) {
+      const currentHost = await tx.roomParticipant.findUnique({
+        where: { id: room.currentHostParticipantId },
+      });
+      if (currentHost && !currentHost.leftAt) {
+        const silentFor = now.getTime() - currentHost.lastSeenAt.getTime();
+        if (silentFor < HOST_GRACE_MS) {
+          throw new PartyRoomError("host_still_present", "Current Host is still connected", 409);
+        }
+        await tx.roomParticipant.update({
+          where: { id: currentHost.id },
+          data: { role: ROOM_ROLE.dj },
+        });
+      }
+    }
+
+    await tx.roomParticipant.update({
       where: { id: participant.id },
       data: { role: ROOM_ROLE.host, lastSeenAt: now },
-    }),
-    prisma.room.update({
+    });
+    await tx.room.update({
       where: { id: roomId },
       data: {
         currentHostParticipantId: participant.id,
         isPlaying: false,
         roomVersion: { increment: 1 },
       },
-    }),
-  ]);
+    });
+  });
 
   return emitRoomSnapshot(roomId);
 }
