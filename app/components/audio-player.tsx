@@ -42,6 +42,7 @@ import {
   revokePlaybackAudioUrl,
 } from "#app/features/offline-storage/resolve-playback-url.client.ts";
 import { reportPlayEvent } from "#app/features/usage-analytics/report-play-event.client.ts";
+import { reportRoomPlayEvent } from "#app/features/party-room/api.client.ts";
 import { useOnlineStatus } from "#app/hooks/use-online-status.ts";
 import { type FullTrack } from "#app/types/frontend/shared";
 import { triggerBrowserDownload } from "#app/utils/download.ts";
@@ -843,6 +844,12 @@ interface AudioPlayerProps {
   unlockAutoplayRef?: React.MutableRefObject<
     ((trackId: string, cachedUrl: string) => boolean) | null
   >;
+  /** When set, emit room play events instead of personal UsageEvents. */
+  roomSpeaker?: { roomId: string } | null;
+  /** Server-driven play/pause while in room speaker mode. */
+  roomPlaying?: boolean | null;
+  /** Prefer this audio URL (e.g. speaker grant) over personal /resources/audio. */
+  audioSrcOverride?: string;
 }
 
 export function AudioPlayer(props: AudioPlayerProps) {
@@ -863,6 +870,9 @@ export function AudioPlayer(props: AudioPlayerProps) {
     playbackToken = 0,
     wantsAutoPlayRef,
     unlockAutoplayRef,
+    roomSpeaker = null,
+    roomPlaying = null,
+    audioSrcOverride,
   } = props;
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -885,6 +895,22 @@ export function AudioPlayer(props: AudioPlayerProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isNowPlayingOpen, setIsNowPlayingOpen] = useState(false);
   const isOnline = useOnlineStatus();
+
+  const emitPlayEvent = useCallback(
+    (type: "play_started" | "play_completed", id: string, playId?: string | null) => {
+      if (roomSpeaker?.roomId) {
+        reportRoomPlayEvent(
+          roomSpeaker.roomId,
+          type === "play_started" ? "room_play_started" : "room_play_completed",
+          id,
+          playId,
+        );
+        return;
+      }
+      reportPlayEvent(type, id, playId);
+    },
+    [roomSpeaker],
+  );
 
   // Expose a function to apply a prefetched track and play it synchronously within
   // a user gesture. This maintains autoplay permission across track changes.
@@ -1033,6 +1059,15 @@ export function AudioPlayer(props: AudioPlayerProps) {
     setPlaybackError(null);
 
     let cancelled = false;
+    if (audioSrcOverride) {
+      loadedTrackIdRef.current = trackId;
+      setAudioSrc(audioSrcOverride);
+      setPlaybackError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     void resolveTrackPlaybackSource(trackId)
       .then((url) => {
         if (cancelled) return;
@@ -1058,7 +1093,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       cancelled = true;
       revokePlaybackAudioUrl(trackId);
     };
-  }, [audioFile, trackId]);
+  }, [audioFile, trackId, audioSrcOverride]);
 
   // When going offline while a track is playing, proactively swap to the
   // cached blob URL so playback continues seamlessly.  Falls back to
@@ -1134,7 +1169,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
                 playStartedForTrackRef.current = track.id;
                 playCompletedForTrackRef.current = null;
                 playIdRef.current = generatePlayId();
-                reportPlayEvent("play_started", track.id, playIdRef.current);
+                emitPlayEvent("play_started", track.id, playIdRef.current);
               }
             })
             .catch(() => {
@@ -1152,7 +1187,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       }
       isManualPlayRef.current = false;
     }
-  }, [trackId, track, audioSrc, playbackToken, volume, isMuted, wantsAutoPlayRef]);
+  }, [trackId, track, audioSrc, playbackToken, volume, isMuted, wantsAutoPlayRef, emitPlayEvent]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -1178,7 +1213,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
           playStartedForTrackRef.current = track.id;
           playCompletedForTrackRef.current = null;
           playIdRef.current = generatePlayId();
-          reportPlayEvent("play_started", track.id, playIdRef.current);
+          emitPlayEvent("play_started", track.id, playIdRef.current);
         }
       }
     } catch (_error) {
@@ -1191,7 +1226,23 @@ export function AudioPlayer(props: AudioPlayerProps) {
         variant: "destructive",
       });
     }
-  }, [track]);
+  }, [track, emitPlayEvent]);
+
+  // Room speaker: honor server play/pause without personal transport controls.
+  useEffect(() => {
+    if (!roomSpeaker || roomPlaying === null || !audioRef.current) return;
+    if (roomPlaying) {
+      keepPlayingRef.current = true;
+      void audioRef.current.play().catch(() => {
+        setIsPlaying(false);
+        keepPlayingRef.current = false;
+      });
+    } else {
+      keepPlayingRef.current = false;
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, [roomSpeaker, roomPlaying]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -1383,7 +1434,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
         audio.currentTime / audio.duration >= 0.5
       ) {
         playCompletedForTrackRef.current = trackId;
-        reportPlayEvent("play_completed", trackId, playIdRef.current);
+        emitPlayEvent("play_completed", trackId, playIdRef.current);
       }
     };
     const handlePlay = () => {
@@ -1420,7 +1471,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
     const handleEnded = () => {
       if (trackId && playCompletedForTrackRef.current !== trackId) {
         playCompletedForTrackRef.current = trackId;
-        reportPlayEvent("play_completed", trackId, playIdRef.current);
+        emitPlayEvent("play_completed", trackId, playIdRef.current);
       }
       // Only auto-advance if not looping one track
       if (loopMode === "one") {
@@ -1512,7 +1563,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
     };
-  }, [onNext, loopMode, trackId, audioSrc, hasNext]);
+  }, [onNext, loopMode, trackId, audioSrc, hasNext, emitPlayEvent]);
 
   const handleDownload = async () => {
     if (!track) return;
