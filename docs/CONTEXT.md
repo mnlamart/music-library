@@ -104,13 +104,33 @@ Implementation tickets: [On-Repeat Snapshots #198](https://github.com/mnlamart/m
 
 - **LoopMode** — Controls playback repetition when the spine pointer reaches either end: `'off'` (playback stops when no next/previous track exists), `'all'` (wraps the spine — next from end goes to start, previous from start goes to end), `'one'` (repeats the current track indefinitely — both `resolveNextTrack` and `resolvePreviousTrack` return the current spine position). Up Next is never affected by loop mode; it drains independently.
 
+### Party Room
+
+- **Party Room** — Server-hosted in-person party session: shared live queue, roles, optional guests, one speaker device. Distinct from the personal **Queue Spine** / **Up Next** player. See [ADR-030](./decisions/030-party-room.md).
+
+- **RoomParticipant** — A person’s seat in one **Party Room**: linked `userId` **or** guest (display name + opaque token), plus role (**Host** / **DJ** / **Listener**). Prefer this term over “membership.”
+
+- **Host / DJ / Listener** — Room roles on a **RoomParticipant**. **Host:** transport, manage room, speaker (v1), add/edit queue. **DJ:** add and edit others’ upcoming rows (no transport / manage). **Listener:** watch (+ **remove-own**); cannot add unless promoted or **defaultJoinRole** is DJ. Host configures **`defaultJoinRole`** (`listener` | `dj`) for new joiners.
+
+- **Room Queue** — Flat ordered list of track ids for a **Party Room** (cap 500), plus **`currentIndex`**. Not a **Queue Spine**. Starts empty; Host may bulk **Add playlist to queue**. Rows before the pointer are history (read-only); upcoming rows are editable by Host/DJ. Each row records **`addedByParticipantId`** (**remove-own** works for every role).
+
+- **Room Speaker** — The single device that outputs audio for the room (v1: current Host’s device). Personal **PlayerState** is suspended on that device while the room is live.
+
+- **Room Code** — Six-character join code (`ABCDEFGHJKLMNPQRSTUVWXYZ123456789`). Same value appears in the join URL. Host UI shows code, copy-link, and a QR encoding the **full URL**. **Smart join:** logged-in users become linked participants; logged-out users enter the **Guest Shell**.
+
+- **Guest Shell** — Minified app for anonymous participants: Room tab + Search tab (artists / albums / tracks with audio only, full archived catalog).
+
+- **Audition** — Participant-gated, short-lived audio URL so a guest (or participant) can play **one track at a time** on their device to verify it — not the room speaker. Rate-limited (~20 grants/participant/min).
+
+- **Room Play Event** — Room-scoped play start/complete for the speaker’s playback. Does **not** write personal `play_started` / `play_completed` **UsageEvent**s and does not feed personal listening insights.
+
 ### Generic
 
 - **Epic Stack** — The full-stack framework this project is built on (React Router v7, Prisma, SQLite, Tailwind, Fly.io).
 
 - **MOCKS** — Environment variable (`MOCKS=true`) enabling server-side mocking of all external services (YouTube API, yt-dlp, Tigris uploads, Telegram). Used in development and CI.
 
-- **UsageEvent** — Append-only product analytics row (`signup`, `login`, `library_add`, `play_started`, `play_completed`). Written via `recordUsageEvent`; powers the admin user activity feed, `/history`, **On-Repeat Snapshot** / **Heavy Rotation** / **Weekly Wrap** / **Recently Played Strip** ranking, and **Personal Play Boost** (`play_completed` where noted).
+- **UsageEvent** — Append-only product analytics row (`signup`, `login`, `library_add`, `play_started`, `play_completed`). Written via `recordUsageEvent`; powers the admin user activity feed, `/history`, **On-Repeat Snapshot** / **Heavy Rotation** / **Weekly Wrap** / **Recently Played Strip** ranking, and **Personal Play Boost** (`play_completed` where noted). **Party Room** speaker plays use **Room Play Event**s instead — they must not inflate these personal signals.
 
 - **DailyUsageStat** — Per-UTC-day counter for admin time-series charts (`signups`, `logins`, `library_adds`, `plays_*`, `dau`). Incremented when usage events are recorded.
 
@@ -309,3 +329,7 @@ Home page redesign decisions (implemented). Route: `app/routes/_marketing+/index
 64. **Weekly Wrap on listening hub** — Quiet home-only summary for the **current UTC week (Mon–Sun)**: finishes + unique tracks from `play_completed`; show day streak only when > 1. **Hide when empty**. See [ADR-027](./decisions/027-weekly-wrap.md).
 
 65. **Personal Play Boost on global FTS** — Soft-boost global search results by the **current user's lifetime** `play_completed` counts. Personal only; relevance remains primary. No ServicePlaylist browse change in v1. See [ADR-028](./decisions/028-personal-play-boost.md).
+
+### Party Room
+
+66. **Party Room (shared live queue)** — In-person collaborative queue: server-owned **Room Queue** + SSE, roles **Host / DJ / Listener** with Host-configurable **`defaultJoinRole`**, one **Room Speaker**, **RoomParticipant** seats (users or guests), **Room Code** + URL + QR with **smart join**, **Guest Shell** + **Audition**, catalog = any track with audio, Host **Add playlist to queue**, remove-own for every role, Host failover after **10s** absence (explicit Become host; original host may reclaim), room plays as **Room Play Event**s only (no personal **UsageEvent** inflation), personal **PlayerState** suspended on the speaker device. Caps and UX details in [ADR-030](./decisions/030-party-room.md). Tracking: [#284](https://github.com/mnlamart/music-library/issues/284).
