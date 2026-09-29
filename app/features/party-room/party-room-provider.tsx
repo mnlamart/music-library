@@ -19,8 +19,10 @@ import {
   joinRoom,
   kickParticipant,
   leaveRoom,
+  readActiveRoomCode,
   reclaimHost,
   reorderRoomQueue,
+  resolveRoomActionCode,
   RoomApiError,
   ROOM_API,
   sendHostHeartbeat,
@@ -61,7 +63,7 @@ type PartyRoomContextValue = {
   refresh: () => Promise<void>;
   create: (defaultJoinRole?: RoomDefaultJoinRole) => Promise<RoomSnapshot>;
   join: (codeOrUrl: string, displayName?: string) => Promise<RoomSnapshot>;
-  leave: () => Promise<void>;
+  leave: (codeOverride?: string) => Promise<void>;
   end: () => Promise<void>;
   becomeHostNow: () => Promise<void>;
   reclaimHostNow: () => Promise<void>;
@@ -278,22 +280,36 @@ export function PartyRoomProvider({
     [applyRoom, meUserId],
   );
 
-  const leave = useCallback(async () => {
-    const code = roomCodeRef.current;
-    if (!code) return;
-    setError(null);
-    try {
-      await leaveRoom(code);
-      applyRoom(null);
-    } catch (err) {
-      setError(errorMessage(err));
-      throw err;
-    }
-  }, [applyRoom]);
+  const leave = useCallback(
+    async (codeOverride?: string) => {
+      const code = resolveRoomActionCode({
+        override: codeOverride,
+        refCode: roomCodeRef.current,
+        storedCode: readActiveRoomCode(),
+      });
+      if (!code) {
+        throw new Error("Not in a room");
+      }
+      setError(null);
+      try {
+        await leaveRoom(code);
+        applyRoom(null);
+      } catch (err) {
+        setError(errorMessage(err));
+        throw err;
+      }
+    },
+    [applyRoom],
+  );
 
   const end = useCallback(async () => {
-    const code = roomCodeRef.current;
-    if (!code) return;
+    const code = resolveRoomActionCode({
+      refCode: roomCodeRef.current,
+      storedCode: readActiveRoomCode(),
+    });
+    if (!code) {
+      throw new Error("Not in a room");
+    }
     setError(null);
     try {
       await endRoom(code);

@@ -79,6 +79,21 @@ export function writeActiveRoomCode(code: string | null): void {
   }
 }
 
+/**
+ * Resolve the room code for leave/end before the live snapshot lands.
+ * Guest join writes sessionStorage first; `roomCodeRef` is only set after GET.
+ */
+export function resolveRoomActionCode(options: {
+  override?: string | null;
+  refCode?: string | null;
+  storedCode?: string | null;
+}): string | null {
+  for (const candidate of [options.override, options.refCode, options.storedCode]) {
+    if (typeof candidate === "string" && candidate.length > 0) return candidate;
+  }
+  return null;
+}
+
 async function parseJsonSafe(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text) return null;
