@@ -35,6 +35,7 @@ import { type TrackPopularityStats } from "#app/utils/discover.ts";
 import { formatPopularityStats } from "#app/utils/popularity-format.ts";
 import { useIsMobile } from "#app/utils/use-mobile.ts";
 import { AddToPlaylistMenu } from "./add-to-playlist-menu";
+import { AddToRoomQueueAction } from "./party-room/add-to-room-queue-action";
 
 interface TrackListItemData {
   id: string;
@@ -586,6 +587,7 @@ export const TrackListItem = memo(function TrackListItem({
                       <Icon name="plus" className="h-4 w-4 mr-2" />
                       Add to queue
                     </DropdownMenuItem>
+                    <AddToRoomQueueAction trackId={track.id} variant="dropdown" />
                   </>
                 )}
                 {showAudioFileDownload && hasAudioFiles ? (
@@ -714,6 +716,11 @@ export const TrackListItem = memo(function TrackListItem({
                       <Icon name="plus" className="h-5 w-5 mr-3" />
                       Add to queue
                     </Button>
+                    <AddToRoomQueueAction
+                      trackId={track.id}
+                      variant="sheet"
+                      onDone={() => setIsActionsSheetOpen(false)}
+                    />
                   </>
                 )}
                 {showAudioFileDownload && hasAudioFiles ? (

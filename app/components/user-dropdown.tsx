@@ -73,6 +73,13 @@ export function UserDropdown() {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
+            <Link prefetch="intent" to="/rooms">
+              <Icon className="text-body-md" name="speaker-wave">
+                Party Room
+              </Icon>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
             <Link prefetch="intent" to="/music/services">
               <Icon className="text-body-md" name="link-2">
                 Connected Services

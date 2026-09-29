@@ -47,17 +47,13 @@ test("hides library, playlists, and history menu items on mobile (md+ only)", as
   expect(history.className).toMatch(/\bmax-md:hidden\b/);
 });
 
-test("keeps profile and downloads visible on all viewports", async () => {
+test("includes Party Room link for all viewports", async () => {
   const user = userEvent.setup();
   renderDropdown();
 
   await user.click(screen.getByRole("button", { name: /user menu/i }));
 
-  const profile = await screen.findByRole("menuitem", { name: /profile/i });
-  const downloads = screen.getByRole("menuitem", { name: /downloads/i });
-  const services = screen.getByRole("menuitem", { name: /connected services/i });
-
-  expect(profile.className).not.toMatch(/\bmax-md:hidden\b/);
-  expect(downloads.className).not.toMatch(/\bmax-md:hidden\b/);
-  expect(services.className).not.toMatch(/\bmax-md:hidden\b/);
+  const rooms = await screen.findByRole("menuitem", { name: /party room/i });
+  expect(rooms.className).not.toMatch(/\bmax-md:hidden\b/);
+  expect(rooms).toHaveAttribute("href", "/rooms");
 });

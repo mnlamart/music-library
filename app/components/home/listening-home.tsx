@@ -7,6 +7,7 @@ import { HomeRecentTrackRow } from "#app/components/home/home-recent-track-row.t
 import { SnapshotShelf } from "#app/components/home/snapshot-shelf.tsx";
 import { RecentlyPlayedStrip } from "#app/components/home/recently-played-strip.tsx";
 import { WeeklyWrap } from "#app/components/home/weekly-wrap.tsx";
+import { GotACodeJoin } from "#app/components/party-room/got-a-code-join.tsx";
 import { InstallAppHomePrompt } from "#app/components/pwa/install-app-home-prompt.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import {
@@ -50,6 +51,8 @@ export function ListeningHome({
       ) : null}
 
       <WeeklyWrap wrap={weeklyWrap} />
+
+      <GotACodeJoin className="mb-10" />
 
       <section className="mb-10">
         <Card className="overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
