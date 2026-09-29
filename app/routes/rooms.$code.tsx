@@ -20,7 +20,10 @@ import {
   type SeatedParticipant,
 } from "#app/features/party-room/participant-seat.server.ts";
 import { getRoomSnapshotByCode } from "#app/features/party-room/party-room.server.ts";
-import { usePartyRoom } from "#app/features/party-room/party-room-provider.tsx";
+import {
+  useOptionalPartyRoom,
+  usePartyRoom,
+} from "#app/features/party-room/party-room-provider.tsx";
 import { resolveOptionalUserId } from "#app/features/party-room/request.server.ts";
 import { cn } from "#app/utils/misc.tsx";
 import { type Route } from "./+types/rooms.$code.ts";
@@ -165,6 +168,8 @@ function LoggedInRoomByCode() {
 }
 
 function GuestRoomShell({ roomShell }: { roomShell: GuestLoaderData }) {
+  const party = useOptionalPartyRoom();
+
   if (!roomShell.room) {
     return (
       <div className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
@@ -181,6 +186,10 @@ function GuestRoomShell({ roomShell }: { roomShell: GuestLoaderData }) {
 
   if (!roomShell.participant) return <Outlet />;
 
+  const liveMe = party?.room?.code === roomShell.code ? party.room.me : null;
+  const displayName = liveMe?.displayName ?? roomShell.participant.displayName;
+  const role = liveMe?.role ?? roomShell.participant.role;
+
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col">
       <header className="sticky top-0 z-10 border-b border-border/60 bg-background/90 px-4 py-3 backdrop-blur">
@@ -190,8 +199,8 @@ function GuestRoomShell({ roomShell }: { roomShell: GuestLoaderData }) {
             <p className="font-mono text-xl font-semibold tracking-widest">{roomShell.code}</p>
           </div>
           <div className="text-right text-sm">
-            <p className="font-medium">{roomShell.participant.displayName}</p>
-            <p className="capitalize text-muted-foreground">{roomShell.participant.role}</p>
+            <p className="font-medium">{displayName}</p>
+            <p className="capitalize text-muted-foreground">{role}</p>
           </div>
         </div>
         <nav

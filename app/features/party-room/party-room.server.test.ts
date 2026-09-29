@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
 import { createUser } from "#tests/db-utils.ts";
-import { HOST_GRACE_MS, MAX_PARTICIPANTS, ROOM_ROLE } from "./constants.ts";
+import { EMPTY_ROOM_TTL_MS, HOST_GRACE_MS, MAX_PARTICIPANTS, ROOM_ROLE } from "./constants.ts";
 import { hashGuestToken } from "./guest-token.server.ts";
 import {
   becomeHost,
@@ -12,6 +12,7 @@ import {
   PartyRoomError,
   reclaimHost,
   setDefaultJoinRole,
+  sweepExpiredEmptyRooms,
 } from "./party-room.server.ts";
 import { resetRoomSseConnections } from "./sse.server.ts";
 
@@ -224,5 +225,47 @@ describe("party-room lifecycle", () => {
     const err = new PartyRoomError("forbidden", "nope", 403);
     expect(err.status).toBe(403);
     expect(err.code).toBe("forbidden");
+  });
+
+  test("sweepExpiredEmptyRooms ends rooms past empty TTL", async () => {
+    const host = await makeUser();
+    const room = await createRoom({ userId: host.id, displayName: "Host" });
+    await leaveRoom({
+      roomId: room.id,
+      actor: { type: "user", userId: host.id },
+    });
+
+    const emptySince = new Date(Date.now() - EMPTY_ROOM_TTL_MS - 1000);
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { emptySince },
+    });
+
+    const closed = await sweepExpiredEmptyRooms(new Date());
+    expect(closed.map((r) => r.id)).toContain(room.id);
+
+    const ended = await prisma.room.findUniqueOrThrow({ where: { id: room.id } });
+    expect(ended.status).toBe("ended");
+    expect(ended.endedAt).not.toBeNull();
+  });
+
+  test("sweepExpiredEmptyRooms skips rooms still within TTL", async () => {
+    const host = await makeUser();
+    const room = await createRoom({ userId: host.id, displayName: "Host" });
+    await leaveRoom({
+      roomId: room.id,
+      actor: { type: "user", userId: host.id },
+    });
+
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { emptySince: new Date() },
+    });
+
+    const closed = await sweepExpiredEmptyRooms(new Date());
+    expect(closed.map((r) => r.id)).not.toContain(room.id);
+
+    const stillOpen = await prisma.room.findUniqueOrThrow({ where: { id: room.id } });
+    expect(stillOpen.status).toBe("open");
   });
 });
