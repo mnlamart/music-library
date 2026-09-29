@@ -31,8 +31,15 @@ export function RoomsHub() {
   const [defaultJoinRole, setDefaultJoinRole] = useState<RoomDefaultJoinRole>("listener");
   const [busy, setBusy] = useState(false);
 
-  if (party.loading) {
-    return <p className="text-sm text-muted-foreground">Loading rooms…</p>;
+  if (party.loading && !party.apiUnavailable) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4">
+        <header>
+          <h1 className="text-2xl font-bold">Party Room</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Loading your room…</p>
+        </header>
+      </div>
+    );
   }
 
   if (party.room?.status === "open") {

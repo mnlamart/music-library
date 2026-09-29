@@ -82,7 +82,7 @@ export function PartyRoomProvider({
   enabled?: boolean;
 }) {
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
-  const [loading, setLoading] = useState(Boolean(enabled));
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiUnavailable, setApiUnavailable] = useState(false);
   const roomIdRef = useRef<string | null>(null);
