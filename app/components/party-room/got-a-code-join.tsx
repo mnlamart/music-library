@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
 import { Button } from "#app/components/ui/button.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { Input } from "#app/components/ui/input.tsx";
@@ -11,7 +10,6 @@ import { parseRoomCodeInput } from "#app/features/party-room/code.ts";
  */
 export function GotACodeJoin({ className }: { className?: string }) {
   const party = useOptionalPartyRoom();
-  const navigate = useNavigate();
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -45,7 +43,8 @@ export function GotACodeJoin({ className }: { className?: string }) {
     setBusy(true);
     try {
       const room = await party.join(code);
-      void navigate(`/rooms/${room.code}`);
+      // Hard nav: avoids RR manifest mismatch on stale post-deploy tabs.
+      window.location.assign(`/rooms/${room.code}`);
     } catch {
       setLocalError(party.error ?? "Could not join room");
     } finally {

@@ -150,14 +150,31 @@ export function PartyRoomProvider({
       if (cancelled) return;
       try {
         const payload = JSON.parse(event.data) as Record<string, unknown>;
-        if (payload.room || payload.code || payload.roomId) {
-          const raw = (payload.room as Record<string, unknown> | undefined) ?? payload;
-          void import("./api.client.ts").then(({ normalizeRoomSnapshot }) => {
-            applyRoom(normalizeRoomSnapshot(raw, meUserId));
-          });
-        } else if (payload.type === "version") {
-          void refresh();
+        const type = typeof payload.type === "string" ? payload.type : null;
+
+        // Handshake / non-snapshot events must not be treated as RoomSnapshots
+        // (`connected` carries roomId; `room_ended` would wipe queue into "open").
+        if (type === "connected") return;
+        if (type === "room_ended") {
+          applyRoom(null);
+          writeActiveRoomCode(null);
+          return;
         }
+        if (type === "version") {
+          void refresh();
+          return;
+        }
+
+        const isSnapshot =
+          type === "room_snapshot" ||
+          type === "snapshot" ||
+          (type == null && (payload.queue != null || payload.participants != null));
+        if (!isSnapshot) return;
+
+        const raw = (payload.room as Record<string, unknown> | undefined) ?? payload;
+        void import("./api.client.ts").then(({ normalizeRoomSnapshot }) => {
+          applyRoom(normalizeRoomSnapshot(raw, meUserId));
+        });
       } catch {
         // ignore malformed SSE
       }

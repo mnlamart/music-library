@@ -3,9 +3,11 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
+  addPlaylistToRoomQueue,
   addTrackToRoomQueue,
   createRoom,
   fetchCurrentRoom,
+  normalizeRoomSnapshot,
   RoomApiError,
   reportRoomPlayEvent,
   writeActiveRoomCode,
@@ -147,6 +149,83 @@ describe("party-room api.client (backend #294 contract)", () => {
       }),
     );
     await expect(createRoom({ defaultJoinRole: "dj" })).rejects.toBeInstanceOf(RoomApiError);
+  });
+
+  it("unwraps add_playlist { snapshot } responses", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          addedCount: 2,
+          snapshot: {
+            roomId: "room-1",
+            code: "AB3K9Q",
+            status: "open",
+            defaultJoinRole: "listener",
+            roomVersion: 3,
+            currentIndex: 0,
+            isPlaying: false,
+            currentHostParticipantId: "host-1",
+            participants: [
+              {
+                id: "host-1",
+                userId: "user-1",
+                displayName: "Kody",
+                role: "host",
+                lastSeenAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            queue: [
+              {
+                id: "q1",
+                trackId: "t1",
+                position: 0,
+                addedByParticipantId: "host-1",
+                createdAt: new Date().toISOString(),
+                track: { id: "t1", title: "One", artist: { name: "A" } },
+              },
+            ],
+            createdAt: new Date().toISOString(),
+            endedAt: null,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const room = await addPlaylistToRoomQueue("AB3K9Q", "playlist-1", "user-1");
+    expect(room.code).toBe("AB3K9Q");
+    expect(room.queue).toHaveLength(1);
+    expect(room.me?.role).toBe("host");
+  });
+
+  it("marks hostTakeoverAvailable when host seat is empty", () => {
+    const room = normalizeRoomSnapshot(
+      {
+        roomId: "room-1",
+        code: "AB3K9Q",
+        status: "open",
+        defaultJoinRole: "listener",
+        roomVersion: 1,
+        currentIndex: 0,
+        isPlaying: false,
+        currentHostParticipantId: null,
+        participants: [
+          {
+            id: "dj-1",
+            userId: "user-2",
+            displayName: "DJ",
+            role: "dj",
+            lastSeenAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        queue: [],
+        createdAt: new Date().toISOString(),
+        endedAt: null,
+      },
+      "user-2",
+    );
+    expect(room.hostTakeoverAvailable).toBe(true);
   });
 
   it("reportRoomPlayEvent posts to play-events", async () => {

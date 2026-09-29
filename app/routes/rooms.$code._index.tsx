@@ -17,7 +17,11 @@ import {
   GUEST_DISPLAY_NAME_MAX,
   GUEST_DISPLAY_NAME_MIN,
 } from "#app/features/party-room/constants.ts";
-import { serializeGuestTokenCookie } from "#app/features/party-room/guest-token.server.ts";
+import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
+import {
+  readGuestToken,
+  serializeGuestTokenCookie,
+} from "#app/features/party-room/guest-token.server.ts";
 import { resolveRoomParticipantByCode } from "#app/features/party-room/participant-seat.server.ts";
 import { joinRoom, PartyRoomError } from "#app/features/party-room/party-room.server.ts";
 import { Button } from "#app/components/ui/button.tsx";
@@ -34,11 +38,12 @@ export async function action({ request, params }: { request: Request; params: { 
   const code = parseRoomCodeInput(params.code ?? "") ?? (params.code ?? "").toUpperCase();
   const formData = await request.formData();
   const displayName = String(formData.get("displayName") ?? "");
+  const guestToken = await readGuestToken(request);
 
   try {
     const result = await joinRoom({
       code,
-      actor: { type: "guest", displayName },
+      actor: { type: "guest", displayName, guestToken },
     });
     const headers = result.guestToken
       ? { "Set-Cookie": await serializeGuestTokenCookie(result.guestToken) }
@@ -179,4 +184,8 @@ export default function GuestJoinOrRoom() {
       </Form>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  return <GeneralErrorBoundary />;
 }

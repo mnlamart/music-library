@@ -28,6 +28,15 @@ export async function loader({
 
     const snapshot = await getRoomSnapshot(room.id);
 
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let unsubscribe: (() => void) | undefined;
+    const cleanup = () => {
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = undefined;
+      unsubscribe?.();
+      unsubscribe = undefined;
+    };
+
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(encodeSseData({ type: "connected", roomId: room.id }));
@@ -35,20 +44,18 @@ export async function loader({
           controller.enqueue(encodeSseData({ type: "room_snapshot", ...snapshot }));
         }
 
-        const unsubscribe = subscribeRoomEvents(room.id, controller);
+        unsubscribe = subscribeRoomEvents(room.id, controller);
 
-        const heartbeat = setInterval(() => {
+        heartbeat = setInterval(() => {
           try {
             controller.enqueue(encodeSseComment("heartbeat"));
           } catch {
-            clearInterval(heartbeat);
-            unsubscribe();
+            cleanup();
           }
         }, 15_000);
 
         request.signal.addEventListener("abort", () => {
-          clearInterval(heartbeat);
-          unsubscribe();
+          cleanup();
           try {
             controller.close();
           } catch {
@@ -57,7 +64,7 @@ export async function loader({
         });
       },
       cancel() {
-        // abort handler cleans up
+        cleanup();
       },
     });
 

@@ -4,16 +4,9 @@
  * - Logged-out → Guest Shell layout (Room + Search tabs)
  */
 
-import { useEffect } from "react";
-import {
-  data,
-  Link,
-  NavLink,
-  Outlet,
-  useLoaderData,
-  useNavigate,
-  useParams,
-} from "react-router";
+import { useEffect, useRef } from "react";
+import { data, Link, NavLink, Outlet, useLoaderData, useNavigate, useParams } from "react-router";
+import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
 import { RoomsHub } from "#app/components/party-room/rooms-hub.tsx";
 import { canAddTracks } from "#app/features/party-room/capabilities.ts";
 import {
@@ -130,13 +123,21 @@ function LoggedInRoomByCode() {
   const party = usePartyRoom();
   const navigate = useNavigate();
   const code = rawCode ? normalizeRoomCode(rawCode) : "";
+  const joinAttemptedForCode = useRef<string | null>(null);
+
+  // Reset attempt when the route code changes
+  useEffect(() => {
+    joinAttemptedForCode.current = null;
+  }, [code]);
 
   useEffect(() => {
     if (!code || !isValidRoomCode(code)) return;
     if (party.loading) return;
     if (party.room?.code === code) return;
     if (party.apiUnavailable) return;
+    if (joinAttemptedForCode.current === code) return;
 
+    joinAttemptedForCode.current = code;
     void party
       .join(code)
       .then((room) => {
@@ -145,9 +146,9 @@ function LoggedInRoomByCode() {
         }
       })
       .catch(() => {
-        // Error surfaced via party.error on hub
+        // Error surfaced via party.error on hub; do not retry-loop.
       });
-  }, [code, party, navigate]);
+  }, [code, party.loading, party.room?.code, party.apiUnavailable, party.join, navigate]);
 
   if (rawCode && !parseRoomCodeInputClient(rawCode)) {
     return (
@@ -227,4 +228,8 @@ function GuestTab({ to, children, end }: { to: string; children: React.ReactNode
       {children}
     </NavLink>
   );
+}
+
+export function ErrorBoundary() {
+  return <GeneralErrorBoundary />;
 }

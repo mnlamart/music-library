@@ -129,11 +129,24 @@ async function roomFetch<T>(
   return body as T;
 }
 
+/**
+ * Queue mutations sometimes wrap the snapshot (`{ snapshot, addedCount, … }`).
+ * Prefer the nested snapshot when present.
+ */
+export function unwrapRoomSnapshotPayload(raw: Record<string, unknown>): Record<string, unknown> {
+  const nested = raw.snapshot;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return nested as Record<string, unknown>;
+  }
+  return raw;
+}
+
 /** Normalize backend snapshot variations into the client RoomSnapshot shape. */
 export function normalizeRoomSnapshot(
-  raw: Record<string, unknown>,
+  rawInput: Record<string, unknown>,
   meUserId?: string | null,
 ): RoomSnapshot {
+  const raw = unwrapRoomSnapshotPayload(rawInput);
   const code = String(raw.code ?? "");
   const participants = Array.isArray(raw.participants) ? raw.participants : [];
   const queue = Array.isArray(raw.queue) ? raw.queue : [];
@@ -216,12 +229,13 @@ export function normalizeRoomSnapshot(
   const hostLast =
     mappedParticipants.find((p) => p.id === currentHostParticipantId)?.lastHeartbeatAt ?? null;
 
-  // Client-side grace estimate when server does not flag takeover.
+  // Empty host seat (host left) or grace elapsed → others may Become host.
+  const hostSeatEmpty =
+    !currentHostParticipantId || !mappedParticipants.some((p) => p.id === currentHostParticipantId);
+  const hostGraceElapsed = hostLast ? Date.now() - Date.parse(hostLast) > 10_000 : hostSeatEmpty;
   const hostTakeoverAvailable = Boolean(
     raw.hostTakeoverAvailable ??
-    (hostLast
-      ? Date.now() - Date.parse(hostLast) > 10_000 && me && me.id !== currentHostParticipantId
-      : false),
+    (me && me.id !== currentHostParticipantId && (hostSeatEmpty || hostGraceElapsed)),
   );
 
   return {
