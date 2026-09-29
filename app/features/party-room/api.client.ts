@@ -121,6 +121,11 @@ async function roomFetch<T>(
     throw new RoomApiError(message, response.status, body);
   }
 
+  // Auth redirects can return 200 HTML login pages — treat non-objects as failure.
+  if (body !== null && typeof body !== "object") {
+    throw new RoomApiError("Unexpected non-JSON room API response", response.status, body);
+  }
+
   return body as T;
 }
 

@@ -97,6 +97,19 @@ describe("splitRoomQueue", () => {
     expect(nowPlaying?.position).toBe(1);
     expect(upcoming.map((i) => i.position)).toEqual([2, 3]);
   });
+
+  it("tolerates missing queue or playback without throwing", () => {
+    expect(
+      splitRoomQueue({
+        queue: undefined as unknown as [],
+        playback: undefined as unknown as {
+          isPlaying: false;
+          currentIndex: -1;
+          currentTrackId: null;
+        },
+      }),
+    ).toEqual({ history: [], upcoming: [], nowPlaying: null });
+  });
 });
 
 describe("host failover helpers", () => {

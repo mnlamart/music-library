@@ -120,9 +120,11 @@ export function RoomsHub() {
         ) : null}
 
         <section>
-          <h2 className="mb-2 text-lg font-semibold">Participants ({room.participants.length})</h2>
+          <h2 className="mb-2 text-lg font-semibold">
+            Participants ({room.participants?.length ?? 0})
+          </h2>
           <ul className="divide-y divide-border rounded-md border border-border">
-            {room.participants.map((p) => (
+            {(room.participants ?? []).map((p) => (
               <li key={p.id} className="flex items-center justify-between px-3 py-2 text-sm">
                 <span>
                   {p.displayName}

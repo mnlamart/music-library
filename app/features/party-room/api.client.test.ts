@@ -139,6 +139,16 @@ describe("party-room api.client (backend #294 contract)", () => {
     await expect(addTrackToRoomQueue("AB3K9Q", "track-1")).rejects.toBeInstanceOf(RoomApiError);
   });
 
+  it("throws RoomApiError when response body is non-JSON HTML", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response("<!DOCTYPE html><html><body>Login</body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+    await expect(createRoom({ defaultJoinRole: "dj" })).rejects.toBeInstanceOf(RoomApiError);
+  });
+
   it("reportRoomPlayEvent posts to play-events", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 }),
