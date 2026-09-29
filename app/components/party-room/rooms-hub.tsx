@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { HostFailoverControls } from "#app/components/party-room/host-failover-controls.tsx";
 import { RoomQueuePanel } from "#app/components/party-room/room-queue-panel.tsx";
 import { Button } from "#app/components/ui/button.tsx";
@@ -17,6 +17,11 @@ import { toast } from "#app/components/ui/use-toast.ts";
 import { type RoomDefaultJoinRole } from "#app/features/party-room/constants.ts";
 import { usePartyRoom } from "#app/features/party-room/party-room-provider.tsx";
 
+/** Hard navigations avoid RR lazy-discovery crashes on stale post-deploy tabs. */
+function goToRoom(code: string) {
+  window.location.assign(`/rooms/${code}`);
+}
+
 function copyText(text: string) {
   void navigator.clipboard.writeText(text).then(
     () => toast({ title: "Copied" }),
@@ -26,7 +31,6 @@ function copyText(text: string) {
 
 export function RoomsHub() {
   const party = usePartyRoom();
-  const navigate = useNavigate();
   const [joinValue, setJoinValue] = useState("");
   const [defaultJoinRole, setDefaultJoinRole] = useState<RoomDefaultJoinRole>("listener");
   const [busy, setBusy] = useState(false);
@@ -187,7 +191,7 @@ export function RoomsHub() {
               .create(defaultJoinRole)
               .then((room) => {
                 toast({ title: "Room created", description: room.code });
-                void navigate(`/rooms/${room.code}`);
+                goToRoom(room.code);
               })
               .catch(() => {})
               .finally(() => setBusy(false));
@@ -208,7 +212,7 @@ export function RoomsHub() {
             void party
               .join(joinValue)
               .then((room) => {
-                void navigate(`/rooms/${room.code}`);
+                goToRoom(room.code);
               })
               .catch(() => {})
               .finally(() => setBusy(false));
