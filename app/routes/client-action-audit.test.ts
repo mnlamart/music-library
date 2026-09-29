@@ -16,6 +16,18 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/metadata+/tracks+/bulk-edit.tsx",
   "_auth+/webauthn+/registration.ts",
   "_auth+/webauthn+/authentication.ts",
+  // Party Room JSON APIs (called via fetch from room UI / guest shell)
+  "api+/rooms+/index.tsx",
+  "api+/rooms+/$roomCode.join.tsx",
+  "api+/rooms+/$roomCode.leave.tsx",
+  "api+/rooms+/$roomCode.end.tsx",
+  "api+/rooms+/$roomCode.settings.tsx",
+  "api+/rooms+/$roomCode.participants.$participantId.tsx",
+  "api+/rooms+/$roomCode.heartbeat.tsx",
+  "api+/rooms+/$roomCode.become-host.tsx",
+  "api+/rooms+/$roomCode.reclaim-host.tsx",
+  "api+/rooms+/$roomCode.queue.tsx",
+  "api+/rooms+/$roomCode.play-events.tsx",
 ]);
 
 function walkFiles(dir: string): string[] {
