@@ -59,8 +59,9 @@ export function GuestRoomLivePanel({
 
       <section className="space-y-3 border-t border-border/60 pt-4 text-sm text-muted-foreground">
         <p>
-          Signed in as <span className="text-foreground">{displayName}</span> (
-          <span className="capitalize">{role}</span>)
+          Signed in as{" "}
+          <span className="text-foreground">{party?.room?.me?.displayName ?? displayName}</span> (
+          <span className="capitalize">{party?.room?.me?.role ?? role}</span>)
         </p>
         <p>
           Room <span className="font-mono text-foreground">{code}</span>

@@ -254,7 +254,7 @@ describe("Party Room UI affordances", () => {
         code: "AB3K9Q",
         status: "open",
         roomVersion: 2,
-        me: { id: "g1", role: "dj", userId: null, isGuest: true },
+        me: { id: "g1", role: "dj", userId: null, isGuest: true, displayName: "Walkup" },
         queue: [
           queueItem("q0", 0, "Now"),
           queueItem("q1", 1, "Guest Next"),
@@ -271,6 +271,30 @@ describe("Party Room UI affordances", () => {
     expect(screen.getByRole("button", { name: /leave room/i })).toBeInTheDocument();
     expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
     expect(screen.getByText("Walkup")).toBeInTheDocument();
+  });
+
+  it("guest Room tab reflects live host role after takeover", () => {
+    mockParty = {
+      ...mockParty,
+      isHost: true,
+      canTransport: true,
+      showBecomeHost: false,
+      refresh: vi.fn(),
+      leave: vi.fn(),
+      room: {
+        id: "r1",
+        code: "AB3K9Q",
+        status: "open",
+        roomVersion: 3,
+        me: { id: "g1", role: "host", userId: null, isGuest: true, displayName: "Walkup" },
+        queue: [queueItem("q0", 0, "Now")],
+        playback: { isPlaying: false, currentIndex: 0, currentTrackId: "track-q0" },
+      },
+    };
+    renderWithRouter(<GuestRoomLivePanel code="AB3K9Q" role="dj" displayName="Walkup" />);
+    expect(screen.getByText(/signed in as/i).textContent).toMatch(/host/i);
+    expect(screen.queryByRole("button", { name: /become host/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^play$/i })).toBeInTheDocument();
   });
 
   it("lets Host promote and kick other participants", async () => {
