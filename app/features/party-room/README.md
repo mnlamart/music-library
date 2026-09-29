@@ -4,47 +4,36 @@ Logged-in UX + speaker player integration for [ADR-030](../../../docs/decisions/
 
 ## Ownership
 
-This package owns:
+This package currently mixes:
 
-- Thin HTTP/SSE **client** helpers (`api.client.ts`)
-- Capability / code helpers (ADR matrix)
-- `PartyRoomProvider` (current room, heartbeat, live updates)
-- Personal `PlayerState` suspend/restore while this device is the room speaker
-- Room play-event reporting (`room_play_*` — **not** personal `UsageEvent`)
+- **UI client** (this PR): `api.client.ts`, `party-room-provider.tsx`, `player-suspend.ts`, `types.ts`, routes/components under `app/routes/rooms*` and `app/components/party-room/`
+- **Overlapping domain helpers** (`constants.ts`, `capabilities.ts`, `code.ts`) that duplicate names from backend PR **#294**
 
-Server routes and Prisma models are owned by issues **#286–#288**. Rebase onto the backend PR once it merges.
+**Merge order:** merge [#294](https://github.com/mnlamart/music-library/pull/294) first, then rebase this branch and delete duplicate domain helpers — re-export from the backend module instead.
 
-## Expected API contract
+## Backend contract (PR #294)
 
-| Method           | Path                                | Purpose                                     |
-| ---------------- | ----------------------------------- | ------------------------------------------- |
-| `POST`           | `/api/rooms`                        | Create room                                 |
-| `GET`            | `/api/rooms/current`                | Current open room for user (`204` if none)  |
-| `POST`           | `/api/rooms/join`                   | Join by `{ code }` (smart join)             |
-| `GET`            | `/api/rooms/:roomId`                | Snapshot                                    |
-| `POST`           | `/api/rooms/:roomId/leave`          | Leave                                       |
-| `POST`           | `/api/rooms/:roomId/end`            | Host end                                    |
-| `POST`           | `/api/rooms/:roomId/heartbeat`      | Host heartbeat (~2–3s)                      |
-| `POST`           | `/api/rooms/:roomId/become-host`    | Takeover after 10s grace                    |
-| `POST`           | `/api/rooms/:roomId/reclaim-host`   | Original host reclaim                       |
-| `PATCH`          | `/api/rooms/:roomId`                | Settings (`defaultJoinRole`)                |
-| `POST`           | `/api/rooms/:roomId/queue`          | Add track                                   |
-| `POST`           | `/api/rooms/:roomId/queue/playlist` | Host bulk add playlist                      |
-| `PATCH`/`DELETE` | `/api/rooms/:roomId/queue/:itemId`  | Reorder / remove                            |
-| `POST`           | `/api/rooms/:roomId/transport`      | play / pause / skip / jump                  |
-| `GET`            | `/api/rooms/:roomId/events`         | SSE (`roomVersion` + snapshot)              |
-| `POST`           | `/api/rooms/:roomId/play-event`     | `room_play_started` / `room_play_completed` |
-| `GET`            | `/resources/rooms/audio/:trackId`   | Speaker audio grant                         |
+| Method | Path                            | Purpose                                                                                   |
+| ------ | ------------------------------- | ----------------------------------------------------------------------------------------- |
+| `POST` | `/api/rooms`                    | Create                                                                                    |
+| `GET`  | `/api/rooms/:code`              | Snapshot                                                                                  |
+| `POST` | `/api/rooms/:code/join`         | Smart join                                                                                |
+| `POST` | `/api/rooms/:code/leave`        | Leave                                                                                     |
+| `POST` | `/api/rooms/:code/end`          | Host end                                                                                  |
+| `POST` | `/api/rooms/:code/heartbeat`    | Host heartbeat                                                                            |
+| `POST` | `/api/rooms/:code/become-host`  | Takeover                                                                                  |
+| `POST` | `/api/rooms/:code/reclaim-host` | Original host reclaim                                                                     |
+| `POST` | `/api/rooms/:code/settings`     | `defaultJoinRole`                                                                         |
+| `POST` | `/api/rooms/:code/queue`        | Intent: `add_track`, `add_playlist`, `remove`, `reorder`, `play`, `pause`, `skip`, `jump` |
+| `GET`  | `/api/rooms/:code/events`       | SSE                                                                                       |
+| `POST` | `/api/rooms/:code/play-events`  | `room_play_started` / `room_play_completed`                                               |
+| `GET`  | `/api/rooms/:code/qr`           | QR data URL                                                                               |
 
-Snapshot shape: see `types.ts` (`RoomSnapshot`).
+No `/api/rooms/current` — active code is stored in `sessionStorage` (`party-room.active-code`) after create/join.
 
 ## UI surfaces
 
-- `/rooms` — create / join / current room (code, copy link, QR when provided)
-- `/rooms/:code` — smart join via URL
+- `/rooms`, `/rooms/:code`
 - Home **Got a code?**
-- Header **in-room chip**
-- Track `…` → **Add to room queue** (Host/DJ)
-- Host: full transport via room queue panel + global player
-- Non-host: read-only now-playing bar → room
-- **Become host** / **Reclaim host**
+- In-room chip, Add to room queue, Become/Reclaim host
+- Speaker suspend/restore + room play events (no personal `UsageEvent`)

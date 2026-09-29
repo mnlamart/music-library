@@ -78,6 +78,6 @@ export type RoomTransportAction =
   | { action: "play" }
   | { action: "pause" }
   | { action: "skip" }
-  | { action: "jump"; queueItemId: string };
+  | { action: "jump"; index: number };
 
 export type RoomPlayEventType = "room_play_started" | "room_play_completed";

@@ -55,6 +55,7 @@ export function RoomSpeakerBridge() {
     const stub = roomQueueItemToFullTrack(nowPlaying.track);
     audio.playRoomSpeakerTrack(stub, {
       roomId: room.id,
+      code: room.code,
       onEnded: () => {
         void party.transport({ action: "skip" });
       },

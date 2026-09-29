@@ -8,45 +8,16 @@ import {
   fetchCurrentRoom,
   RoomApiError,
   reportRoomPlayEvent,
+  writeActiveRoomCode,
+  ACTIVE_ROOM_CODE_KEY,
 } from "./api.client.ts";
-import { type RoomSnapshot } from "./types.ts";
 
-function sampleRoom(overrides: Partial<RoomSnapshot> = {}): RoomSnapshot {
-  return {
-    id: "room-1",
-    code: "AB3K9Q",
-    status: "open",
-    defaultJoinRole: "listener",
-    roomVersion: 1,
-    createdAt: new Date().toISOString(),
-    endedAt: null,
-    originalHostParticipantId: "host-1",
-    currentHostParticipantId: "host-1",
-    hostLastHeartbeatAt: new Date().toISOString(),
-    hostTakeoverAvailable: false,
-    me: {
-      id: "host-1",
-      displayName: "Kody",
-      role: "host",
-      userId: "user-1",
-      isGuest: false,
-      lastHeartbeatAt: new Date().toISOString(),
-      isOriginalHost: true,
-    },
-    participants: [],
-    queue: [],
-    playback: { isPlaying: false, currentIndex: 0, currentTrackId: null },
-    joinUrl: "http://localhost:3000/rooms/AB3K9Q",
-    qrDataUrl: null,
-    ...overrides,
-  };
-}
-
-describe("party-room api.client", () => {
+describe("party-room api.client (backend #294 contract)", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     globalThis.fetch = vi.fn() as unknown as typeof fetch;
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -54,44 +25,128 @@ describe("party-room api.client", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns null for current room 204", async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(null, { status: 204 }));
+  it("returns null for current room when no active code stored", async () => {
     await expect(fetchCurrentRoom()).resolves.toBeNull();
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      "/api/rooms/current",
-      expect.objectContaining({ method: "GET" }),
-    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
-  it("creates a room via POST /api/rooms", async () => {
-    const room = sampleRoom();
+  it("fetches current room via GET /api/rooms/:code from sessionStorage", async () => {
+    writeActiveRoomCode("AB3K9Q");
     vi.mocked(globalThis.fetch).mockResolvedValue(
-      new Response(JSON.stringify(room), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
+      new Response(
+        JSON.stringify({
+          roomId: "room-1",
+          code: "AB3K9Q",
+          status: "open",
+          defaultJoinRole: "listener",
+          roomVersion: 1,
+          currentIndex: 0,
+          isPlaying: false,
+          currentHostParticipantId: "host-1",
+          originalHostUserId: "user-1",
+          participants: [
+            {
+              id: "host-1",
+              userId: "user-1",
+              displayName: "Kody",
+              role: "host",
+              lastSeenAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          queue: [],
+          createdAt: new Date().toISOString(),
+          endedAt: null,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const room = await fetchCurrentRoom("user-1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/rooms/AB3K9Q",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(room?.code).toBe("AB3K9Q");
+    expect(room?.me?.role).toBe("host");
+  });
+
+  it("creates a room via POST /api/rooms and stores code", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ roomId: "room-1", code: "AB3K9Q", status: "open" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            roomId: "room-1",
+            code: "AB3K9Q",
+            status: "open",
+            defaultJoinRole: "dj",
+            roomVersion: 1,
+            currentIndex: 0,
+            isPlaying: false,
+            currentHostParticipantId: "host-1",
+            participants: [],
+            queue: [],
+            createdAt: new Date().toISOString(),
+            endedAt: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const room = await createRoom({ defaultJoinRole: "dj" });
+    expect(sessionStorage.getItem(ACTIVE_ROOM_CODE_KEY)).toBe("AB3K9Q");
+    expect(room.code).toBe("AB3K9Q");
+  });
+
+  it("adds tracks with intent add_track", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          roomId: "room-1",
+          code: "AB3K9Q",
+          status: "open",
+          defaultJoinRole: "listener",
+          roomVersion: 2,
+          currentIndex: 0,
+          isPlaying: false,
+          currentHostParticipantId: "host-1",
+          participants: [],
+          queue: [],
+          createdAt: new Date().toISOString(),
+          endedAt: null,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await addTrackToRoomQueue("AB3K9Q", "track-1");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/rooms/AB3K9Q/queue",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ intent: "add_track", trackId: "track-1" }),
       }),
     );
-    await expect(createRoom({ defaultJoinRole: "dj" })).resolves.toMatchObject({
-      code: "AB3K9Q",
-      id: "room-1",
-    });
   });
 
   it("throws RoomApiError on failure", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 }),
     );
-    await expect(addTrackToRoomQueue("room-1", "track-1")).rejects.toBeInstanceOf(RoomApiError);
+    await expect(addTrackToRoomQueue("AB3K9Q", "track-1")).rejects.toBeInstanceOf(RoomApiError);
   });
 
-  it("reportRoomPlayEvent posts room-scoped events without throwing", async () => {
+  it("reportRoomPlayEvent posts to play-events", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 }),
     );
-    reportRoomPlayEvent("room-1", "room_play_started", "track-1", "play-xyz");
+    reportRoomPlayEvent("AB3K9Q", "room_play_started", "track-1", "play-xyz");
     await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "/api/rooms/room-1/play-event",
+      "/api/rooms/AB3K9Q/play-events",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({

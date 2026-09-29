@@ -149,10 +149,13 @@ interface AudioPlayerContextType {
   getPersonalPlayerSnapshot: () => PlayerStateData;
   restorePersonalPlayerSnapshot: (snapshot: PlayerStateData, wasVisible: boolean) => Promise<void>;
   /** Party Room host: play a room-queue track; personal UsageEvents suppressed. */
-  playRoomSpeakerTrack: (track: Track, options: { roomId: string; onEnded?: () => void }) => void;
+  playRoomSpeakerTrack: (
+    track: Track,
+    options: { roomId: string; code: string; onEnded?: () => void },
+  ) => void;
   setRoomPlaybackPlaying: (playing: boolean) => void;
   /** Active room speaker session (null when not speaking for a room). */
-  roomSpeaker: { roomId: string } | null;
+  roomSpeaker: { roomId: string; code: string } | null;
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
@@ -343,7 +346,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   const [isLoadingNext, setIsLoadingNext] = useState(false);
   const [playbackToken, setPlaybackToken] = useState(0);
   const [cacheVersion, setCacheVersion] = useState(0);
-  const [roomSpeaker, setRoomSpeaker] = useState<{ roomId: string } | null>(null);
+  const [roomSpeaker, setRoomSpeaker] = useState<{ roomId: string; code: string } | null>(null);
   const [roomPlaying, setRoomPlaying] = useState<boolean | null>(null);
   const persistenceSuspendedRef = useRef(false);
   const roomOnEndedRef = useRef<(() => void) | null>(null);
@@ -1362,8 +1365,8 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   );
 
   const playRoomSpeakerTrack = useCallback(
-    (track: Track, options: { roomId: string; onEnded?: () => void }) => {
-      setRoomSpeaker({ roomId: options.roomId });
+    (track: Track, options: { roomId: string; code: string; onEnded?: () => void }) => {
+      setRoomSpeaker({ roomId: options.roomId, code: options.code });
       roomOnEndedRef.current = options.onEnded ?? null;
       wantsAutoPlayRef.current = true;
       setCurrentTrack(track);

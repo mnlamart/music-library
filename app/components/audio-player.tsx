@@ -845,7 +845,7 @@ interface AudioPlayerProps {
     ((trackId: string, cachedUrl: string) => boolean) | null
   >;
   /** When set, emit room play events instead of personal UsageEvents. */
-  roomSpeaker?: { roomId: string } | null;
+  roomSpeaker?: { roomId: string; code: string } | null;
   /** Server-driven play/pause while in room speaker mode. */
   roomPlaying?: boolean | null;
   /** Prefer this audio URL (e.g. speaker grant) over personal /resources/audio. */
@@ -898,9 +898,9 @@ export function AudioPlayer(props: AudioPlayerProps) {
 
   const emitPlayEvent = useCallback(
     (type: "play_started" | "play_completed", id: string, playId?: string | null) => {
-      if (roomSpeaker?.roomId) {
+      if (roomSpeaker?.code) {
         reportRoomPlayEvent(
-          roomSpeaker.roomId,
+          roomSpeaker.code,
           type === "play_started" ? "room_play_started" : "room_play_completed",
           id,
           playId,

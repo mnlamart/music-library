@@ -70,7 +70,7 @@ export function RoomQueuePanel() {
   const removeItem = (item: RoomQueueItemDto) => {
     const isOwn = room.me?.id === item.addedByParticipantId;
     if (!canEditOthers && !(canRemoveOwn && isOwn)) return;
-    void removeRoomQueueItem(room.id, item.id)
+    void removeRoomQueueItem(room.code, item.id)
       .then((next) => {
         // Provider will also get SSE; refresh via addTrack path by forcing refresh
         void party.refresh();

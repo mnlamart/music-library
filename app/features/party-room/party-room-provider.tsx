@@ -14,6 +14,7 @@ import {
   createRoom,
   endRoom,
   fetchCurrentRoom,
+  fetchRoomQrDataUrl,
   joinRoom,
   leaveRoom,
   reclaimHost,
@@ -22,6 +23,7 @@ import {
   sendHostHeartbeat,
   sendRoomTransport,
   updateRoomSettings,
+  writeActiveRoomCode,
 } from "./api.client.ts";
 import {
   canAddToRoomQueue,
@@ -34,6 +36,7 @@ import {
 } from "./index.ts";
 import { ROOM_HOST_HEARTBEAT_INTERVAL_MS, type RoomDefaultJoinRole } from "./constants.ts";
 import { type RoomSnapshot, type RoomTransportAction } from "./types.ts";
+import { useOptionalUser } from "#app/utils/user.ts";
 
 type PartyRoomContextValue = {
   room: RoomSnapshot | null;
@@ -81,16 +84,19 @@ export function PartyRoomProvider({
   /** When false (signed out), skip polling. */
   enabled?: boolean;
 }) {
+  const user = useOptionalUser();
+  const meUserId = user?.id ?? null;
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiUnavailable, setApiUnavailable] = useState(false);
-  const roomIdRef = useRef<string | null>(null);
+  const roomCodeRef = useRef<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const applyRoom = useCallback((next: RoomSnapshot | null) => {
     setRoom(next);
-    roomIdRef.current = next?.id ?? null;
+    roomCodeRef.current = next?.code ?? null;
+    if (next?.code) writeActiveRoomCode(next.code);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -99,11 +105,16 @@ export function PartyRoomProvider({
       setLoading(false);
       return;
     }
+    setLoading(true);
     try {
-      const current = await fetchCurrentRoom();
+      const current = await fetchCurrentRoom(meUserId);
       applyRoom(current);
       setApiUnavailable(false);
       setError(null);
+      if (current && !current.qrDataUrl) {
+        const qr = await fetchRoomQrDataUrl(current.code);
+        if (qr) applyRoom({ ...current, qrDataUrl: qr });
+      }
     } catch (err) {
       if (err instanceof RoomApiError && (err.status === 404 || err.status === 501)) {
         setApiUnavailable(true);
@@ -114,7 +125,7 @@ export function PartyRoomProvider({
     } finally {
       setLoading(false);
     }
-  }, [applyRoom, enabled]);
+  }, [applyRoom, enabled, meUserId]);
 
   useEffect(() => {
     void refresh();
@@ -122,8 +133,8 @@ export function PartyRoomProvider({
 
   // SSE live sync while participating
   useEffect(() => {
-    const roomId = room?.id;
-    if (!roomId || room.status !== "open") {
+    const code = room?.code;
+    if (!code || room.status !== "open") {
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       return;
@@ -132,25 +143,20 @@ export function PartyRoomProvider({
     if (eventSourceRef.current) return;
 
     let cancelled = false;
-    const es = new EventSource(ROOM_API.events(roomId));
+    const es = new EventSource(ROOM_API.events(code));
     eventSourceRef.current = es;
 
     es.onmessage = (event) => {
       if (cancelled) return;
       try {
-        const payload = JSON.parse(event.data) as {
-          type?: string;
-          room?: RoomSnapshot;
-          roomVersion?: number;
-        };
-        if (payload.room) {
-          applyRoom(payload.room);
+        const payload = JSON.parse(event.data) as Record<string, unknown>;
+        if (payload.room || payload.code || payload.roomId) {
+          const raw = (payload.room as Record<string, unknown> | undefined) ?? payload;
+          void import("./api.client.ts").then(({ normalizeRoomSnapshot }) => {
+            applyRoom(normalizeRoomSnapshot(raw, meUserId));
+          });
         } else if (payload.type === "version") {
-          void fetchCurrentRoom()
-            .then((current) => {
-              if (current) applyRoom(current);
-            })
-            .catch(() => {});
+          void refresh();
         }
       } catch {
         // ignore malformed SSE
@@ -158,7 +164,7 @@ export function PartyRoomProvider({
     };
 
     es.onerror = () => {
-      // Browser will reconnect; if permanently broken, periodic heartbeat/refresh covers it.
+      // Browser reconnects; refresh covers permanent failure.
     };
 
     return () => {
@@ -166,16 +172,14 @@ export function PartyRoomProvider({
       es.close();
       if (eventSourceRef.current === es) eventSourceRef.current = null;
     };
-  }, [applyRoom, room?.id, room?.status]);
+  }, [applyRoom, meUserId, refresh, room?.code, room?.status]);
 
   // Host heartbeat ~2–3s
   useEffect(() => {
     if (!room || !isCurrentHost(room) || room.status !== "open") return;
 
     const tick = () => {
-      void sendHostHeartbeat(room.id).catch(() => {
-        // Transient network — next tick retries
-      });
+      void sendHostHeartbeat(room.code).catch(() => {});
     };
     tick();
     const id = window.setInterval(tick, ROOM_HOST_HEARTBEAT_INTERVAL_MS);
@@ -186,7 +190,7 @@ export function PartyRoomProvider({
     async (defaultJoinRole: RoomDefaultJoinRole = "listener") => {
       setError(null);
       try {
-        const next = await createRoom({ defaultJoinRole });
+        const next = await createRoom({ defaultJoinRole }, meUserId);
         applyRoom(next);
         setApiUnavailable(false);
         return next;
@@ -199,7 +203,7 @@ export function PartyRoomProvider({
         throw err;
       }
     },
-    [applyRoom],
+    [applyRoom, meUserId],
   );
 
   const join = useCallback(
@@ -212,7 +216,7 @@ export function PartyRoomProvider({
       }
       setError(null);
       try {
-        const next = await joinRoom({ code, displayName });
+        const next = await joinRoom({ code, displayName }, meUserId);
         applyRoom(next);
         setApiUnavailable(false);
         return next;
@@ -225,15 +229,15 @@ export function PartyRoomProvider({
         throw err;
       }
     },
-    [applyRoom],
+    [applyRoom, meUserId],
   );
 
   const leave = useCallback(async () => {
-    const id = roomIdRef.current;
-    if (!id) return;
+    const code = roomCodeRef.current;
+    if (!code) return;
     setError(null);
     try {
-      await leaveRoom(id);
+      await leaveRoom(code);
       applyRoom(null);
     } catch (err) {
       setError(errorMessage(err));
@@ -242,11 +246,11 @@ export function PartyRoomProvider({
   }, [applyRoom]);
 
   const end = useCallback(async () => {
-    const id = roomIdRef.current;
-    if (!id) return;
+    const code = roomCodeRef.current;
+    if (!code) return;
     setError(null);
     try {
-      await endRoom(id);
+      await endRoom(code);
       applyRoom(null);
     } catch (err) {
       setError(errorMessage(err));
@@ -255,47 +259,47 @@ export function PartyRoomProvider({
   }, [applyRoom]);
 
   const becomeHostNow = useCallback(async () => {
-    const id = roomIdRef.current;
-    if (!id) return;
-    const next = await becomeHost(id);
+    const code = roomCodeRef.current;
+    if (!code) return;
+    const next = await becomeHost(code, meUserId);
     applyRoom(next);
-  }, [applyRoom]);
+  }, [applyRoom, meUserId]);
 
   const reclaimHostNow = useCallback(async () => {
-    const id = roomIdRef.current;
-    if (!id) return;
-    const next = await reclaimHost(id);
+    const code = roomCodeRef.current;
+    if (!code) return;
+    const next = await reclaimHost(code, meUserId);
     applyRoom(next);
-  }, [applyRoom]);
+  }, [applyRoom, meUserId]);
 
   const setDefaultJoinRole = useCallback(
     async (role: RoomDefaultJoinRole) => {
-      const id = roomIdRef.current;
-      if (!id) return;
-      const next = await updateRoomSettings(id, { defaultJoinRole: role });
+      const code = roomCodeRef.current;
+      if (!code) return;
+      const next = await updateRoomSettings(code, { defaultJoinRole: role }, meUserId);
       applyRoom(next);
     },
-    [applyRoom],
+    [applyRoom, meUserId],
   );
 
   const addTrack = useCallback(
     async (trackId: string) => {
-      const id = roomIdRef.current;
-      if (!id) throw new Error("Not in a room");
-      const next = await addTrackToRoomQueue(id, trackId);
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await addTrackToRoomQueue(code, trackId, meUserId);
       applyRoom(next);
     },
-    [applyRoom],
+    [applyRoom, meUserId],
   );
 
   const transport = useCallback(
     async (action: RoomTransportAction) => {
-      const id = roomIdRef.current;
-      if (!id) return;
-      const next = await sendRoomTransport(id, action);
+      const code = roomCodeRef.current;
+      if (!code) return;
+      const next = await sendRoomTransport(code, action, meUserId);
       applyRoom(next);
     },
-    [applyRoom],
+    [applyRoom, meUserId],
   );
 
   const value = useMemo<PartyRoomContextValue>(() => {
