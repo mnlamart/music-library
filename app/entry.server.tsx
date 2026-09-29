@@ -41,6 +41,15 @@ if (process.env.BACKUP_BUCKET_NAME) {
   });
 }
 
+// Party Room empty-room TTL sweeper (ADR-030) — primary only, always on.
+if (process.env.NODE_ENV !== "test") {
+  void import("./features/party-room/empty-room-sweeper.server.ts").then(
+    ({ startEmptyRoomSweeper }) => {
+      startEmptyRoomSweeper();
+    },
+  );
+}
+
 const MODE = process.env.NODE_ENV ?? "development";
 
 type DocRequestArgs = Parameters<HandleDocumentRequestFunction>;

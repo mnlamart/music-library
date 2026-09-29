@@ -105,6 +105,29 @@ export async function maybeAutoCloseEmptyRoom(roomId: string, now = new Date()) 
   return endRoom({ roomId, actor: { type: "system" } });
 }
 
+/**
+ * Close open rooms that have been empty longer than EMPTY_ROOM_TTL_MS.
+ * Opportunistic + scheduler — rooms nobody looks up still expire.
+ */
+export async function sweepExpiredEmptyRooms(now = new Date()) {
+  const cutoff = new Date(now.getTime() - EMPTY_ROOM_TTL_MS);
+  const expired = await prisma.room.findMany({
+    where: {
+      status: ROOM_STATUS.open,
+      emptySince: { lte: cutoff, not: null },
+    },
+    select: { id: true },
+    take: 50,
+  });
+
+  const closed: Array<Awaited<ReturnType<typeof endRoom>>> = [];
+  for (const room of expired) {
+    const ended = await endRoom({ roomId: room.id, actor: { type: "system" } });
+    closed.push(ended);
+  }
+  return closed;
+}
+
 export async function createRoom({
   userId,
   displayName,
@@ -148,6 +171,9 @@ export async function createRoom({
       409,
     );
   }
+
+  // Opportunistic TTL sweep so abandoned rooms do not linger forever.
+  await sweepExpiredEmptyRooms().catch(() => {});
 
   const code = await allocateUniqueCode();
   const now = new Date();
@@ -682,7 +708,7 @@ export async function reclaimHost({ roomId, actor }: { roomId: string; actor: Pa
   return emitRoomSnapshot(roomId);
 }
 
-export async function getRoomSnapshot(roomId: string) {
+export async function getRoomSnapshot(roomId: string, actor?: ParticipantActor | null) {
   const room = await prisma.room.findUnique({
     where: { id: roomId },
     include: {
@@ -721,6 +747,40 @@ export async function getRoomSnapshot(roomId: string) {
   });
   if (!room) return null;
 
+  const nameByParticipantId = new Map(room.participants.map((p) => [p.id, p.displayName] as const));
+
+  const host = room.currentHostParticipantId
+    ? room.participants.find((p) => p.id === room.currentHostParticipantId)
+    : null;
+  const hostSeatEmpty = !host;
+  const hostGraceElapsed = host ? Date.now() - host.lastSeenAt.getTime() > HOST_GRACE_MS : true;
+  const hostTakeoverAvailable = hostSeatEmpty || hostGraceElapsed;
+
+  let me: {
+    id: string;
+    userId: string | null;
+    displayName: string;
+    role: string;
+    lastSeenAt: string;
+    isOriginalHost: boolean;
+  } | null = null;
+
+  if (actor && actor.type !== "system") {
+    const participant = await resolveParticipant(roomId, actor);
+    if (participant) {
+      me = {
+        id: participant.id,
+        userId: participant.userId,
+        displayName: participant.displayName,
+        role: participant.role,
+        lastSeenAt: participant.lastSeenAt.toISOString(),
+        isOriginalHost: Boolean(
+          participant.userId && participant.userId === room.originalHostUserId,
+        ),
+      };
+    }
+  }
+
   return {
     roomId: room.id,
     code: room.code,
@@ -731,19 +791,23 @@ export async function getRoomSnapshot(roomId: string) {
     isPlaying: room.isPlaying,
     originalHostUserId: room.originalHostUserId,
     currentHostParticipantId: room.currentHostParticipantId,
+    hostTakeoverAvailable,
     emptySince: room.emptySince?.toISOString() ?? null,
     endedAt: room.endedAt?.toISOString() ?? null,
     createdAt: room.createdAt.toISOString(),
+    me,
     participants: room.participants.map((p) => ({
       ...p,
       lastSeenAt: p.lastSeenAt.toISOString(),
       createdAt: p.createdAt.toISOString(),
+      isOriginalHost: Boolean(p.userId && p.userId === room.originalHostUserId),
     })),
     queue: room.queueItems.map((item) => ({
       id: item.id,
       trackId: item.trackId,
       position: item.position,
       addedByParticipantId: item.addedByParticipantId,
+      addedByDisplayName: nameByParticipantId.get(item.addedByParticipantId) ?? "Unknown",
       createdAt: item.createdAt.toISOString(),
       track: item.track,
     })),
