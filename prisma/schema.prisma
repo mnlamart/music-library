@@ -35,6 +35,8 @@ model User {
   trackEdits          TrackEdit[]       @relation("TrackEditUser")
   artistEdits         ArtistEdit[]      @relation("ArtistEditUser")
   albumEdits          AlbumEdit[]       @relation("AlbumEditUser")
+  roomsCreated        Room[]            @relation("RoomOriginalHost")
+  roomParticipants    RoomParticipant[]
 }
 
 model PlayerState {
@@ -316,6 +318,8 @@ model Track {
   archiveJob              ArchiveJob?
   onRepeatSnapshotTracks  OnRepeatSnapshotTrack[]
   edits                   TrackEdit[]
+  roomQueueItems          RoomQueueItem[]
+  roomPlayEvents          RoomPlayEvent[]
 
   @@unique([serviceId, externalId])
   @@index([serviceId, externalId])
@@ -640,4 +644,100 @@ model AlbumEdit {
   
   @@index([albumId, editedAt])
   @@index([editedBy])
+}
+
+/// Party Room — server-hosted shared live queue (ADR-030).
+model Room {
+  id                       String   @id @default(cuid())
+  /// 6-char join code; unique among open rooms (enforced in app).
+  code                     String
+  /// open | ended
+  status                   String   @default("open")
+  /// listener | dj — never host
+  defaultJoinRole          String   @default("listener")
+  /// Flat Room Queue pointer; history is rows with position < currentIndex.
+  currentIndex             Int      @default(0)
+  /// Monotonic version bumped on every mutation (SSE resync).
+  roomVersion              Int      @default(0)
+  isPlaying                Boolean  @default(false)
+  originalHostUserId       String
+  originalHostUser         User     @relation("RoomOriginalHost", fields: [originalHostUserId], references: [id], onDelete: Cascade)
+  /// Current Host participant seat (speaker device in v1).
+  currentHostParticipantId String?  @unique
+  currentHostParticipant   RoomParticipant? @relation("RoomCurrentHost", fields: [currentHostParticipantId], references: [id], onDelete: SetNull)
+  /// Set when the last connected participant leaves; used for empty-room TTL.
+  emptySince               DateTime?
+  endedAt                  DateTime?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  participants RoomParticipant[] @relation("RoomParticipants")
+  queueItems   RoomQueueItem[]
+  playEvents   RoomPlayEvent[]
+
+  @@index([code, status])
+  @@index([status])
+  @@index([originalHostUserId, status])
+}
+
+/// Seat in a Party Room — linked user or guest (not "membership").
+model RoomParticipant {
+  id             String    @id @default(cuid())
+  roomId         String
+  room           Room      @relation("RoomParticipants", fields: [roomId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// SHA-256 hex of the opaque guest token (null for linked users).
+  guestTokenHash String?
+  displayName    String
+  /// host | dj | listener
+  role           String
+  lastSeenAt     DateTime  @default(now())
+  leftAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  addedQueueItems RoomQueueItem[]
+  hostedRoom      Room? @relation("RoomCurrentHost")
+
+  @@index([roomId, leftAt])
+  @@index([userId, leftAt])
+  @@index([guestTokenHash])
+  @@unique([roomId, userId])
+  @@unique([roomId, guestTokenHash])
+}
+
+model RoomQueueItem {
+  id                   String   @id @default(cuid())
+  roomId               String
+  room                 Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  trackId              String
+  track                Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  /// Dense 0-based position in the flat Room Queue.
+  position             Int
+  addedByParticipantId String
+  addedBy              RoomParticipant @relation(fields: [addedByParticipantId], references: [id], onDelete: Cascade)
+  createdAt            DateTime @default(now())
+
+  @@index([roomId, position])
+  @@index([addedByParticipantId])
+  @@index([trackId])
+}
+
+/// Room-scoped play start/complete — does not write personal UsageEvents.
+model RoomPlayEvent {
+  id                   String   @id @default(cuid())
+  roomId               String
+  room                 Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  trackId              String
+  track                Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  /// room_play_started | room_play_completed
+  type                 String
+  addedByParticipantId String?
+  playId               String?
+  createdAt            DateTime @default(now())
+
+  @@index([roomId, createdAt])
+  @@index([trackId])
+  @@index([type, createdAt])
 }
