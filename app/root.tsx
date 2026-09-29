@@ -11,6 +11,7 @@ import {
   ScrollRestoration,
   useLoaderData,
   useMatches,
+  useRouteLoaderData,
 } from "react-router";
 import { HoneypotProvider } from "remix-utils/honeypot/react";
 import { useToast } from "#app/components/toaster.tsx";
@@ -270,14 +271,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
  * Player active: ~126px (bottom nav + mini-bar)
  */
 function usePartyRoomGuestShell() {
-  const matches = useMatches();
   // Prefer loader `guestShell` from `/rooms/:code` so logged-in hub is not forced into guest chrome
-  // when child guest routes also match the URL.
-  for (const match of matches) {
-    const data = match.data as { guestShell?: boolean } | undefined;
-    if (data?.guestShell === true) return true;
-    if (data?.guestShell === false) return false;
-  }
+  // when child guest routes also match the URL. (Do not read `UIMatch.data` — not typed on RR matches.)
+  const roomRouteData = useRouteLoaderData("routes/rooms.$code") as
+    | { guestShell?: boolean }
+    | undefined;
+  if (roomRouteData?.guestShell === true) return true;
+  if (roomRouteData?.guestShell === false) return false;
+
+  const matches = useMatches();
   return matches.some((match) => {
     const handle = match.handle as { partyRoomGuestShell?: boolean } | undefined;
     return handle?.partyRoomGuestShell === true;
