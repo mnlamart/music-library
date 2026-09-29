@@ -403,6 +403,20 @@ export async function removeRoomQueueItem(
   return normalizeRoomSnapshot(raw, meUserId);
 }
 
+/** Reorder upcoming queue rows (Host/DJ). Ids must be the full upcoming set. */
+export async function reorderRoomQueue(
+  code: string,
+  orderedUpcomingIds: string[],
+  meUserId?: string | null,
+): Promise<RoomSnapshot> {
+  const raw = await roomFetch<Record<string, unknown>>(ROOM_API.queue(code), {
+    method: "POST",
+    body: JSON.stringify({ intent: "reorder", orderedUpcomingIds }),
+  });
+  if (!raw) throw new RoomApiError("Empty queue reorder response", 500);
+  return normalizeRoomSnapshot(raw, meUserId);
+}
+
 export async function sendRoomTransport(
   code: string,
   action: RoomTransportAction,

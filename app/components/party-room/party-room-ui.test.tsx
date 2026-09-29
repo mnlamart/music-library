@@ -8,19 +8,33 @@ import { GotACodeJoin } from "#app/components/party-room/got-a-code-join.tsx";
 import { InRoomChip } from "#app/components/party-room/in-room-chip.tsx";
 import { HostFailoverControls } from "#app/components/party-room/host-failover-controls.tsx";
 import { AddToRoomQueueAction } from "#app/components/party-room/add-to-room-queue-action.tsx";
+import { RoomQueuePanel } from "#app/components/party-room/room-queue-panel.tsx";
 
 const join = vi.fn();
 const becomeHostNow = vi.fn();
 const reclaimHostNow = vi.fn();
 const addTrack = vi.fn();
+const reorderUpcoming = vi.fn();
+
+const queueItem = (id: string, position: number, title: string) => ({
+  id,
+  position,
+  trackId: `track-${id}`,
+  track: {
+    id: `track-${id}`,
+    title,
+    artistName: "Artist",
+    duration: 180,
+    coverObjectKey: null,
+    hasAudio: true,
+  },
+  addedByParticipantId: "p1",
+  addedByDisplayName: "Host",
+  createdAt: new Date().toISOString(),
+});
 
 const baseParty = {
-  room: null as null | {
-    id: string;
-    code: string;
-    status: "open" | "ended";
-    me: { id: string; role: "host" | "dj" | "listener" } | null;
-  },
+  room: null as null | Record<string, unknown>,
   loading: false,
   error: null as string | null,
   apiUnavailable: false,
@@ -39,6 +53,7 @@ const baseParty = {
   reclaimHostNow,
   setDefaultJoinRole: vi.fn(),
   addTrack,
+  reorderUpcoming,
   transport: vi.fn(),
   clearError: vi.fn(),
 };
@@ -61,11 +76,20 @@ function renderWithRouter(ui: React.ReactNode) {
 
 describe("Party Room UI affordances", () => {
   beforeEach(() => {
-    mockParty = { ...baseParty, room: null, join, becomeHostNow, reclaimHostNow, addTrack };
+    mockParty = {
+      ...baseParty,
+      room: null,
+      join,
+      becomeHostNow,
+      reclaimHostNow,
+      addTrack,
+      reorderUpcoming,
+    };
     join.mockReset();
     becomeHostNow.mockReset();
     reclaimHostNow.mockReset();
     addTrack.mockReset();
+    reorderUpcoming.mockReset();
   });
 
   it("renders Got a code? join form when not in a room", () => {
@@ -160,5 +184,48 @@ describe("Party Room UI affordances", () => {
     };
     const { container } = renderWithRouter(<AddToRoomQueueAction trackId="track-1" />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows drag handles for Host/DJ upcoming tracks", () => {
+    mockParty = {
+      ...mockParty,
+      isHost: true,
+      canTransport: true,
+      room: {
+        id: "r1",
+        code: "AB3K9Q",
+        status: "open",
+        roomVersion: 1,
+        me: { id: "p1", role: "host", userId: "u1" },
+        queue: [
+          queueItem("q0", 0, "Now"),
+          queueItem("q1", 1, "Next A"),
+          queueItem("q2", 2, "Next B"),
+        ],
+        playback: { isPlaying: false, currentIndex: 0, currentTrackId: "track-q0" },
+      },
+    };
+    renderWithRouter(<RoomQueuePanel />);
+    expect(screen.getByText(/drag to reorder/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/drag to reorder next a/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/drag to reorder next b/i)).toBeInTheDocument();
+  });
+
+  it("hides drag handles for listeners", () => {
+    mockParty = {
+      ...mockParty,
+      room: {
+        id: "r1",
+        code: "AB3K9Q",
+        status: "open",
+        roomVersion: 1,
+        me: { id: "p2", role: "listener", userId: "u2" },
+        queue: [queueItem("q0", 0, "Now"), queueItem("q1", 1, "Next A")],
+        playback: { isPlaying: false, currentIndex: 0, currentTrackId: "track-q0" },
+      },
+    };
+    renderWithRouter(<RoomQueuePanel />);
+    expect(screen.queryByText(/drag to reorder/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/drag to reorder/i)).not.toBeInTheDocument();
   });
 });

@@ -18,6 +18,7 @@ import {
   joinRoom,
   leaveRoom,
   reclaimHost,
+  reorderRoomQueue,
   RoomApiError,
   ROOM_API,
   sendHostHeartbeat,
@@ -59,6 +60,7 @@ type PartyRoomContextValue = {
   reclaimHostNow: () => Promise<void>;
   setDefaultJoinRole: (role: RoomDefaultJoinRole) => Promise<void>;
   addTrack: (trackId: string) => Promise<void>;
+  reorderUpcoming: (orderedUpcomingIds: string[]) => Promise<void>;
   transport: (action: RoomTransportAction) => Promise<void>;
   clearError: () => void;
 };
@@ -309,6 +311,16 @@ export function PartyRoomProvider({
     [applyRoom, meUserId],
   );
 
+  const reorderUpcoming = useCallback(
+    async (orderedUpcomingIds: string[]) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await reorderRoomQueue(code, orderedUpcomingIds, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
   const transport = useCallback(
     async (action: RoomTransportAction) => {
       const code = roomCodeRef.current;
@@ -341,6 +353,7 @@ export function PartyRoomProvider({
       reclaimHostNow,
       setDefaultJoinRole,
       addTrack,
+      reorderUpcoming,
       transport,
       clearError: () => setError(null),
     };
@@ -358,6 +371,7 @@ export function PartyRoomProvider({
     reclaimHostNow,
     setDefaultJoinRole,
     addTrack,
+    reorderUpcoming,
     transport,
   ]);
 
