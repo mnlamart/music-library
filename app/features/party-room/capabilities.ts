@@ -85,3 +85,17 @@ export function canRemoveQueueItem({
 export function isRoomRole(value: string): value is RoomRole {
   return value === ROOM_ROLE.host || value === ROOM_ROLE.dj || value === ROOM_ROLE.listener;
 }
+
+/** Client-facing aliases used by logged-in UX. */
+export const canRoomRole = roleHasCapability;
+export const canAddToRoomQueue = canAddTracks;
+export const canRemoveOwnQueueItem = canRemoveOwn;
+export const canControlTransport = canTransport;
+export const isRoomSpeakerRole = canBeSpeaker;
+
+/** Prefer DJ over Listener when offering Become host after grace. */
+export function rankForHostTakeover(role: RoomRole): number {
+  if (role === ROOM_ROLE.dj) return 2;
+  if (role === ROOM_ROLE.listener) return 1;
+  return 0;
+}

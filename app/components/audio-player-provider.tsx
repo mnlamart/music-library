@@ -143,6 +143,19 @@ interface AudioPlayerContextType {
   hydrateTracksForDisplay: (ids: string[]) => void;
   /** @deprecated Use addToUpNext instead */
   addToCurrentPlaylist: (track: Track) => void;
+  /** Party Room: stop writing personal PlayerState while this device is speaker. */
+  suspendPersonalPersistence: () => void;
+  resumePersonalPersistence: () => void;
+  getPersonalPlayerSnapshot: () => PlayerStateData;
+  restorePersonalPlayerSnapshot: (snapshot: PlayerStateData, wasVisible: boolean) => Promise<void>;
+  /** Party Room host: play a room-queue track; personal UsageEvents suppressed. */
+  playRoomSpeakerTrack: (
+    track: Track,
+    options: { roomId: string; code: string; onEnded?: () => void },
+  ) => void;
+  setRoomPlaybackPlaying: (playing: boolean) => void;
+  /** Active room speaker session (null when not speaking for a room). */
+  roomSpeaker: { roomId: string; code: string } | null;
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
@@ -333,6 +346,10 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   const [isLoadingNext, setIsLoadingNext] = useState(false);
   const [playbackToken, setPlaybackToken] = useState(0);
   const [cacheVersion, setCacheVersion] = useState(0);
+  const [roomSpeaker, setRoomSpeaker] = useState<{ roomId: string; code: string } | null>(null);
+  const [roomPlaying, setRoomPlaying] = useState<boolean | null>(null);
+  const persistenceSuspendedRef = useRef(false);
+  const roomOnEndedRef = useRef<(() => void) | null>(null);
 
   const isShuffleEnabled = shuffleSeed !== null;
 
@@ -1315,6 +1332,64 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     })();
   }, [currentTrackId, hydrateAround, isPlayerVisible, navigationState, userId]);
 
+  const restoreQueueFromServerRef = useRef<((saved: PlayerStateData) => Promise<void>) | null>(
+    null,
+  );
+
+  const suspendPersonalPersistence = useCallback(() => {
+    persistenceSuspendedRef.current = true;
+  }, []);
+
+  const resumePersonalPersistence = useCallback(() => {
+    persistenceSuspendedRef.current = false;
+    setRoomSpeaker(null);
+    setRoomPlaying(null);
+    roomOnEndedRef.current = null;
+  }, []);
+
+  const getPersonalPlayerSnapshot = useCallback((): PlayerStateData => {
+    return { ...playerStateRef.current };
+  }, []);
+
+  const restorePersonalPlayerSnapshot = useCallback(
+    async (snapshot: PlayerStateData, wasVisible: boolean) => {
+      setRoomSpeaker(null);
+      roomOnEndedRef.current = null;
+      if (!wasVisible || !hasPersistableQueue(snapshot)) {
+        closePlayer();
+        return;
+      }
+      await restoreQueueFromServerRef.current?.(snapshot);
+    },
+    [closePlayer],
+  );
+
+  const playRoomSpeakerTrack = useCallback(
+    (track: Track, options: { roomId: string; code: string; onEnded?: () => void }) => {
+      setRoomSpeaker({ roomId: options.roomId, code: options.code });
+      roomOnEndedRef.current = options.onEnded ?? null;
+      wantsAutoPlayRef.current = true;
+      setCurrentTrack(track);
+      setIsPlayerVisible(true);
+      setPlaybackToken((token) => token + 1);
+      setUpNext([]);
+      setSpine([]);
+      setSpineOrder([]);
+      setSpinePosition(0);
+      setSpineTotal(0);
+      setPlayContext(null);
+    },
+    [],
+  );
+
+  const setRoomPlaybackPlaying = useCallback((playing: boolean) => {
+    setRoomPlaying(playing);
+  }, []);
+
+  const handleRoomSpeakerEnded = useCallback(() => {
+    roomOnEndedRef.current?.();
+  }, []);
+
   const contextValue = useMemo(
     () => ({
       currentTrack,
@@ -1351,6 +1426,13 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       playQueueTrack,
       hydrateTracksForDisplay,
       addToCurrentPlaylist,
+      suspendPersonalPersistence,
+      resumePersonalPersistence,
+      getPersonalPlayerSnapshot,
+      restorePersonalPlayerSnapshot,
+      playRoomSpeakerTrack,
+      setRoomPlaybackPlaying,
+      roomSpeaker,
     }),
     [
       currentTrack,
@@ -1387,6 +1469,13 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       playQueueTrack,
       hydrateTracksForDisplay,
       addToCurrentPlaylist,
+      suspendPersonalPersistence,
+      resumePersonalPersistence,
+      getPersonalPlayerSnapshot,
+      restorePersonalPlayerSnapshot,
+      playRoomSpeakerTrack,
+      setRoomPlaybackPlaying,
+      roomSpeaker,
     ],
   );
 
@@ -1508,6 +1597,8 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     [loadSpineForContext],
   );
 
+  restoreQueueFromServerRef.current = restoreQueueFromServer;
+
   // Offline partial restore: rebuild the current track + Up Next from the
   // locally mirrored player state, resolving only tracks that are downloaded
   // for offline playback. The spine is intentionally NOT re-derived (no network
@@ -1586,6 +1677,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
   useEffect(() => {
     if (
       !userId ||
+      persistenceSuspendedRef.current ||
       !shouldPersistPlayerState(
         userId,
         onlineRestoredForUserIdRef.current,
@@ -1599,6 +1691,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
       if (
+        persistenceSuspendedRef.current ||
         !shouldPersistPlayerState(
           userId,
           onlineRestoredForUserIdRef.current,
@@ -1615,7 +1708,16 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
     return () => {
       if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     };
-  }, [userId, playContext, currentTrack?.id, upNext, shuffleSeed, loopMode, persistEpoch]);
+  }, [
+    userId,
+    playContext,
+    currentTrack?.id,
+    upNext,
+    shuffleSeed,
+    loopMode,
+    persistEpoch,
+    roomSpeaker,
+  ]);
 
   // Flush on page unload so the latest state survives a tab close / navigation.
   useEffect(() => {
@@ -1623,6 +1725,7 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
 
     const flush = () => {
       if (
+        persistenceSuspendedRef.current ||
         !shouldPersistPlayerState(
           userId,
           onlineRestoredForUserIdRef.current,
@@ -1710,17 +1813,22 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         onClose={closePlayer}
         onStartQueuePlayback={startQueuePlayback}
         hasQueuedPlayback={hasQueuedPlayback}
-        onNext={playNext}
-        onPrevious={playPrevious}
+        onNext={roomSpeaker ? handleRoomSpeakerEnded : playNext}
+        onPrevious={roomSpeaker ? () => {} : playPrevious}
         onToggleLoop={toggleLoop}
         onToggleShuffle={toggleShuffle}
-        hasNext={hasNext}
-        hasPrevious={hasPrevious}
-        loopMode={loopMode}
-        isShuffleEnabled={isShuffleEnabled}
+        hasNext={roomSpeaker ? true : hasNext}
+        hasPrevious={roomSpeaker ? false : hasPrevious}
+        loopMode={roomSpeaker ? "off" : loopMode}
+        isShuffleEnabled={roomSpeaker ? false : isShuffleEnabled}
         playbackToken={playbackToken}
         wantsAutoPlayRef={wantsAutoPlayRef}
         unlockAutoplayRef={unlockAutoplayRef}
+        roomSpeaker={roomSpeaker}
+        roomPlaying={roomPlaying}
+        audioSrcOverride={
+          roomSpeaker && currentTrack ? `/resources/rooms/audio/${currentTrack.id}` : undefined
+        }
       />
     </AudioPlayerContext.Provider>
   );

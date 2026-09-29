@@ -17,6 +17,7 @@ import { useServiceWorkerUpdateToast } from "#app/hooks/use-service-worker-updat
 import { type Route } from "./+types/root.ts";
 import appleTouchIconAssetUrl from "./assets/favicons/apple-touch-icon.png";
 import faviconAssetUrl from "./assets/favicons/favicon.svg";
+import { InRoomChip } from "./components/party-room/in-room-chip.tsx";
 import { AudioPlayerProvider, useAudioPlayer } from "./components/audio-player-provider";
 import { AutoplayGuideDialog } from "./components/autoplay-guide-dialog";
 import { BottomNav } from "./components/bottom-nav.tsx";
@@ -29,6 +30,8 @@ import { href as iconsHref } from "./components/ui/icon.tsx";
 import { Icon } from "./components/ui/icon.tsx";
 import { DuplicatePlaylistDialogProvider } from "./components/duplicate-playlist-dialog.tsx";
 import { Toaster } from "./components/ui/toaster.tsx";
+import { PartyRoomProvider } from "./features/party-room/party-room-provider.tsx";
+import { RoomSpeakerBridge } from "./components/party-room/room-speaker-bridge.tsx";
 import { offlineClientMiddleware } from "./middleware/offline-client.middleware.client.ts";
 import { ThemeSwitch, useOptionalTheme } from "./routes/resources+/theme-switch.tsx";
 import tailwindStyleSheetUrl from "./styles/tailwind.css?url";
@@ -300,7 +303,8 @@ function ShellLayout() {
               <span>Search tracks, albums, artists...</span>
             </Link>
           </div>
-          <div className="flex items-center gap-4 sm:gap-6 md:gap-10">
+          <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
+            {user ? <InRoomChip /> : null}
             <ThemeSwitch userPreference={loaderData.requestInfo.userPrefs.theme} />
             {user ? (
               <Suspense fallback={null}>
@@ -360,12 +364,15 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <OpenImgContextProvider optimizerEndpoint="/resources/images" getSrc={getImgSrc}>
         <AudioPlayerProvider userId={loaderData.user?.id ?? null}>
-          <DuplicatePlaylistDialogProvider>
-            <ShellLayout />
-            <Toaster />
-            <AutoplayGuideDialog />
-            <EpicProgress />
-          </DuplicatePlaylistDialogProvider>
+          <PartyRoomProvider enabled={Boolean(loaderData.user?.id)}>
+            <RoomSpeakerBridge />
+            <DuplicatePlaylistDialogProvider>
+              <ShellLayout />
+              <Toaster />
+              <AutoplayGuideDialog />
+              <EpicProgress />
+            </DuplicatePlaylistDialogProvider>
+          </PartyRoomProvider>
         </AudioPlayerProvider>
       </OpenImgContextProvider>
     </QueryClientProvider>

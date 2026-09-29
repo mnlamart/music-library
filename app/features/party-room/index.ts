@@ -15,6 +15,25 @@ export {
   ROOM_ROLE,
   DEFAULT_JOIN_ROLE,
   ROOM_PLAY_EVENT_TYPES,
+  RATE_LIMIT_WINDOW_MS,
+  ROOM_HOST_HEARTBEAT_INTERVAL_MS,
+  ROOM_QUEUE_MAX_TRACKS,
+  ROOM_MAX_PARTICIPANTS,
+  ROOM_ACTIVE_PER_CREATOR,
+  ROOM_GUEST_DISPLAY_NAME_MIN,
+  ROOM_GUEST_DISPLAY_NAME_MAX,
+  ROOM_ADD_TRACK_RATE_PER_MIN,
+  ROOM_AUDITION_RATE_PER_MIN,
+  ROOM_EMPTY_TTL_MS,
+  ROOM_HOST_GRACE_MS,
+} from "./constants.ts";
+
+export type {
+  RoomStatus,
+  RoomRole,
+  DefaultJoinRole,
+  RoomDefaultJoinRole,
+  RoomPlayEventType,
 } from "./constants.ts";
 
 export {
@@ -24,6 +43,13 @@ export {
   buildRoomJoinPath,
   buildRoomJoinUrl,
 } from "./codes.ts";
+
+export {
+  normalizeRoomCode,
+  parseRoomCodeInput as parseRoomCodeInputClient,
+  buildRoomJoinPath as buildRoomJoinPathClient,
+  buildRoomJoinUrl as buildRoomJoinUrlClient,
+} from "./code.ts";
 
 export {
   capabilitiesForRole,
@@ -36,4 +62,58 @@ export {
   canManageRoom,
   canBeSpeaker,
   isRoomRole,
+  canRoomRole,
+  canAddToRoomQueue,
+  canRemoveOwnQueueItem,
+  canControlTransport,
+  isRoomSpeakerRole,
+  rankForHostTakeover,
 } from "./capabilities.ts";
+
+export type { RoomCapability } from "./capabilities.ts";
+export type * from "./types.ts";
+
+import { type RoomQueueItemDto, type RoomSnapshot } from "./types.ts";
+
+/** Split queue into history (≤ currentIndex) and upcoming (> currentIndex). */
+export function splitRoomQueue(room: Pick<RoomSnapshot, "queue" | "playback">): {
+  history: RoomQueueItemDto[];
+  upcoming: RoomQueueItemDto[];
+  nowPlaying: RoomQueueItemDto | null;
+} {
+  const { queue, playback } = room;
+  const idx = playback.currentIndex;
+  if (queue.length === 0 || idx < 0) {
+    return { history: [], upcoming: queue, nowPlaying: null };
+  }
+  const history = queue.filter((item) => item.position < idx);
+  const nowPlaying = queue.find((item) => item.position === idx) ?? null;
+  const upcoming = queue.filter((item) => item.position > idx);
+  return { history, upcoming, nowPlaying };
+}
+
+/** True when the local participant is the current host (speaker device). */
+export function isCurrentHost(room: RoomSnapshot): boolean {
+  return Boolean(room.me && room.me.id === room.currentHostParticipantId);
+}
+
+/** Original host who lost the seat may reclaim. */
+export function canReclaimHost(room: RoomSnapshot): boolean {
+  return Boolean(
+    room.me &&
+      room.me.isOriginalHost &&
+      room.me.id !== room.currentHostParticipantId &&
+      room.status === "open",
+  );
+}
+
+/** Non-host participant may take over after grace when server flags it. */
+export function canBecomeHost(room: RoomSnapshot): boolean {
+  return Boolean(
+    room.hostTakeoverAvailable &&
+      room.me &&
+      room.me.id !== room.currentHostParticipantId &&
+      room.me.role !== "host" &&
+      room.status === "open",
+  );
+}
