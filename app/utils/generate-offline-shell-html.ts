@@ -49,7 +49,7 @@ export const OFFLINE_SHELL_THEME_SCRIPT = `(function(){
       }
     }
     if (theme === 'light' || theme === 'dark') {
-      document.documentElement.className = theme + ' h-full overflow-x-hidden';
+      document.documentElement.className = theme + ' h-full overflow-x-clip';
     }
   } catch (e) {}
 })();`;
@@ -92,7 +92,7 @@ export async function generateOfflineShellHtml(assets: OfflineShellAssets): Prom
   const routerBootstrap = buildOfflineRouterBootstrap(serializeEmptyRouterPayload());
   const lines = [
     "<!DOCTYPE html>",
-    '<html lang="en" class="light h-full overflow-x-hidden" data-offline-shell="true">',
+    '<html lang="en" class="light h-full overflow-x-clip" data-offline-shell="true">',
     "<head>",
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width,initial-scale=1" />',
