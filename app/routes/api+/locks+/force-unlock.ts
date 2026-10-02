@@ -35,3 +35,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   return { success: true };
 }
+
+// Client-side version delegates to server action
+export async function clientAction(args: ActionFunctionArgs) {
+  return action(args);
+}

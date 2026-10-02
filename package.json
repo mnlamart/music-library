@@ -131,6 +131,7 @@
     "input-otp": "^1.4.2",
     "intl-parse-accept-language": "^1.0.0",
     "isbot": "^5.2.1",
+    "js-levenshtein": "^1.1.6",
     "litefs-js": "^2.0.2",
     "lru-cache": "^11.1.0",
     "mime-types": "^3.0.1",

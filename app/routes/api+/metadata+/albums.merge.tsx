@@ -1,140 +1,143 @@
+/**
+ * POST /api/metadata/albums/merge
+ * Merge a source album into a target album
+ */
+
 import { data } from "react-router";
 import { z } from "zod";
-import { prisma } from "#app/utils/db.server.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
-import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
-import { type Route } from "./+types/albums.merge.ts";
+import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
+import { prisma } from "#app/utils/db.server.ts";
+import type { Route } from "./+types/albums.merge.ts";
 
-const MergeAlbumSchema = z.object({
+const MergeAlbumsSchema = z.object({
   sourceId: z.string().min(1, "Source album ID is required"),
   targetId: z.string().min(1, "Target album ID is required"),
-  keepAsAlias: z.boolean(),
-  comment: z.string().min(1, "Comment is required to explain merge reason"),
+  keepAsAlias: z.boolean().default(true),
+  comment: z.string().min(1, "Comment is required to explain the merge"),
 });
 
 export async function action({ request }: Route.ActionArgs) {
-  // Check curator/admin role
+  await requireCuratorOrAdmin(request);
   const userId = await requireUserId(request);
-  const user = await prisma.user.findFirst({
-    where: {
-      id: userId,
-      roles: {
-        some: {
-          name: { in: ["curator", "admin"] },
-        },
-      },
-    },
-  });
 
-  if (!user) {
-    throw data(
-      {
-        error: "Unauthorized",
-        message: "You must be a curator or admin to merge albums",
-      },
-      { status: 403 },
-    );
-  }
-
-  // Parse and validate request body
   const body = await request.json();
-  const result = MergeAlbumSchema.safeParse(body);
+  const result = MergeAlbumsSchema.safeParse(body);
 
   if (!result.success) {
-    throw data(
-      {
-        error: "Validation failed",
-        issues: result.error.issues,
-      },
-      { status: 400 },
-    );
+    throw new Response(result.error.message, { status: 400 });
   }
 
   const { sourceId, targetId, comment } = result.data;
 
-  // Prevent self-merge
+  // Validate: cannot merge album into itself
   if (sourceId === targetId) {
-    throw data(
-      {
-        error: "Invalid merge",
-        message: "Cannot merge an album into itself",
-      },
-      { status: 400 },
-    );
+    throw new Response("Cannot merge an album into itself", { status: 400 });
   }
 
-  // Perform merge in transaction
-  const result2 = await prisma.$transaction(async (tx) => {
-    // Check both albums exist
-    const [sourceAlbum, targetAlbum] = await Promise.all([
-      tx.album.findUnique({ where: { id: sourceId } }),
-      tx.album.findUnique({ where: { id: targetId } }),
-    ]);
-
-    if (!sourceAlbum) {
-      throw data({ error: "Source album not found" }, { status: 404 });
-    }
-
-    if (!targetAlbum) {
-      throw data({ error: "Target album not found" }, { status: 404 });
-    }
-
-    // Prevent circular merge - target must not already be merged
-    if (targetAlbum.mergedIntoId) {
-      throw data(
-        {
-          error: "Invalid merge",
-          message: "Target album is already merged into another album",
-        },
-        { status: 400 },
-      );
-    }
-
-    // Get count for response
-    const trackCount = await tx.track.count({ where: { albumId: sourceId } });
-
-    // Update all tracks
-    await tx.track.updateMany({
-      where: { albumId: sourceId },
-      data: { albumId: targetId },
-    });
-
-    // Mark source as merged
-    const mergedAlbum = await tx.album.update({
+  // Fetch both albums
+  const [sourceAlbum, targetAlbum] = await Promise.all([
+    prisma.album.findUnique({
       where: { id: sourceId },
-      data: {
-        mergedIntoId: targetId,
-        mergedAt: new Date(),
-        mergedBy: userId,
+      include: {
+        _count: {
+          select: {
+            tracks: true,
+          },
+        },
       },
+    }),
+    prisma.album.findUnique({
+      where: { id: targetId },
+    }),
+  ]);
+
+  if (!sourceAlbum) {
+    throw new Response("Source album not found", { status: 404 });
+  }
+
+  if (!targetAlbum) {
+    throw new Response("Target album not found", { status: 404 });
+  }
+
+  // Validate: target album must not be merged
+  if (targetAlbum.mergedIntoId) {
+    throw new Response("Target album is already merged into another album", {
+      status: 400,
+    });
+  }
+
+  // Validate: source album must not be merged already
+  if (sourceAlbum.mergedIntoId) {
+    throw new Response("Source album is already merged", { status: 400 });
+  }
+
+  try {
+    // Perform merge in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create audit entry before merge
+      await tx.albumEdit.create({
+        data: {
+          albumId: sourceId,
+          editedBy: userId,
+          comment: `MERGE: ${comment}`,
+          name: sourceAlbum.name,
+          artistId: sourceAlbum.artistId,
+          year: sourceAlbum.year,
+          coverImageId: sourceAlbum.coverImageId,
+        },
+      });
+
+      // Move all tracks from source to target
+      const tracksUpdated = await tx.track.updateMany({
+        where: { albumId: sourceId },
+        data: { albumId: targetId },
+      });
+
+      // Mark source album as merged
+      await tx.album.update({
+        where: { id: sourceId },
+        data: {
+          mergedIntoId: targetId,
+          mergedAt: new Date(),
+          mergedBy: userId,
+        },
+      });
+
+      // Update duplicate detection status for this pair
+      await tx.duplicateDetection.updateMany({
+        where: {
+          entityType: "album",
+          OR: [
+            { entityId1: sourceId, entityId2: targetId },
+            { entityId1: targetId, entityId2: sourceId },
+          ],
+        },
+        data: {
+          status: "merged",
+        },
+      });
+
+      return {
+        tracksUpdated: tracksUpdated.count,
+      };
     });
 
-    // Create album edit entry for the merge operation
-    await tx.albumEdit.create({
-      data: {
-        albumId: sourceId,
-        editedBy: userId,
-        comment: `Merged into ${targetAlbum.name}: ${comment}`,
-        name: mergedAlbum.name,
-        artistId: mergedAlbum.artistId,
-        year: mergedAlbum.year,
-        coverImageId: mergedAlbum.coverImageId,
+    return data({
+      success: true,
+      tracksUpdated: result.tracksUpdated,
+      targetAlbum: {
+        id: targetAlbum.id,
+        name: targetAlbum.name,
       },
     });
-
-    return {
-      tracksUpdated: trackCount,
-      targetAlbum,
-    };
-  });
-
-  return data({
-    success: true,
-    tracksUpdated: result2.tracksUpdated,
-    targetAlbum: result2.targetAlbum,
-  });
+  } catch (error) {
+    console.error("Error merging albums:", error);
+    throw new Response("Failed to merge albums", { status: 500 });
+  }
 }
 
-export async function clientAction(args: Route.ClientActionArgs) {
-  return proxyClientActionToServer(args);
+// Client-side version delegates to server action
+export async function clientAction(args: Route.ActionArgs) {
+  return action(args);
 }
