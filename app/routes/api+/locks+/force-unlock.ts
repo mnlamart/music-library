@@ -1,7 +1,9 @@
 import { data, type ActionFunctionArgs } from "react-router";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { forceUnlock, type EntityType } from "#app/utils/locks.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { z } from "zod";
+import { type Route } from "./+types/force-unlock.ts";
 
 const ForceUnlockSchema = z.object({
   entityType: z.enum(["track", "artist", "album"]),
@@ -34,4 +36,8 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   return { success: true };
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
