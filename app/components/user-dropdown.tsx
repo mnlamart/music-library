@@ -36,7 +36,11 @@ export function UserDropdown() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuPortal>
-        <DropdownMenuContent sideOffset={8} align="end">
+        <DropdownMenuContent
+          sideOffset={8}
+          align="end"
+          className="max-h-[calc(100dvh-12.5rem)] overflow-y-auto"
+        >
           <DropdownMenuItem asChild>
             <Link prefetch="intent" to={`/users/${user.username}`}>
               <Icon className="text-body-md" name="avatar">

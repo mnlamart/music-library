@@ -1,0 +1,437 @@
+import { useLoaderData, useFetcher } from "react-router";
+import { useState } from "react";
+import { Button } from "#app/components/ui/button";
+import { Card, CardContent } from "#app/components/ui/card";
+import { Icon } from "#app/components/ui/icon";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "#app/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "#app/components/ui/dialog";
+import { Input } from "#app/components/ui/input";
+import { Label } from "#app/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#app/components/ui/select";
+import { Checkbox } from "#app/components/ui/checkbox";
+import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
+import { type Route } from "./+types/genres";
+
+type Genre = {
+  id: string;
+  name: string;
+  trackCount: number;
+  createdAt: string;
+};
+
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireCuratorOrAdmin(request);
+
+  // Fetch genres from API
+  const response = await fetch(new URL("/api/genres", request.url));
+  const result = (await response.json()) as { genres: Genre[] };
+
+  return { genres: result.genres };
+}
+
+export default function GenresPage() {
+  const { genres } = useLoaderData<typeof loader>();
+  const createFetcher = useFetcher();
+  const editFetcher = useFetcher();
+  const deleteFetcher = useFetcher();
+  const mergeFetcher = useFetcher();
+
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+
+  const [newGenreName, setNewGenreName] = useState("");
+  const [editingGenre, setEditingGenre] = useState<Genre | null>(null);
+  const [editedName, setEditedName] = useState("");
+  const [deletingGenre, setDeletingGenre] = useState<Genre | null>(null);
+  const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
+  const [mergeTargetId, setMergeTargetId] = useState("");
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter genres by search query
+  const filteredGenres = genres.filter((genre) =>
+    genre.name.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  const handleCreate = () => {
+    if (!newGenreName.trim()) return;
+
+    createFetcher.submit(
+      { name: newGenreName },
+      {
+        method: "POST",
+        action: "/api/genres",
+        encType: "application/json",
+      },
+    );
+
+    setNewGenreName("");
+    setCreateDialogOpen(false);
+  };
+
+  const handleEdit = () => {
+    if (!editingGenre || !editedName.trim()) return;
+
+    editFetcher.submit(
+      { name: editedName },
+      {
+        method: "PUT",
+        action: `/api/genres/${editingGenre.id}`,
+        encType: "application/json",
+      },
+    );
+
+    setEditingGenre(null);
+    setEditedName("");
+    setEditDialogOpen(false);
+  };
+
+  const handleDelete = () => {
+    if (!deletingGenre) return;
+
+    deleteFetcher.submit(
+      {},
+      {
+        method: "DELETE",
+        action: `/api/genres/${deletingGenre.id}`,
+      },
+    );
+
+    setDeletingGenre(null);
+    setDeleteDialogOpen(false);
+  };
+
+  const handleMerge = () => {
+    if (selectedGenres.size < 2 || !mergeTargetId) return;
+
+    const sourceIds = Array.from(selectedGenres).filter((id) => id !== mergeTargetId);
+
+    mergeFetcher.submit(
+      {
+        sourceIds,
+        targetId: mergeTargetId,
+      },
+      {
+        method: "POST",
+        action: "/api/genres/merge",
+        encType: "application/json",
+      },
+    );
+
+    setSelectedGenres(new Set());
+    setMergeTargetId("");
+    setMergeDialogOpen(false);
+  };
+
+  const openEditDialog = (genre: Genre) => {
+    setEditingGenre(genre);
+    setEditedName(genre.name);
+    setEditDialogOpen(true);
+  };
+
+  const openDeleteDialog = (genre: Genre) => {
+    setDeletingGenre(genre);
+    setDeleteDialogOpen(true);
+  };
+
+  const openMergeDialog = () => {
+    if (selectedGenres.size < 2) return;
+    setMergeDialogOpen(true);
+  };
+
+  const toggleGenreSelection = (genreId: string) => {
+    const newSelection = new Set(selectedGenres);
+    if (newSelection.has(genreId)) {
+      newSelection.delete(genreId);
+    } else {
+      newSelection.add(genreId);
+    }
+    setSelectedGenres(newSelection);
+  };
+
+  return (
+    <div className="container mx-auto py-8 max-w-6xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Genre Management</h1>
+        <p className="text-muted-foreground">
+          Manage music genres, merge duplicates, and keep your library organized
+        </p>
+      </div>
+
+      <div className="mb-6 flex gap-4 items-center">
+        <div className="flex-1">
+          <div className="relative">
+            <Icon
+              name="magnifying-glass"
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+            />
+            <Input
+              type="text"
+              placeholder="Search genres..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+        <Button onClick={() => setCreateDialogOpen(true)}>
+          <Icon name="plus" className="mr-2 h-4 w-4" />
+          Add Genre
+        </Button>
+        <Button onClick={openMergeDialog} disabled={selectedGenres.size < 2} variant="outline">
+          <Icon name="arrow-path" className="mr-2 h-4 w-4" />
+          Merge Selected ({selectedGenres.size})
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">
+                  <div className="flex items-center justify-center">
+                    <Checkbox
+                      checked={
+                        selectedGenres.size === filteredGenres.length && filteredGenres.length > 0
+                      }
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedGenres(new Set(filteredGenres.map((g) => g.id)));
+                        } else {
+                          setSelectedGenres(new Set());
+                        }
+                      }}
+                    />
+                  </div>
+                </TableHead>
+                <TableHead>Genre Name</TableHead>
+                <TableHead className="text-right">Track Count</TableHead>
+                <TableHead className="text-right w-[200px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredGenres.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    {searchQuery
+                      ? "No genres match your search"
+                      : "No genres yet. Create one to get started."}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredGenres.map((genre) => (
+                  <TableRow key={genre.id}>
+                    <TableCell>
+                      <div className="flex items-center justify-center">
+                        <Checkbox
+                          checked={selectedGenres.has(genre.id)}
+                          onCheckedChange={() => toggleGenreSelection(genre.id)}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        onClick={() => {
+                          // Navigate to library filtered by this genre (future feature)
+                          console.log("View tracks with genre:", genre.name);
+                        }}
+                        className="font-medium hover:underline text-left"
+                      >
+                        {genre.name}
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {genre.trackCount}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-2 justify-end">
+                        <Button size="sm" variant="ghost" onClick={() => openEditDialog(genre)}>
+                          <Icon name="pencil-1" className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => openDeleteDialog(genre)}>
+                          <Icon name="trash" className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Create Genre Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Genre</DialogTitle>
+            <DialogDescription>Add a new genre to your music library</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="genre-name">Genre Name</Label>
+              <Input
+                id="genre-name"
+                value={newGenreName}
+                onChange={(e) => setNewGenreName(e.target.value)}
+                placeholder="e.g., Progressive Rock"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleCreate();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={!newGenreName.trim()}>
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Genre Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Genre</DialogTitle>
+            <DialogDescription>Rename this genre (affects all linked tracks)</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-genre-name">Genre Name</Label>
+              <Input
+                id="edit-genre-name"
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                placeholder="e.g., Progressive Rock"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleEdit();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEdit} disabled={!editedName.trim()}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Genre Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Genre</DialogTitle>
+            <DialogDescription>Are you sure you want to delete this genre?</DialogDescription>
+          </DialogHeader>
+          {deletingGenre && (
+            <div className="py-4">
+              <p className="mb-2">
+                This will remove <strong>{deletingGenre.name}</strong> from{" "}
+                <strong>{deletingGenre.trackCount}</strong> track(s).
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Tracks will not be deleted, only the genre tag will be removed.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              Delete Genre
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Merge Genres Dialog */}
+      <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Merge Genres</DialogTitle>
+            <DialogDescription>
+              Combine multiple genres into one. All tracks will be relinked to the target genre.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Selected Genres ({selectedGenres.size})</Label>
+              <div className="text-sm text-muted-foreground">
+                {Array.from(selectedGenres)
+                  .map((id) => genres.find((g) => g.id === id)?.name)
+                  .filter(Boolean)
+                  .join(", ")}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="merge-target">Merge Into (Target)</Label>
+              <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
+                <SelectTrigger id="merge-target">
+                  <SelectValue placeholder="Select target genre..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from(selectedGenres)
+                    .map((id) => genres.find((g) => g.id === id))
+                    .filter((genre): genre is Genre => genre !== undefined)
+                    .map((genre) => (
+                      <SelectItem key={genre.id} value={genre.id}>
+                        {genre.name} ({genre.trackCount} tracks)
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Other selected genres will be deleted after merging
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMergeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleMerge} disabled={!mergeTargetId}>
+              Merge Genres
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
