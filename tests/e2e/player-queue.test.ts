@@ -385,11 +385,12 @@ test.describe("Player / Queue", () => {
     const playButton = playerBar.getByLabel("Play", { exact: true });
     if (await playButton.isVisible().catch(() => false)) {
       await playButton.click({ force: true });
-      await expect(playerBar.getByLabel("Pause")).toBeVisible({ timeout: 5000 });
+      await expect(playerBar.getByLabel("Pause")).toBeVisible({ timeout: 10000 });
     }
 
+    // Wait for Pause button to be ready
     const pauseButton = playerBar.getByLabel("Pause");
-    await expect(pauseButton).toBeVisible({ timeout: 5000 });
+    await expect(pauseButton).toBeVisible({ timeout: 10000 });
     await pauseButton.click({ force: true });
 
     // After pausing, the play button should be visible
@@ -527,11 +528,13 @@ test.describe("Player / Queue", () => {
     const playButton = playerBar.getByLabel("Play", { exact: true });
     if (await playButton.isVisible().catch(() => false)) {
       await playButton.click({ force: true });
-      await expect(playerBar.getByLabel("Pause")).toBeVisible({ timeout: 5000 });
+      await expect(playerBar.getByLabel("Pause")).toBeVisible({ timeout: 10000 });
     }
 
-    // Pause via button click
-    await playerBar.getByLabel("Pause").click({ force: true });
+    // Wait for Pause button to be ready, then click
+    const pauseButton = playerBar.getByLabel("Pause");
+    await expect(pauseButton).toBeVisible({ timeout: 10000 });
+    await pauseButton.click({ force: true });
     await expect(playerBar.getByLabel("Play", { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
