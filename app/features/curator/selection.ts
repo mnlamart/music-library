@@ -1,5 +1,6 @@
 /**
  * Selection state for bulk operations.
+ * Handles track selection with localStorage persistence and BroadcastChannel sync.
  *
  * This module is intentionally not `*.client.ts`. Route components call these
  * hooks during SSR, and React Router replaces `.client` exports with

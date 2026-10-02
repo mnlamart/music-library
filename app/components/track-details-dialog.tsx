@@ -17,6 +17,7 @@ import { BasicMetadataTab } from "./track-details-dialog/basic-metadata-tab";
 import { ExtendedMetadataTab } from "./track-details-dialog/extended-metadata-tab";
 import { HistoryTab } from "./track-details-dialog/history-tab";
 import { CommentDialog } from "./track-details-dialog/comment-dialog";
+import { CuratorNotes } from "./curator-notes";
 import { LockBanner } from "./lock-banner";
 import { useLock } from "#app/hooks/use-lock";
 import { broadcastCuratorMessage, useCuratorSync } from "#app/features/curator/sync.client";
@@ -56,7 +57,12 @@ interface TrackDetailsDialogProps {
 }
 
 export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetailsDialogProps) {
-  const fetcher = useFetcher<{ track: TrackDetails; isCurator: boolean }>();
+  const fetcher = useFetcher<{
+    track: TrackDetails;
+    isCurator: boolean;
+    notesCount: number;
+    currentUserId: string;
+  }>();
   const [activeTab, setActiveTab] = useState("basic");
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<any>(null);
@@ -236,10 +242,18 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
 
               {isCurator ? (
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="basic">Basic</TabsTrigger>
                     <TabsTrigger value="extended">Extended</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
+                    <TabsTrigger value="notes">
+                      Notes
+                      {fetcher.data?.notesCount ? (
+                        <span className="ml-1 rounded-full bg-primary/20 px-1.5 py-0.5 text-xs">
+                          {fetcher.data.notesCount}
+                        </span>
+                      ) : null}
+                    </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="basic" className="mt-4">
@@ -260,6 +274,16 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
 
                   <TabsContent value="history" className="mt-4">
                     <HistoryTab trackId={trackId} onRestore={handleRestore} />
+                  </TabsContent>
+
+                  <TabsContent value="notes" className="mt-4">
+                    {fetcher.data?.currentUserId && (
+                      <CuratorNotes
+                        entityType="track"
+                        entityId={trackId}
+                        currentUserId={fetcher.data.currentUserId}
+                      />
+                    )}
                   </TabsContent>
                 </Tabs>
               ) : (
