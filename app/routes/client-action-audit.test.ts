@@ -29,6 +29,16 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/rooms+/$roomCode.queue.tsx",
   "api+/rooms+/$roomCode.play-events.tsx",
   "api+/rooms+/$roomCode.audition.ts",
+  // Curator Queue JSON APIs
+  "api+/curator+/queue+/report.ts",
+  "api+/curator+/queue+/flag.ts",
+  "api+/curator+/queue+/$id.claim.ts",
+  "api+/curator+/queue+/$id.unclaim.ts",
+  "api+/curator+/queue+/$id.resolve.ts",
+  // Lock Management JSON APIs
+  "api+/locks+/acquire.ts",
+  "api+/locks+/release.ts",
+  "api+/locks+/force-unlock.ts",
 ]);
 
 function walkFiles(dir: string): string[] {
