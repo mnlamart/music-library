@@ -2,7 +2,7 @@
  * E2E: admin user monitoring — list, disable, blocked login.
  */
 import { expect } from "@playwright/test";
-import { dismissOverlays, test } from "#tests/playwright-utils.ts";
+import { test, dismissOverlays } from "#tests/playwright-utils.ts";
 
 test.describe("Admin users monitoring", { tag: "@slow" }, () => {
   test("admin can list users, disable one, and that user cannot log in", async ({
