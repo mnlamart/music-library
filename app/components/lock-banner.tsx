@@ -3,11 +3,17 @@ import { Icon } from "./ui/icon.tsx";
 
 export interface LockBannerProps {
   lockedByName: string;
+  entityType?: "track" | "artist" | "album";
   onRefresh?: () => void;
   className?: string;
 }
 
-export function LockBanner({ lockedByName, onRefresh, className = "" }: LockBannerProps) {
+export function LockBanner({
+  lockedByName,
+  entityType: _entityType = "track",
+  onRefresh,
+  className = "",
+}: LockBannerProps) {
   return (
     <div
       className={`flex items-center justify-between rounded-lg border border-yellow-600 bg-yellow-50 p-4 dark:bg-yellow-950 ${className}`}

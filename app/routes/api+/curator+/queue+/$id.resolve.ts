@@ -2,6 +2,7 @@ import { data } from "react-router";
 import { z } from "zod";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireCuratorRole } from "#app/utils/permissions.server.ts";
+import { sendReviewResolutionEmail } from "#app/utils/queue-notifications.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { type Route } from "./+types/$id.resolve.ts";
 
@@ -21,7 +22,14 @@ export async function action({ request, params }: Route.ActionArgs) {
     return data({ success: false, error: "Invalid input data" }, { status: 400 });
   }
 
-  const item = await prisma.reviewQueueItem.findUnique({ where: { id } });
+  const item = await prisma.reviewQueueItem.findUnique({
+    where: { id },
+    include: {
+      reporter: {
+        select: { id: true, email: true, username: true, name: true },
+      },
+    },
+  });
   if (!item) return data({ success: false, error: "Queue item not found" }, { status: 404 });
   if (item.status !== "claimed") {
     return data(
@@ -36,6 +44,11 @@ export async function action({ request, params }: Route.ActionArgs) {
     );
   }
 
+  const curator = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true, name: true },
+  });
+
   await prisma.reviewQueueItem.update({
     where: { id },
     data: {
@@ -46,6 +59,24 @@ export async function action({ request, params }: Route.ActionArgs) {
       resolvedAt: new Date(),
     },
   });
+
+  if (item.reporter && item.source === "user_report") {
+    await sendReviewResolutionEmail({
+      reporter: item.reporter,
+      curator: curator || { username: "Unknown", name: null },
+      item: {
+        entityType: item.entityType,
+        entityId: item.entityId,
+        issueType: item.issueType,
+        description: item.description,
+      },
+      resolution: parsed.data.resolution,
+      resolutionComment: parsed.data.resolutionComment,
+    }).catch((err) => {
+      console.error("Failed to send resolution email:", err);
+    });
+  }
+
   return data({ success: true });
 }
 

@@ -9,10 +9,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#app/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#app/components/ui/tabs";
 import { Input } from "#app/components/ui/input";
 import { Label } from "#app/components/ui/label";
 import { Textarea } from "#app/components/ui/textarea";
 import { Icon } from "#app/components/ui/icon";
+import { ImageUploader } from "#app/components/image-uploader";
+import { ArtistHistoryTab } from "#app/components/artist-edit-dialog/artist-history-tab";
 
 export interface Artist {
   id: string;
@@ -33,6 +36,8 @@ interface ArtistEditDialogProps {
 
 export function ArtistEditDialog({ artist, open, onOpenChange, onSaved }: ArtistEditDialogProps) {
   const editFetcher = useFetcher();
+  const restoreFetcher = useFetcher();
+  const [activeTab, setActiveTab] = useState("metadata");
 
   const [formData, setFormData] = useState({
     name: artist.name,
@@ -44,7 +49,7 @@ export function ArtistEditDialog({ artist, open, onOpenChange, onSaved }: Artist
     comment: "",
   });
 
-  const isSubmitting = editFetcher.state !== "idle";
+  const isSubmitting = editFetcher.state !== "idle" || restoreFetcher.state !== "idle";
   const hasChanges =
     formData.name !== artist.name ||
     formData.bio !== (artist.bio || "") ||
@@ -75,8 +80,28 @@ export function ArtistEditDialog({ artist, open, onOpenChange, onSaved }: Artist
     );
   };
 
+  const handleRestore = (editId: string, comment: string | null) => {
+    if (!comment) return;
+
+    restoreFetcher.submit(
+      { comment },
+      {
+        method: "POST",
+        action: `/api/metadata/artists/${artist.id}/restore/${editId}`,
+        encType: "application/json",
+      },
+    );
+  };
+
+  const handleImageUploaded = (objectKey: string) => {
+    setFormData({ ...formData, imageUrl: objectKey });
+  };
+
   // Close dialog and notify parent on successful save
-  if (editFetcher.state === "idle" && editFetcher.data && open) {
+  if (
+    (editFetcher.state === "idle" && editFetcher.data && open) ||
+    (restoreFetcher.state === "idle" && restoreFetcher.data && open)
+  ) {
     setTimeout(() => {
       onOpenChange(false);
       onSaved?.();
@@ -85,7 +110,7 @@ export function ArtistEditDialog({ artist, open, onOpenChange, onSaved }: Artist
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Artist</DialogTitle>
           <DialogDescription>
@@ -93,100 +118,112 @@ export function ArtistEditDialog({ artist, open, onOpenChange, onSaved }: Artist
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="metadata">Metadata</TabsTrigger>
+            <TabsTrigger value="image">Image</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="metadata" className="space-y-4 mt-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">
+                  Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bio">Biography</Label>
+                <Textarea
+                  id="bio"
+                  value={formData.bio}
+                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                  rows={4}
+                  placeholder="Add artist biography..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="genre">Genre</Label>
+                  <Input
+                    id="genre"
+                    value={formData.genre}
+                    onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
+                    placeholder="e.g., Rock, Pop, Jazz"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="country">Country</Label>
+                  <Input
+                    id="country"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    placeholder="e.g., United States, UK"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="website">Website</Label>
+                <Input
+                  id="website"
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  placeholder="https://artist-website.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="comment">Comment (optional)</Label>
+                <Textarea
+                  id="comment"
+                  value={formData.comment}
+                  onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                  placeholder="Explain why you made these changes..."
+                  rows={2}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={!hasChanges || isSubmitting}>
+                  {isSubmitting && <Icon name="update" className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="image" className="mt-4">
+            <ImageUploader
+              entityType="artist"
+              entityId={artist.id}
+              currentImageUrl={formData.imageUrl}
+              onImageUploaded={handleImageUploaded}
             />
-          </div>
+          </TabsContent>
 
-          <div className="space-y-2">
-            <Label htmlFor="bio">Biography</Label>
-            <Textarea
-              id="bio"
-              value={formData.bio}
-              onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-              rows={4}
-              placeholder="Add artist biography..."
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="genre">Genre</Label>
-              <Input
-                id="genre"
-                value={formData.genre}
-                onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
-                placeholder="e.g., Rock, Pop, Jazz"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                placeholder="e.g., United States, UK"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="imageUrl">Image URL</Label>
-            <Input
-              id="imageUrl"
-              type="url"
-              value={formData.imageUrl}
-              onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-              placeholder="https://example.com/artist-image.jpg"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="website">Website</Label>
-            <Input
-              id="website"
-              type="url"
-              value={formData.website}
-              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-              placeholder="https://artist-website.com"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="comment">Comment (optional)</Label>
-            <Textarea
-              id="comment"
-              value={formData.comment}
-              onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-              placeholder="Explain why you made these changes..."
-              rows={2}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!hasChanges || isSubmitting}>
-              {isSubmitting && <Icon name="update" className="mr-2 h-4 w-4 animate-spin" />}
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </form>
+          <TabsContent value="history" className="mt-4">
+            <ArtistHistoryTab artistId={artist.id} onRestore={handleRestore} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

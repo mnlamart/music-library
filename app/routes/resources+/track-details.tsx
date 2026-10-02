@@ -46,7 +46,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
       serviceUrl: true,
       // Additional metadata fields
-      genre: true,
+      genre: true, // Keep for backward compatibility during migration
+      genres: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       year: true,
       trackNumber: true,
       albumArtist: true,
@@ -66,5 +72,16 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const isCurator = await userIsCuratorOrAdmin(userId);
 
-  return data({ track, isCurator });
+  // Get notes count for curators
+  let notesCount = 0;
+  if (isCurator) {
+    notesCount = await prisma.curatorNote.count({
+      where: {
+        entityType: "track",
+        entityId: trackId,
+      },
+    });
+  }
+
+  return data({ track, isCurator, notesCount, currentUserId: userId });
 }
