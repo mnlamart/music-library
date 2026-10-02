@@ -16,6 +16,13 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/metadata+/tracks+/bulk-edit.tsx",
   "_auth+/webauthn+/registration.ts",
   "_auth+/webauthn+/authentication.ts",
+  // Curator notes JSON APIs (called via fetch)
+  "api+/curator+/notes+/index.ts",
+  "api+/curator+/notes+/$id.ts",
+  // Lock system JSON APIs (called via fetch)
+  "api+/locks+/acquire.ts",
+  "api+/locks+/release.ts",
+  "api+/locks+/force-unlock.ts",
   // Party Room JSON APIs (called via fetch from room UI / guest shell)
   "api+/rooms+/index.tsx",
   "api+/rooms+/$roomCode.join.tsx",

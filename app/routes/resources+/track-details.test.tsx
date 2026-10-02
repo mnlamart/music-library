@@ -99,7 +99,12 @@ describe("track-details loader", () => {
       request: makeRequest("trackId=track-1"),
     } as never);
 
-    expect(response.data).toEqual({ track: mockTrack, isCurator: false });
+    expect(response.data).toEqual({
+      track: mockTrack,
+      isCurator: false,
+      notesCount: 0,
+      currentUserId: "user-1",
+    });
     expect(prisma.track.findUnique).toHaveBeenCalledWith({
       where: { id: "track-1" },
       select: expect.objectContaining({
@@ -148,6 +153,11 @@ describe("track-details loader", () => {
       request: makeRequest("trackId=track-1"),
     } as never);
 
-    expect(response.data).toEqual({ track: mockTrack, isCurator: false });
+    expect(response.data).toEqual({
+      track: mockTrack,
+      isCurator: false,
+      notesCount: 0,
+      currentUserId: "user-1",
+    });
   });
 });
