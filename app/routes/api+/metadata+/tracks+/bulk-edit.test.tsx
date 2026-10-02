@@ -288,6 +288,7 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
 
     expect(response.data.success).toBe(true);
     expect(response.data.updatedCount).toBe(1);
+    expect(response.data.updated).toBe(1);
   });
 
   test("successfully updates multiple tracks in a transaction", async () => {
