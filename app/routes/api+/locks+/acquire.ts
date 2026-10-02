@@ -3,8 +3,8 @@ import { requireUserId } from "#app/utils/auth.server.ts";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { acquireLock, type EntityType } from "#app/utils/locks.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
-import { type Route } from "./+types/acquire.ts";
 import { z } from "zod";
+import { type Route } from "./+types/acquire.ts";
 
 const AcquireLockSchema = z.object({
   entityType: z.enum(["track", "artist", "album"]),
