@@ -1094,42 +1094,27 @@ describe("Search Utilities", () => {
         },
       });
 
-      for (const track of [familiar, unfamiliar, exactUnused, containsHeavy]) {
-        await prisma.userTrack.create({
-          data: { userId: user.id, trackId: track.id },
-        });
-      }
+      await prisma.userTrack.createMany({
+        data: [familiar, unfamiliar, exactUnused, containsHeavy].map((track) => ({
+          userId: user.id,
+          trackId: track.id,
+        })),
+      });
 
-      // Personal lifetime completes on familiar (soft-boost signal).
-      for (let i = 0; i < 12; i++) {
-        await prisma.usageEvent.create({
-          data: {
-            type: USAGE_EVENT_TYPES.play_completed,
-            userId: user.id,
-            trackId: familiar.id,
-          },
-        });
-      }
-      // Other user's plays must never affect this user's ranking.
-      for (let i = 0; i < 50; i++) {
-        await prisma.usageEvent.create({
-          data: {
-            type: USAGE_EVENT_TYPES.play_completed,
-            userId: otherUser.id,
-            trackId: unfamiliar.id,
-          },
-        });
-      }
-      // Heavy personal plays on a contains match — still must not beat exact "Song".
-      for (let i = 0; i < 80; i++) {
-        await prisma.usageEvent.create({
-          data: {
-            type: USAGE_EVENT_TYPES.play_completed,
-            userId: user.id,
-            trackId: containsHeavy.id,
-          },
-        });
-      }
+      const play = (userId: string, trackId: string) => ({
+        type: USAGE_EVENT_TYPES.play_completed,
+        userId,
+        trackId,
+      });
+      // One insert for the personal boost, the other user's plays, and the
+      // contains-match plays. Sequential creates blew the 5s test timeout in CI.
+      await prisma.usageEvent.createMany({
+        data: [
+          ...Array.from({ length: 12 }, () => play(user.id, familiar.id)),
+          ...Array.from({ length: 50 }, () => play(otherUser.id, unfamiliar.id)),
+          ...Array.from({ length: 80 }, () => play(user.id, containsHeavy.id)),
+        ],
+      });
 
       return { user, familiar, unfamiliar, exactUnused, containsHeavy };
     }
@@ -1143,7 +1128,7 @@ describe("Search Utilities", () => {
       expect(trackIds).toContain(familiar.id);
       expect(trackIds).toContain(unfamiliar.id);
       expect(trackIds.indexOf(familiar.id)).toBeLessThan(trackIds.indexOf(unfamiliar.id));
-    });
+    }, 10000);
 
     it("does not apply personal play boost when logged out (relevance only)", async () => {
       const { familiar, unfamiliar } = await seedBoostFixture();
