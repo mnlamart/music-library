@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArtistAutocomplete } from "#app/components/artist-autocomplete";
+import { GenreSelector, type Genre } from "#app/components/genre-selector";
 import { Button } from "#app/components/ui/button";
 import { Input } from "#app/components/ui/input";
 import { Label } from "#app/components/ui/label";
@@ -14,12 +15,12 @@ export function BasicMetadataTab({ track, onSave }: BasicMetadataTabProps) {
   const [title, setTitle] = useState(track.title);
   const [artistId, setArtistId] = useState(track.artist.id);
   const [albumName, setAlbumName] = useState(track.albumRecord?.name ?? "");
-  const [genre, setGenre] = useState(track.genre ?? "");
+  const [genres, setGenres] = useState<Genre[]>(track.genres.map((g) => ({ ...g, trackCount: 0 })));
   const [year, setYear] = useState(track.year?.toString() ?? "");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleArtistChange = (id: string | null, name: string) => {
+  const handleArtistChange = (id: string | null, _name: string) => {
     setArtistId(id ?? "");
     if (errors.artist) {
       setErrors((prev) => ({ ...prev, artist: "" }));
@@ -43,6 +44,29 @@ export function BasicMetadataTab({ track, onSave }: BasicMetadataTabProps) {
       handleArtistChange(data.artist.id, data.artist.name);
     } catch (error) {
       console.error("Error creating artist:", error);
+      throw error;
+    }
+  };
+
+  const handleCreateGenre = async (name: string): Promise<Genre> => {
+    try {
+      const response = await fetch("/api/genres", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as { error?: string };
+        throw new Error(errorData.error || "Failed to create genre");
+      }
+
+      const data = (await response.json()) as {
+        genre: { id: string; name: string; trackCount: number };
+      };
+      return data.genre;
+    } catch (error) {
+      console.error("Error creating genre:", error);
       throw error;
     }
   };
@@ -73,7 +97,7 @@ export function BasicMetadataTab({ track, onSave }: BasicMetadataTabProps) {
       title: title.trim(),
       artistId,
       albumId: track.albumRecord?.id ?? null,
-      genre: genre.trim() || null,
+      genreIds: genres.map((g) => g.id),
       year: year ? parseInt(year, 10) : null,
     };
 
@@ -83,7 +107,8 @@ export function BasicMetadataTab({ track, onSave }: BasicMetadataTabProps) {
   const hasChanges =
     title !== track.title ||
     artistId !== track.artist.id ||
-    genre !== (track.genre ?? "") ||
+    JSON.stringify(genres.map((g) => g.id).sort()) !==
+      JSON.stringify(track.genres.map((g) => g.id).sort()) ||
     year !== (track.year?.toString() ?? "");
 
   return (
@@ -132,15 +157,12 @@ export function BasicMetadataTab({ track, onSave }: BasicMetadataTabProps) {
         <p className="px-4 pt-1 text-[10px] text-muted-foreground">Album editing coming soon</p>
       </div>
 
-      <div>
-        <Label htmlFor="genre">Genre</Label>
-        <Input
-          id="genre"
-          value={genre}
-          onChange={(e) => setGenre(e.target.value)}
-          placeholder="Genre"
-        />
-      </div>
+      <GenreSelector
+        selectedGenres={genres}
+        onChange={setGenres}
+        onCreateNew={handleCreateGenre}
+        label="Genres"
+      />
 
       <div>
         <Label htmlFor="year">Year</Label>

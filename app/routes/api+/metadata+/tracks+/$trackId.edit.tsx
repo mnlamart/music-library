@@ -10,7 +10,8 @@ const EditTrackSchema = z.object({
   title: z.string().min(1, "Title is required"),
   artistId: z.string().min(1, "Artist ID is required"),
   albumId: z.string().nullable().optional(),
-  genre: z.string().nullable().optional(),
+  genre: z.string().nullable().optional(), // Keep for backward compatibility
+  genreIds: z.array(z.string()).optional(), // New multi-genre support
   year: z.number().int().nullable().optional(),
   trackNumber: z.number().int().nullable().optional(),
   albumArtist: z.string().nullable().optional(),
@@ -69,6 +70,12 @@ export async function action({ request, params }: Route.ActionArgs) {
       artistId: true,
       albumId: true,
       genre: true,
+      genres: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       year: true,
       trackNumber: true,
       albumArtist: true,
@@ -107,6 +114,18 @@ export async function action({ request, params }: Route.ActionArgs) {
 
     if (!album) {
       throw data({ error: "Album not found" }, { status: 404 });
+    }
+  }
+
+  // Verify all genres exist if provided
+  if (editData.genreIds && editData.genreIds.length > 0) {
+    const genres = await prisma.genre.findMany({
+      where: { id: { in: editData.genreIds } },
+      select: { id: true },
+    });
+
+    if (genres.length !== editData.genreIds.length) {
+      throw data({ error: "One or more genres not found" }, { status: 404 });
     }
   }
 
@@ -172,6 +191,12 @@ export async function action({ request, params }: Route.ActionArgs) {
         totalTracks: editData.totalTracks === undefined ? track.totalTracks : editData.totalTracks,
         totalDiscs: editData.totalDiscs === undefined ? track.totalDiscs : editData.totalDiscs,
         lyrics: editData.lyrics === undefined ? track.lyrics : editData.lyrics,
+        // Update genres if provided
+        ...(editData.genreIds !== undefined && {
+          genres: {
+            set: editData.genreIds.map((id) => ({ id })),
+          },
+        }),
       },
       include: {
         artist: {
@@ -181,6 +206,12 @@ export async function action({ request, params }: Route.ActionArgs) {
           },
         },
         albumRecord: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        genres: {
           select: {
             id: true,
             name: true,

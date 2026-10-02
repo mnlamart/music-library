@@ -31,7 +31,8 @@ export interface TrackDetails {
   service: { displayName: string } | null;
   serviceUrl: string | null;
   // Additional metadata
-  genre: string | null;
+  genre: string | null; // Keep for backward compatibility
+  genres: Array<{ id: string; name: string }>;
   year: number | null;
   trackNumber: number | null;
   albumArtist: string | null;
@@ -196,7 +197,9 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
                     <div className="space-y-1 text-sm text-muted-foreground">
                       <div>Artist: {track.artist.name}</div>
                       {track.albumRecord && <div>Album: {track.albumRecord.name}</div>}
-                      {track.genre && <div>Genre: {track.genre}</div>}
+                      {track.genres.length > 0 && (
+                        <div>Genres: {track.genres.map((g) => g.name).join(", ")}</div>
+                      )}
                       {track.year && <div>Year: {track.year}</div>}
                       <div>Duration: {formatDuration(track.duration)}</div>
                       <div>Added: {new Date(track.createdAt).toLocaleDateString()}</div>
