@@ -1,4 +1,4 @@
-import { useSelectionMode } from "#app/features/curator/selection.client";
+import { useSelectionMode } from "#app/features/curator/selection.ts";
 import { Button } from "#app/components/ui/button";
 import { Icon } from "#app/components/ui/icon";
 import { Label } from "#app/components/ui/label";

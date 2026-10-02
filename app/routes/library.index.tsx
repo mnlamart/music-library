@@ -8,7 +8,7 @@ import { SelectionModeToggle } from "#app/components/selection-mode-toggle";
 import { SortDirectionToggle } from "#app/components/sort-direction-toggle.tsx";
 import { TrackListItem } from "#app/components/track-list-item";
 import { TrackListSelectionControls } from "#app/components/track-list-selection-controls";
-import { useSelection, useSelectionMode } from "#app/features/curator/selection.client";
+import { useSelection, useSelectionMode } from "#app/features/curator/selection.ts";
 import { Checkbox } from "#app/components/ui/checkbox.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { Label } from "#app/components/ui/label.tsx";

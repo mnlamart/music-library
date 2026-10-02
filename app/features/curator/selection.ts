@@ -1,6 +1,10 @@
 /**
- * Selection state management for bulk operations
- * Handles track selection with localStorage persistence and BroadcastChannel sync
+ * Selection state management for bulk operations.
+ * Handles track selection with localStorage persistence and BroadcastChannel sync.
+ *
+ * This module is imported by route components that render on the server.
+ * It must not use a `.client` suffix: React Router replaces those exports
+ * with `undefined` during SSR, and calling the hooks crashes the route.
  */
 
 import { useEffect, useState, useCallback } from "react";
