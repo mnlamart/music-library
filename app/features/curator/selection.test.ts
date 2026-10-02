@@ -11,7 +11,7 @@ import {
   clearSelectedTrackIds,
   useSelectionMode,
   useSelection,
-} from "./selection.client";
+} from "./selection.ts";
 
 // Mock curator sync module
 vi.mock("./sync.client", () => ({
@@ -56,7 +56,7 @@ Object.defineProperty(globalThis, "BroadcastChannel", {
   writable: true,
 });
 
-describe("selection.client", () => {
+describe("selection", () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();

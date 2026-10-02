@@ -1,6 +1,12 @@
 /**
- * Selection state management for bulk operations
- * Handles track selection with localStorage persistence and BroadcastChannel sync
+ * Selection state for bulk operations.
+ *
+ * This module is intentionally not `*.client.ts`. Route components call these
+ * hooks during SSR, and React Router replaces `.client` exports with
+ * `undefined` in the server bundle.
+ *
+ * State is read from localStorage after mount so the server render and the
+ * first client render stay in sync.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -13,17 +19,18 @@ import {
 const SELECTION_MODE_KEY = "curator:selection-mode";
 const SELECTED_TRACKS_KEY = "curator:selected-tracks";
 
-/**
- * Get selection mode from localStorage
- */
-export function getSelectionMode(): boolean {
-  if (typeof globalThis.localStorage === "undefined") return false;
+function readStorageItem(key: string): string | null {
   try {
-    const stored = globalThis.localStorage.getItem(SELECTION_MODE_KEY);
-    return stored === "true";
+    if (typeof globalThis.localStorage === "undefined") return null;
+    return globalThis.localStorage.getItem(key);
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** Read whether selection mode is enabled from localStorage. */
+export function getSelectionMode(): boolean {
+  return readStorageItem(SELECTION_MODE_KEY) === "true";
 }
 
 /**
@@ -47,9 +54,8 @@ export function setSelectionMode(enabled: boolean): void {
  * Get selected track IDs from localStorage
  */
 export function getSelectedTrackIds(): Set<string> {
-  if (typeof globalThis.localStorage === "undefined") return new Set();
   try {
-    const stored = globalThis.localStorage.getItem(SELECTED_TRACKS_KEY);
+    const stored = readStorageItem(SELECTED_TRACKS_KEY);
     if (!stored) return new Set();
     const parsed = JSON.parse(stored) as string[];
     return new Set(parsed);
@@ -97,9 +103,11 @@ export function clearSelectedTrackIds(): void {
  * React hook for selection mode
  */
 export function useSelectionMode() {
-  const [selectionMode, setSelectionModeState] = useState<boolean>(() => getSelectionMode());
+  const [selectionMode, setSelectionModeState] = useState(false);
 
   useEffect(() => {
+    setSelectionModeState(getSelectionMode());
+
     // Subscribe to selection mode changes from other tabs
     const unsubscribe = subscribeToCuratorSync((message: CuratorSyncMessage) => {
       if (message.type === "SELECTION_MODE_CHANGED") {
@@ -131,11 +139,11 @@ export function useSelectionMode() {
  * React hook for track selection state
  */
 export function useSelection() {
-  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(() =>
-    getSelectedTrackIds(),
-  );
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
+    setSelectedTrackIds(getSelectedTrackIds());
+
     // Subscribe to selection changes from other tabs
     const unsubscribe = subscribeToCuratorSync((message: CuratorSyncMessage) => {
       if (message.type === "SELECTION_UPDATED") {
