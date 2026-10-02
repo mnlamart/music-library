@@ -17,6 +17,7 @@ export function UserDropdown() {
   const user = useUser();
   const formRef = useRef<HTMLFormElement>(null);
   const isAdmin = userHasRole(user, "admin");
+  const isCurator = userHasRole(user, "curator") || isAdmin;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -86,6 +87,42 @@ export function UserDropdown() {
               </Icon>
             </Link>
           </DropdownMenuItem>
+          {isCurator && (
+            <DropdownMenuItem asChild>
+              <Link prefetch="intent" to="/music/curator/dashboard">
+                <Icon className="text-body-md" name="pencil-2">
+                  Curator Dashboard
+                </Icon>
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {isCurator && (
+            <DropdownMenuItem asChild>
+              <Link prefetch="intent" to="/music/curator/queue">
+                <Icon className="text-body-md" name="file-text">
+                  Review Queue
+                </Icon>
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {isCurator && (
+            <DropdownMenuItem asChild>
+              <Link prefetch="intent" to="/music/curator/duplicates">
+                <Icon className="text-body-md" name="arrows-right-left">
+                  Duplicates
+                </Icon>
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {isCurator && (
+            <DropdownMenuItem asChild>
+              <Link prefetch="intent" to="/music/curator/genres">
+                <Icon className="text-body-md" name="file-text">
+                  Genres
+                </Icon>
+              </Link>
+            </DropdownMenuItem>
+          )}
           {isAdmin && (
             <DropdownMenuItem asChild>
               <Link prefetch="intent" to="/admin">

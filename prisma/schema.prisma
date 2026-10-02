@@ -37,6 +37,12 @@ model User {
   albumEdits          AlbumEdit[]       @relation("AlbumEditUser")
   roomsCreated        Room[]            @relation("RoomOriginalHost")
   roomParticipants    RoomParticipant[]
+  editLocks           EditLock[]        @relation("EditLockUser")
+  reportedQueueItems  ReviewQueueItem[] @relation("ReviewQueueReporter")
+  claimedQueueItems   ReviewQueueItem[] @relation("ReviewQueueClaimed")
+  resolvedQueueItems  ReviewQueueItem[] @relation("ReviewQueueResolved")
+  curatorNotes        CuratorNote[]     @relation("CuratorNotes")
+  curatorBadges       CuratorBadge[]    @relation("CuratorBadges")
 }
 
 model PlayerState {
@@ -247,6 +253,7 @@ model CoverImage {
   height      Int?
   format      String? // jpeg, png, etc.
   fileSize    Int? // Size in bytes
+  isPrimary   Boolean  @default(true) // For multi-image support
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   tracks      Track[]
@@ -320,6 +327,7 @@ model Track {
   edits                   TrackEdit[]
   roomQueueItems          RoomQueueItem[]
   roomPlayEvents          RoomPlayEvent[]
+  genres                  Genre[]       @relation("TrackGenres")
 
   @@unique([serviceId, externalId])
   @@index([serviceId, externalId])
@@ -740,4 +748,133 @@ model RoomPlayEvent {
   @@index([roomId, createdAt])
   @@index([trackId])
   @@index([type, createdAt])
+}
+
+// Curator System Tables (ADR-031 through ADR-037)
+
+/// Edit locks for concurrent editing protection (ADR-032)
+model EditLock {
+  id         String   @id @default(cuid())
+  entityType String   // 'track', 'artist', 'album'
+  entityId   String
+  lockedBy   String
+  user       User     @relation("EditLockUser", fields: [lockedBy], references: [id], onDelete: Cascade)
+  acquiredAt DateTime @default(now())
+  expiresAt  DateTime
+  
+  @@unique([entityType, entityId])
+  @@index([lockedBy])
+  @@index([expiresAt])
+}
+
+/// Review queue for user reports and system-detected issues (ADR-035)
+model ReviewQueueItem {
+  id                String    @id @default(cuid())
+  entityType        String    // 'track', 'artist', 'album'
+  entityId          String
+  source            String    // 'user_report', 'system', 'curator'
+  issueType         String    // 'wrong_metadata', 'missing_info', 'low_quality', 'duplicate', 'other'
+  description       String?
+  reporterId        String?
+  reporter          User?     @relation("ReviewQueueReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  status            String    @default("open") // 'open', 'claimed', 'resolved'
+  priority          Int       @default(1) // 1 (low) to 3 (high)
+  claimedBy         String?
+  claimedByUser     User?     @relation("ReviewQueueClaimed", fields: [claimedBy], references: [id], onDelete: SetNull)
+  claimedAt         DateTime?
+  resolvedBy        String?
+  resolvedByUser    User?     @relation("ReviewQueueResolved", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  resolvedAt        DateTime?
+  resolution        String?   // 'fixed', 'not_an_issue', 'duplicate', 'cannot_fix'
+  resolutionComment String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([entityType, entityId])
+  @@index([status, priority])
+  @@index([claimedBy])
+  @@index([reporterId])
+  @@index([createdAt])
+}
+
+/// Duplicate detection cache (ADR-034)
+model DuplicateDetection {
+  id             String   @id @default(cuid())
+  entityType     String   // 'artist', 'album'
+  entityId1      String
+  entityId2      String
+  matchType      String   // 'exact', 'fuzzy'
+  similarity     Float    // Levenshtein distance
+  normalizedName String
+  detectedAt     DateTime @default(now())
+  status         String   @default("pending") // 'pending', 'merged', 'dismissed'
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@index([entityType, entityId1])
+  @@index([entityType, entityId2])
+  @@index([normalizedName])
+  @@index([status])
+  @@index([matchType])
+}
+
+/// Normalized name cache for duplicate detection (ADR-034)
+model NormalizedName {
+  id             String   @id @default(cuid())
+  entityType     String   // 'artist', 'album'
+  entityId       String
+  originalName   String
+  normalizedName String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@unique([entityType, entityId])
+  @@index([normalizedName])
+}
+
+/// Genre taxonomy for multi-genre tagging (ADR-037)
+model Genre {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  normalizedName String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tracks         Track[]  @relation("TrackGenres")
+  
+  @@index([normalizedName])
+}
+
+/// Threaded curator notes with @mentions
+model CuratorNote {
+  id         String        @id @default(cuid())
+  entityType String        // 'track', 'artist', 'album'
+  entityId   String
+  curatorId  String
+  curator    User          @relation("CuratorNotes", fields: [curatorId], references: [id], onDelete: Cascade)
+  parentId   String?
+  parent     CuratorNote?  @relation("NoteThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    CuratorNote[] @relation("NoteThread")
+  content    String
+  mentions   String        @default("[]") // JSON array of user IDs
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  
+  @@index([entityType, entityId])
+  @@index([curatorId])
+  @@index([parentId])
+  @@index([createdAt])
+}
+
+/// Curator achievement badges
+model CuratorBadge {
+  id         String   @id @default(cuid())
+  curatorId  String
+  curator    User     @relation("CuratorBadges", fields: [curatorId], references: [id], onDelete: Cascade)
+  badgeType  String   // 'first_edit', 'getting_started', 'regular_contributor', etc.
+  earnedAt   DateTime @default(now())
+  createdAt  DateTime @default(now())
+  
+  @@unique([curatorId, badgeType])
+  @@index([curatorId])
+  @@index([earnedAt])
 }
