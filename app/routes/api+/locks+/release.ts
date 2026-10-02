@@ -2,7 +2,9 @@ import { data, type ActionFunctionArgs } from "react-router";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { releaseLock, type EntityType } from "#app/utils/locks.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { z } from "zod";
+import { type Route } from "./+types/release.ts";
 
 const ReleaseLockSchema = z.object({
   entityType: z.enum(["track", "artist", "album"]),
@@ -37,7 +39,6 @@ export async function action({ request }: ActionFunctionArgs) {
   return { success: true };
 }
 
-// Client-side version delegates to server action
-export async function clientAction(args: ActionFunctionArgs) {
-  return action(args);
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
