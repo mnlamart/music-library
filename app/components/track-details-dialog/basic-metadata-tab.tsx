@@ -9,9 +9,10 @@ import { type TrackDetails } from "../track-details-dialog";
 interface BasicMetadataTabProps {
   track: TrackDetails;
   onSave: (changes: any) => void;
+  disabled?: boolean;
 }
 
-export function BasicMetadataTab({ track, onSave }: BasicMetadataTabProps) {
+export function BasicMetadataTab({ track, onSave, disabled = false }: BasicMetadataTabProps) {
   const [title, setTitle] = useState(track.title);
   const [artistId, setArtistId] = useState(track.artist.id);
   const [albumName, setAlbumName] = useState(track.albumRecord?.name ?? "");
@@ -178,7 +179,7 @@ export function BasicMetadataTab({ track, onSave }: BasicMetadataTabProps) {
       </div>
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="submit" disabled={!hasChanges}>
+        <Button type="submit" disabled={!hasChanges || disabled}>
           Save Changes
         </Button>
       </div>

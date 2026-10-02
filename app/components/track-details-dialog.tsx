@@ -17,6 +17,10 @@ import { BasicMetadataTab } from "./track-details-dialog/basic-metadata-tab";
 import { ExtendedMetadataTab } from "./track-details-dialog/extended-metadata-tab";
 import { HistoryTab } from "./track-details-dialog/history-tab";
 import { CommentDialog } from "./track-details-dialog/comment-dialog";
+import { LockBanner } from "./lock-banner";
+import { useLock } from "#app/hooks/use-lock";
+import { broadcastCuratorMessage, useCuratorSync } from "#app/features/curator/sync.client";
+import { UndoToast } from "./undo-toast";
 
 export interface TrackDetails {
   id: string;
@@ -56,7 +60,22 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
   const [activeTab, setActiveTab] = useState("basic");
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<any>(null);
+  const [showUndoToast, setShowUndoToast] = useState(false);
   const submit = useSubmit();
+
+  const track = fetcher.data?.track;
+  const isCurator = fetcher.data?.isCurator ?? false;
+  const isLoading = fetcher.state !== "idle";
+
+  // Lock integration - only acquire if curator
+  const {
+    lock,
+    isLockedByOther,
+    refresh: refreshLock,
+  } = useLock("track", trackId, {
+    autoAcquire: open && isCurator,
+    autoRelease: true,
+  });
 
   useEffect(() => {
     if (open && fetcher.state === "idle" && !fetcher.data) {
@@ -72,9 +91,30 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
     }
   }, [fetcher.state, fetcher.data]);
 
-  const track = fetcher.data?.track;
-  const isCurator = fetcher.data?.isCurator ?? false;
-  const isLoading = fetcher.state !== "idle";
+  // BroadcastChannel integration
+  useEffect(() => {
+    if (!open) return;
+
+    const cleanup = useCuratorSync((message) => {
+      if (
+        message.type === "LOCK_RELEASED" &&
+        message.entityType === "track" &&
+        message.entityId === trackId
+      ) {
+        // Lock was released by another curator, refresh lock status
+        refreshLock();
+      } else if (
+        message.type === "ENTITY_UPDATED" &&
+        message.entityType === "track" &&
+        message.entityId === trackId
+      ) {
+        // Track was updated by another curator, reload track details
+        fetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
+      }
+    });
+
+    return cleanup;
+  }, [open, trackId, refreshLock, fetcher]);
 
   const serviceDateAdded = track
     ? formatServiceDateAdded({
@@ -107,8 +147,20 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
       action: `/api/metadata/tracks/${trackId}/edit`,
     });
 
+    // Broadcast the update
+    broadcastCuratorMessage({
+      type: "ENTITY_UPDATED",
+      entityType: "track",
+      entityId: trackId,
+    });
+
     setShowCommentDialog(false);
     setPendingChanges(null);
+
+    // Show undo toast after successful edit
+    setShowUndoToast(true);
+    // Note: We'll get the edit ID from the response, but for now we'll reload history
+    fetcher.load(`/api/metadata/tracks/${trackId}/history`);
   };
 
   const handleRestore = (editId: string, comment: string | null) => {
@@ -173,6 +225,15 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
                 </DialogDescription>
               </DialogHeader>
 
+              {/* Lock Banner */}
+              {isCurator && isLockedByOther && lock && (
+                <LockBanner
+                  lockedByName={lock.lockedByName}
+                  entityType="track"
+                  onRefresh={refreshLock}
+                />
+              )}
+
               {isCurator ? (
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
                   <TabsList className="grid w-full grid-cols-3">
@@ -182,11 +243,19 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
                   </TabsList>
 
                   <TabsContent value="basic" className="mt-4">
-                    <BasicMetadataTab track={track} onSave={handleSaveChanges} />
+                    <BasicMetadataTab
+                      track={track}
+                      onSave={handleSaveChanges}
+                      disabled={isLockedByOther}
+                    />
                   </TabsContent>
 
                   <TabsContent value="extended" className="mt-4">
-                    <ExtendedMetadataTab track={track} onSave={handleSaveChanges} />
+                    <ExtendedMetadataTab
+                      track={track}
+                      onSave={handleSaveChanges}
+                      disabled={isLockedByOther}
+                    />
                   </TabsContent>
 
                   <TabsContent value="history" className="mt-4">
@@ -238,6 +307,18 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
           title="Edit Comment"
           description="Optionally add a comment explaining why you're making this change."
           required={false}
+        />
+      )}
+
+      {showUndoToast && (
+        <UndoToast
+          open={showUndoToast}
+          onOpenChange={setShowUndoToast}
+          trackId={trackId}
+          onUndo={() => {
+            // Reload track details after undo
+            fetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
+          }}
         />
       )}
     </>
