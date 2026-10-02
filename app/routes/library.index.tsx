@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { data, useSearchParams } from "react-router";
 import { BulkEditDialog } from "#app/components/bulk-edit-dialog";
 import { OfflineLibraryView } from "#app/components/offline/offline-library-view.tsx";
+import { SelectionModeToggle } from "#app/components/selection-mode-toggle";
 import { SortDirectionToggle } from "#app/components/sort-direction-toggle.tsx";
 import { TrackListItem } from "#app/components/track-list-item";
 import { TrackListSelectionControls } from "#app/components/track-list-selection-controls";
+import { useSelection, useSelectionMode } from "#app/features/curator/selection.client";
 import { Checkbox } from "#app/components/ui/checkbox.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { Label } from "#app/components/ui/label.tsx";
@@ -198,8 +200,10 @@ export default function LibraryIndexRoute({
   );
   const parentRef = useRef<HTMLDivElement>(null);
 
-  // Selection state for bulk editing
-  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
+  // Selection mode and state management
+  const { selectionMode } = useSelectionMode();
+  const { selectedTrackIds, selectAll, deselectAll, toggleSelection, selectedCount } =
+    useSelection();
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
 
   const scrollLibraryToTop = useCallback(() => {
@@ -312,31 +316,26 @@ export default function LibraryIndexRoute({
 
   // Selection handlers for bulk editing
   const handleSelectAll = useCallback(() => {
-    setSelectedTrackIds(new Set(allItems.map((item) => item.id)));
-  }, [allItems]);
+    selectAll(allItems.map((item) => item.track.id));
+  }, [allItems, selectAll]);
 
   const handleDeselectAll = useCallback(() => {
-    setSelectedTrackIds(new Set());
-  }, []);
+    deselectAll();
+  }, [deselectAll]);
 
-  const handleToggleSelection = useCallback((trackId: string) => {
-    setSelectedTrackIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(trackId)) {
-        next.delete(trackId);
-      } else {
-        next.add(trackId);
-      }
-      return next;
-    });
-  }, []);
+  const handleToggleSelection = useCallback(
+    (trackId: string) => {
+      toggleSelection(trackId);
+    },
+    [toggleSelection],
+  );
 
   const handleBulkEditSuccess = useCallback(() => {
-    setSelectedTrackIds(new Set());
+    deselectAll();
     setBulkEditOpen(false);
     // Refetch the data to show updated tracks
     window.location.reload();
-  }, []);
+  }, [deselectAll]);
 
   // Virtualization setup with sticky header support
   const virtualizer = useVirtualizer({
@@ -439,12 +438,19 @@ export default function LibraryIndexRoute({
         </div>
       </div>
 
-      {/* Selection Controls for Bulk Editing */}
+      {/* Selection Mode Toggle */}
       {isCurator && allItems.length > 0 && (
+        <div className="mb-4">
+          <SelectionModeToggle />
+        </div>
+      )}
+
+      {/* Selection Controls for Bulk Editing */}
+      {isCurator && selectionMode && allItems.length > 0 && (
         <TrackListSelectionControls
-          selectedCount={selectedTrackIds.size}
+          selectedCount={selectedCount}
           totalCount={allItems.length}
-          allSelected={selectedTrackIds.size === allItems.length && allItems.length > 0}
+          allSelected={selectedCount === allItems.length && allItems.length > 0}
           onSelectAll={handleSelectAll}
           onDeselectAll={handleDeselectAll}
           onBulkEdit={() => setBulkEditOpen(true)}
@@ -552,8 +558,8 @@ export default function LibraryIndexRoute({
                       librarySort={sort}
                       sortDirection={direction}
                       playlists={playlists}
-                      showCheckbox={isCurator}
-                      isSelected={selectedTrackIds.has(item.id)}
+                      showCheckbox={isCurator && selectionMode}
+                      isSelected={selectedTrackIds.has(item.track.id)}
                       onToggleSelection={handleToggleSelection}
                     />
                   </div>
