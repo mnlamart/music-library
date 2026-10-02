@@ -8,6 +8,7 @@ import { z } from "zod";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import type { Route } from "./+types/artists.merge.ts";
 
 const MergeArtistsSchema = z.object({
@@ -148,7 +149,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
 }
 
-// Client-side version delegates to server action
-export async function clientAction(args: Route.ActionArgs) {
-  return action(args);
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }

@@ -7,6 +7,7 @@
 import { data } from "react-router";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { runDuplicateDetectionJob } from "#app/utils/duplicate-detection-job.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import type { Route } from "./+types/refresh.ts";
 
 export async function action({ request }: Route.ActionArgs) {
@@ -30,7 +31,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
 }
 
-// Client-side version delegates to server action
-export async function clientAction(args: Route.ActionArgs) {
-  return action(args);
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }

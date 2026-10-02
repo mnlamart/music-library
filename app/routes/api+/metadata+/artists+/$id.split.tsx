@@ -9,6 +9,7 @@ import { requireUserId } from "#app/utils/auth.server.ts";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { normalizeArtistName } from "#app/utils/normalize.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import type { Route } from "./+types/$id.split.ts";
 
 const SplitArtistSchema = z.object({
@@ -141,7 +142,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 }
 
-// Client-side version delegates to server action
-export async function clientAction(args: Route.ActionArgs) {
-  return action(args);
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
