@@ -165,10 +165,10 @@ describe("POST /api/genres/merge", () => {
     expect(remainingGenres).toHaveLength(0);
 
     // Verify tracks are now linked to target
-    const targetLinks = await prisma.$queryRaw<Array<{ count: number }>>`
+    const targetLinks = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(*) as count FROM _TrackGenres WHERE A = ${targetGenre.id}
     `;
-    expect(targetLinks[0]?.count).toBe(2);
+    expect(Number(targetLinks[0]?.count)).toBe(2);
 
     vi.mocked((await import("#app/utils/curator.server.ts")).requireCuratorOrAdmin).mockRestore();
   });
@@ -323,10 +323,10 @@ describe("POST /api/genres/merge", () => {
     expect(body.targetGenre?.trackCount).toBe(1);
 
     // Verify only one link exists
-    const targetLinks = await prisma.$queryRaw<Array<{ count: number }>>`
+    const targetLinks = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(*) as count FROM _TrackGenres WHERE A = ${targetGenre.id}
     `;
-    expect(targetLinks[0]?.count).toBe(1);
+    expect(Number(targetLinks[0]?.count)).toBe(1);
 
     vi.mocked((await import("#app/utils/curator.server.ts")).requireCuratorOrAdmin).mockRestore();
   });

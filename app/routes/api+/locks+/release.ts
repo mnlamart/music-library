@@ -9,6 +9,10 @@ const ReleaseLockSchema = z.object({
   entityId: z.string().min(1),
 });
 
+export async function clientAction() {
+  throw new Error("This route should only be called on the server");
+}
+
 export async function action({ request }: ActionFunctionArgs) {
   await requireCuratorOrAdmin(request);
   const userId = await requireUserId(request);

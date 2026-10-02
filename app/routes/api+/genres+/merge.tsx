@@ -106,13 +106,13 @@ export async function action({ request }: Route.ActionArgs) {
         const trackId = link.B;
 
         // Check if already linked to target
-        const existingLink = await tx.$queryRaw<Array<{ count: number }>>`
+        const existingLink = await tx.$queryRaw<Array<{ count: bigint }>>`
           SELECT COUNT(*) as count FROM _TrackGenres
           WHERE A = ${targetId} AND B = ${trackId}
         `;
 
         // If not linked, create link
-        if (existingLink[0]?.count === 0) {
+        if (Number(existingLink[0]?.count) === 0) {
           await tx.$executeRaw`
             INSERT INTO _TrackGenres (A, B) VALUES (${targetId}, ${trackId})
           `;

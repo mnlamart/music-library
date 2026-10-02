@@ -78,6 +78,8 @@ test("shows track details when loaded", () => {
       coverImage: { objectKey: "covers/test.jpg" },
       service: { displayName: "YouTube" },
       serviceUrl: "https://youtube.com/watch?v=abc",
+      genres: [],
+      albumRecord: null,
     },
   };
 
@@ -104,6 +106,8 @@ test("shows Open on YouTube button when serviceUrl is present", () => {
       coverImage: null,
       service: null,
       serviceUrl: "https://youtube.com/watch?v=abc",
+      genres: [],
+      albumRecord: null,
     },
   };
 
@@ -123,6 +127,8 @@ test("does not show YouTube button when serviceUrl is null", () => {
       coverImage: null,
       service: null,
       serviceUrl: null,
+      genres: [],
+      albumRecord: null,
     },
   };
 

@@ -168,6 +168,9 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
                     </div>
                   </div>
                 </DialogTitle>
+                <DialogDescription className="sr-only">
+                  Track details for {track.title} by {track.artist.name}
+                </DialogDescription>
               </DialogHeader>
 
               {isCurator ? (

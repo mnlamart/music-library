@@ -9,6 +9,10 @@ const ForceUnlockSchema = z.object({
   reason: z.string().min(1).max(500),
 });
 
+export async function clientAction() {
+  throw new Error("This route should only be called on the server");
+}
+
 export async function action({ request }: ActionFunctionArgs) {
   await requireCuratorOrAdmin(request);
 

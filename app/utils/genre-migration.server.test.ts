@@ -15,7 +15,7 @@ describe("Genre Migration Utility", () => {
     });
 
     it("should remove special characters except hyphens", () => {
-      expect(normalizeGenreName("Rock & Roll")).toBe("rock  roll");
+      expect(normalizeGenreName("Rock & Roll")).toBe("rock roll");
       expect(normalizeGenreName("Hip-Hop")).toBe("hip-hop");
       expect(normalizeGenreName("R&B")).toBe("rb");
     });

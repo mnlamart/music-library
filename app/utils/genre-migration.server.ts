@@ -150,12 +150,12 @@ export async function migrateTrackGenres(
         }
 
         // Check if link already exists
-        const existingLink = await prisma.$queryRaw<Array<{ count: number }>>`
+        const existingLink = await prisma.$queryRaw<Array<{ count: bigint }>>`
           SELECT COUNT(*) as count FROM _TrackGenres
           WHERE A = ${genreId} AND B = ${track.id}
         `;
 
-        if (existingLink[0]?.count === 0) {
+        if (Number(existingLink[0]?.count) === 0) {
           // Create link in join table
           await prisma.$executeRaw`
             INSERT INTO _TrackGenres (A, B) VALUES (${genreId}, ${track.id})
