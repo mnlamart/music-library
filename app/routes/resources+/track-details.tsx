@@ -46,7 +46,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
       serviceUrl: true,
       // Additional metadata fields
-      genre: true,
+      genre: true, // Keep for backward compatibility during migration
+      genres: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       year: true,
       trackNumber: true,
       albumArtist: true,

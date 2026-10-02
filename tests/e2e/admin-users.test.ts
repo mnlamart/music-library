@@ -30,6 +30,7 @@ test.describe("Admin users monitoring", { tag: "@slow" }, () => {
     await page.waitForLoadState("domcontentloaded");
     await expect(page.getByText(/disabled/i).first()).toBeVisible();
 
+    // The success toast sits over Logout once the admin menu grows past the viewport.
     await expect(page.getByTestId("toast")).toBeVisible();
     await dismissOverlays(page);
     await page.getByRole("button", { name: /user menu/i }).click();
