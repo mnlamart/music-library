@@ -30,6 +30,9 @@ test.describe("Admin users monitoring", { tag: "@slow" }, () => {
     await page.waitForLoadState("domcontentloaded");
     await expect(page.getByText(/disabled/i).first()).toBeVisible();
 
+    // Wait for toast to disappear before clicking logout to avoid pointer interception
+    await page.waitForTimeout(1000);
+
     await page.getByRole("button", { name: /user menu/i }).click();
     await page.getByRole("menuitem", { name: /logout/i }).click();
     await page.waitForURL(/\/(login)?$/);
