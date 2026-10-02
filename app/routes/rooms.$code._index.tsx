@@ -1,23 +1,20 @@
 /**
- * Guest join + Room tab — uses backend joinRoom / queue snapshot.
+ * Guest join + Room tab — join form or live guest room session.
  */
 
 import { useEffect, useRef } from "react";
-import {
-  Form,
-  redirect,
-  useActionData,
-  useLoaderData,
-  useNavigation,
-  useRouteLoaderData,
-} from "react-router";
-import { canAddTracks } from "#app/features/party-room/capabilities.ts";
-import { parseRoomCodeInput } from "#app/features/party-room/codes.ts";
+import { Form, redirect, useActionData, useLoaderData, useNavigation } from "react-router";
 import {
   GUEST_DISPLAY_NAME_MAX,
   GUEST_DISPLAY_NAME_MIN,
 } from "#app/features/party-room/constants.ts";
-import { serializeGuestTokenCookie } from "#app/features/party-room/guest-token.server.ts";
+import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
+import { GuestRoomLivePanel } from "#app/components/party-room/guest-room-live-panel.tsx";
+import {
+  readGuestToken,
+  serializeGuestTokenCookie,
+} from "#app/features/party-room/guest-token.server.ts";
+import { parseRoomCodeInput } from "#app/features/party-room/codes.ts";
 import { resolveRoomParticipantByCode } from "#app/features/party-room/participant-seat.server.ts";
 import { joinRoom, PartyRoomError } from "#app/features/party-room/party-room.server.ts";
 import { Button } from "#app/components/ui/button.tsx";
@@ -34,11 +31,12 @@ export async function action({ request, params }: { request: Request; params: { 
   const code = parseRoomCodeInput(params.code ?? "") ?? (params.code ?? "").toUpperCase();
   const formData = await request.formData();
   const displayName = String(formData.get("displayName") ?? "");
+  const guestToken = await readGuestToken(request);
 
   try {
     const result = await joinRoom({
       code,
-      actor: { type: "guest", displayName },
+      actor: { type: "guest", displayName, guestToken },
     });
     const headers = result.guestToken
       ? { "Set-Cookie": await serializeGuestTokenCookie(result.guestToken) }
@@ -67,80 +65,18 @@ export default function GuestJoinOrRoom() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const inputRef = useRef<HTMLInputElement>(null);
-  const layoutData = useRouteLoaderData("routes/rooms.$code") as
-    | {
-        queue?: Array<{
-          id: string;
-          position: number;
-          track?: { title?: string; artist?: { name?: string } } | null;
-        }>;
-        room?: { currentIndex?: number } | null;
-      }
-    | undefined;
 
   useEffect(() => {
     if (!seated) inputRef.current?.focus();
   }, [seated]);
 
   if (seated && participant) {
-    const queue = layoutData?.queue ?? [];
-    const currentIndex = layoutData?.room?.currentIndex ?? 0;
-    const nowPlaying = queue.find((r) => r.position === currentIndex) ?? queue[currentIndex];
-    const canAdd = canAddTracks(participant.role);
-
     return (
-      <div className="space-y-6">
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold tracking-tight">Now playing</h2>
-          {nowPlaying?.track ? (
-            <div className="rounded-lg border border-border/80 px-4 py-4">
-              <p className="font-medium">{nowPlaying.track.title}</p>
-              <p className="text-sm text-muted-foreground">
-                {nowPlaying.track.artist?.name ?? "Unknown artist"}
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border/80 px-4 py-8 text-center text-sm text-muted-foreground">
-              Queue will appear here when the host starts playing.
-            </div>
-          )}
-          <p className="text-sm text-muted-foreground">
-            {canAdd
-              ? "You can add tracks from Search."
-              : "Search & audition only until a DJ/Host promotes you."}
-          </p>
-        </section>
-        {queue.length > 0 ? (
-          <section className="space-y-2">
-            <h3 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-              Queue
-            </h3>
-            <ul className="divide-y divide-border/60">
-              {queue.map((row) => (
-                <li
-                  key={row.id}
-                  className={`py-2 text-sm ${row.position === currentIndex ? "font-medium" : ""}`}
-                >
-                  <span className="text-muted-foreground">{row.position + 1}.</span>{" "}
-                  {row.track?.title ?? "Track"}
-                  {row.track?.artist?.name ? (
-                    <span className="text-muted-foreground"> — {row.track.artist.name}</span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-        <section className="space-y-1 text-sm text-muted-foreground">
-          <p>
-            Signed in as <span className="text-foreground">{participant.displayName}</span> (
-            <span className="capitalize">{participant.role}</span>)
-          </p>
-          <p>
-            Room <span className="font-mono text-foreground">{code}</span>
-          </p>
-        </section>
-      </div>
+      <GuestRoomLivePanel
+        code={code}
+        role={participant.role}
+        displayName={participant.displayName}
+      />
     );
   }
 
@@ -179,4 +115,8 @@ export default function GuestJoinOrRoom() {
       </Form>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  return <GeneralErrorBoundary />;
 }

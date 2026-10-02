@@ -1,6 +1,6 @@
-import { leaveRoom } from "#app/features/party-room/party-room.server.ts";
+import { destroyGuestTokenCookie } from "#app/features/party-room/guest-token.server.ts";
+import { leaveRoom, findOpenRoomByCode } from "#app/features/party-room/party-room.server.ts";
 import { partyRoomErrorResponse, resolveActor } from "#app/features/party-room/request.server.ts";
-import { findOpenRoomByCode } from "#app/features/party-room/party-room.server.ts";
 
 export async function action({
   request,
@@ -21,7 +21,11 @@ export async function action({
     const room = await findOpenRoomByCode(code);
     const actor = await resolveActor(request);
     const result = await leaveRoom({ roomId: room.id, actor });
-    return Response.json(result);
+    const headers = new Headers({ "Content-Type": "application/json" });
+    if (actor.type === "guest") {
+      headers.append("Set-Cookie", await destroyGuestTokenCookie());
+    }
+    return Response.json(result, { headers });
   } catch (error) {
     return partyRoomErrorResponse(error);
   }

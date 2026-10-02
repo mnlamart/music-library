@@ -16,6 +16,7 @@ export function InRoomChip({ className }: { className?: string }) {
   return (
     <Link
       to={`/rooms/${room.code}`}
+      reloadDocument
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-primary/15",
         className,

@@ -6,6 +6,7 @@ import { authSessionStorage } from "#app/utils/session.server.ts";
 import { createUser } from "#tests/db-utils.ts";
 import { action as createRoomAction } from "#app/routes/api+/rooms+/index.tsx";
 import { action as joinRoomAction } from "#app/routes/api+/rooms+/$roomCode.join.tsx";
+import { action as leaveRoomAction } from "#app/routes/api+/rooms+/$roomCode.leave.tsx";
 import { loader as qrLoader } from "#app/routes/api+/rooms+/$roomCode.qr.tsx";
 import { loader as snapshotLoader } from "#app/routes/api+/rooms+/$roomCode.tsx";
 import { action as endRoomAction } from "#app/routes/api+/rooms+/$roomCode.end.tsx";
@@ -152,5 +153,60 @@ describe("rooms API", () => {
       params: { roomCode: created.code },
     });
     expect(afterEnd.status).toBe(404);
+  });
+
+  test("snapshot includes me for guest cookie; leave clears guest cookie", async () => {
+    const { cookie } = await createUserCookie("Host");
+
+    const createRes = await createRoomAction({
+      request: new Request("http://localhost/api/rooms", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Host", defaultJoinRole: "dj" }),
+      }),
+    });
+    const created = (await createRes.json()) as { code: string };
+
+    const joinRes = await joinRoomAction({
+      request: new Request(`http://localhost/api/rooms/${created.code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Walkup DJ" }),
+      }),
+      params: { roomCode: created.code },
+    });
+    const guestSetCookie = joinRes.headers.get("Set-Cookie");
+    expect(guestSetCookie).toBeTruthy();
+    const guestCookie = parseString(guestSetCookie!)!;
+    const guestCookieHeader = `${guestCookie.name}=${guestCookie.value}`;
+
+    const snapRes = await snapshotLoader({
+      request: new Request(`http://localhost/api/rooms/${created.code}`, {
+        headers: { cookie: guestCookieHeader },
+      }),
+      params: { roomCode: created.code },
+    });
+    expect(snapRes.status).toBe(200);
+    const snap = (await snapRes.json()) as {
+      me: { displayName: string; role: string; userId: string | null } | null;
+      queue: Array<{ addedByDisplayName?: string }>;
+    };
+    expect(snap.me).toMatchObject({
+      displayName: "Walkup DJ",
+      role: "dj",
+      userId: null,
+    });
+
+    const leaveRes = await leaveRoomAction({
+      request: new Request(`http://localhost/api/rooms/${created.code}/leave`, {
+        method: "POST",
+        headers: { cookie: guestCookieHeader },
+      }),
+      params: { roomCode: created.code },
+    });
+    expect(leaveRes.status).toBe(200);
+    const leaveSetCookie = leaveRes.headers.get("Set-Cookie");
+    expect(leaveSetCookie).toContain(GUEST_TOKEN_COOKIE_NAME);
+    expect(leaveSetCookie).toMatch(/Max-Age=0|max-age=0/i);
   });
 });

@@ -404,7 +404,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <OpenImgContextProvider optimizerEndpoint="/resources/images" getSrc={getImgSrc}>
         <AudioPlayerProvider userId={loaderData.user?.id ?? null}>
-          <PartyRoomProvider enabled={Boolean(loaderData.user?.id)}>
+          <PartyRoomProvider enabled>
             <RoomSpeakerBridge />
             <DuplicatePlaylistDialogProvider>
               <ShellLayout />

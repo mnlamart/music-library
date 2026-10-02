@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  addPlaylistToRoomQueue,
   addTrackToRoomQueue,
   becomeHost,
   createRoom,
@@ -16,12 +17,15 @@ import {
   fetchCurrentRoom,
   fetchRoomQrDataUrl,
   joinRoom,
+  kickParticipant,
   leaveRoom,
   reclaimHost,
+  reorderRoomQueue,
   RoomApiError,
   ROOM_API,
   sendHostHeartbeat,
   sendRoomTransport,
+  setParticipantRole,
   updateRoomSettings,
   writeActiveRoomCode,
 } from "./api.client.ts";
@@ -34,7 +38,11 @@ import {
   isCurrentHost,
   parseRoomCodeInput,
 } from "./index.ts";
-import { ROOM_HOST_HEARTBEAT_INTERVAL_MS, type RoomDefaultJoinRole } from "./constants.ts";
+import {
+  ROOM_HOST_HEARTBEAT_INTERVAL_MS,
+  type RoomDefaultJoinRole,
+  type RoomRole,
+} from "./constants.ts";
 import { type RoomSnapshot, type RoomTransportAction } from "./types.ts";
 import { useOptionalUser } from "#app/utils/user.ts";
 
@@ -59,6 +67,10 @@ type PartyRoomContextValue = {
   reclaimHostNow: () => Promise<void>;
   setDefaultJoinRole: (role: RoomDefaultJoinRole) => Promise<void>;
   addTrack: (trackId: string) => Promise<void>;
+  addPlaylist: (playlistId: string) => Promise<void>;
+  reorderUpcoming: (orderedUpcomingIds: string[]) => Promise<void>;
+  setRole: (participantId: string, role: Exclude<RoomRole, "host">) => Promise<void>;
+  kick: (participantId: string) => Promise<void>;
   transport: (action: RoomTransportAction) => Promise<void>;
   clearError: () => void;
 };
@@ -94,7 +106,24 @@ export function PartyRoomProvider({
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const applyRoom = useCallback((next: RoomSnapshot | null) => {
-    setRoom(next);
+    setRoom((prev) => {
+      if (!next) return null;
+      // SSE / shared snapshots often omit `me`. Keep the local seat when still present.
+      if (!next.me && prev?.me) {
+        const stillHere = next.participants.find((p) => p.id === prev.me!.id);
+        if (stillHere) {
+          return {
+            ...next,
+            me: {
+              ...prev.me,
+              ...stillHere,
+              isOriginalHost: stillHere.isOriginalHost || prev.me.isOriginalHost,
+            },
+          };
+        }
+      }
+      return next;
+    });
     roomCodeRef.current = next?.code ?? null;
     if (next?.code) writeActiveRoomCode(next.code);
   }, []);
@@ -150,14 +179,31 @@ export function PartyRoomProvider({
       if (cancelled) return;
       try {
         const payload = JSON.parse(event.data) as Record<string, unknown>;
-        if (payload.room || payload.code || payload.roomId) {
-          const raw = (payload.room as Record<string, unknown> | undefined) ?? payload;
-          void import("./api.client.ts").then(({ normalizeRoomSnapshot }) => {
-            applyRoom(normalizeRoomSnapshot(raw, meUserId));
-          });
-        } else if (payload.type === "version") {
-          void refresh();
+        const type = typeof payload.type === "string" ? payload.type : null;
+
+        // Handshake / non-snapshot events must not be treated as RoomSnapshots
+        // (`connected` carries roomId; `room_ended` would wipe queue into "open").
+        if (type === "connected") return;
+        if (type === "room_ended") {
+          applyRoom(null);
+          writeActiveRoomCode(null);
+          return;
         }
+        if (type === "version") {
+          void refresh();
+          return;
+        }
+
+        const isSnapshot =
+          type === "room_snapshot" ||
+          type === "snapshot" ||
+          (type == null && (payload.queue != null || payload.participants != null));
+        if (!isSnapshot) return;
+
+        const raw = (payload.room as Record<string, unknown> | undefined) ?? payload;
+        void import("./api.client.ts").then(({ normalizeRoomSnapshot }) => {
+          applyRoom(normalizeRoomSnapshot(raw, meUserId));
+        });
       } catch {
         // ignore malformed SSE
       }
@@ -292,6 +338,46 @@ export function PartyRoomProvider({
     [applyRoom, meUserId],
   );
 
+  const addPlaylist = useCallback(
+    async (playlistId: string) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await addPlaylistToRoomQueue(code, playlistId, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
+  const reorderUpcoming = useCallback(
+    async (orderedUpcomingIds: string[]) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await reorderRoomQueue(code, orderedUpcomingIds, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
+  const setRole = useCallback(
+    async (participantId: string, role: Exclude<RoomRole, "host">) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await setParticipantRole(code, participantId, role, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
+  const kick = useCallback(
+    async (participantId: string) => {
+      const code = roomCodeRef.current;
+      if (!code) throw new Error("Not in a room");
+      const next = await kickParticipant(code, participantId, meUserId);
+      applyRoom(next);
+    },
+    [applyRoom, meUserId],
+  );
+
   const transport = useCallback(
     async (action: RoomTransportAction) => {
       const code = roomCodeRef.current;
@@ -324,6 +410,10 @@ export function PartyRoomProvider({
       reclaimHostNow,
       setDefaultJoinRole,
       addTrack,
+      addPlaylist,
+      reorderUpcoming,
+      setRole,
+      kick,
       transport,
       clearError: () => setError(null),
     };
@@ -341,6 +431,10 @@ export function PartyRoomProvider({
     reclaimHostNow,
     setDefaultJoinRole,
     addTrack,
+    addPlaylist,
+    reorderUpcoming,
+    setRole,
+    kick,
     transport,
   ]);
 

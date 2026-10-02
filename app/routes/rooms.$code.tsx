@@ -4,16 +4,9 @@
  * - Logged-out → Guest Shell layout (Room + Search tabs)
  */
 
-import { useEffect } from "react";
-import {
-  data,
-  Link,
-  NavLink,
-  Outlet,
-  useLoaderData,
-  useNavigate,
-  useParams,
-} from "react-router";
+import { useEffect, useRef } from "react";
+import { data, Link, NavLink, Outlet, useLoaderData, useNavigate, useParams } from "react-router";
+import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
 import { RoomsHub } from "#app/components/party-room/rooms-hub.tsx";
 import { canAddTracks } from "#app/features/party-room/capabilities.ts";
 import {
@@ -27,7 +20,10 @@ import {
   type SeatedParticipant,
 } from "#app/features/party-room/participant-seat.server.ts";
 import { getRoomSnapshotByCode } from "#app/features/party-room/party-room.server.ts";
-import { usePartyRoom } from "#app/features/party-room/party-room-provider.tsx";
+import {
+  useOptionalPartyRoom,
+  usePartyRoom,
+} from "#app/features/party-room/party-room-provider.tsx";
 import { resolveOptionalUserId } from "#app/features/party-room/request.server.ts";
 import { cn } from "#app/utils/misc.tsx";
 import { type Route } from "./+types/rooms.$code.ts";
@@ -130,13 +126,21 @@ function LoggedInRoomByCode() {
   const party = usePartyRoom();
   const navigate = useNavigate();
   const code = rawCode ? normalizeRoomCode(rawCode) : "";
+  const joinAttemptedForCode = useRef<string | null>(null);
+
+  // Reset attempt when the route code changes
+  useEffect(() => {
+    joinAttemptedForCode.current = null;
+  }, [code]);
 
   useEffect(() => {
     if (!code || !isValidRoomCode(code)) return;
     if (party.loading) return;
     if (party.room?.code === code) return;
     if (party.apiUnavailable) return;
+    if (joinAttemptedForCode.current === code) return;
 
+    joinAttemptedForCode.current = code;
     void party
       .join(code)
       .then((room) => {
@@ -145,9 +149,9 @@ function LoggedInRoomByCode() {
         }
       })
       .catch(() => {
-        // Error surfaced via party.error on hub
+        // Error surfaced via party.error on hub; do not retry-loop.
       });
-  }, [code, party, navigate]);
+  }, [code, party.loading, party.room?.code, party.apiUnavailable, party.join, navigate]);
 
   if (rawCode && !parseRoomCodeInputClient(rawCode)) {
     return (
@@ -164,6 +168,8 @@ function LoggedInRoomByCode() {
 }
 
 function GuestRoomShell({ roomShell }: { roomShell: GuestLoaderData }) {
+  const party = useOptionalPartyRoom();
+
   if (!roomShell.room) {
     return (
       <div className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
@@ -180,6 +186,10 @@ function GuestRoomShell({ roomShell }: { roomShell: GuestLoaderData }) {
 
   if (!roomShell.participant) return <Outlet />;
 
+  const liveMe = party?.room?.code === roomShell.code ? party.room.me : null;
+  const displayName = liveMe?.displayName ?? roomShell.participant.displayName;
+  const role = liveMe?.role ?? roomShell.participant.role;
+
   return (
     <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col">
       <header className="sticky top-0 z-10 border-b border-border/60 bg-background/90 px-4 py-3 backdrop-blur">
@@ -189,8 +199,8 @@ function GuestRoomShell({ roomShell }: { roomShell: GuestLoaderData }) {
             <p className="font-mono text-xl font-semibold tracking-widest">{roomShell.code}</p>
           </div>
           <div className="text-right text-sm">
-            <p className="font-medium">{roomShell.participant.displayName}</p>
-            <p className="capitalize text-muted-foreground">{roomShell.participant.role}</p>
+            <p className="font-medium">{displayName}</p>
+            <p className="capitalize text-muted-foreground">{role}</p>
           </div>
         </div>
         <nav
@@ -227,4 +237,8 @@ function GuestTab({ to, children, end }: { to: string; children: React.ReactNode
       {children}
     </NavLink>
   );
+}
+
+export function ErrorBoundary() {
+  return <GeneralErrorBoundary />;
 }

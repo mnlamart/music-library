@@ -1,0 +1,94 @@
+/**
+ * Guest Shell Room tab — live queue (SSE via PartyRoomProvider), DJ edit,
+ * Become host, and leave.
+ */
+
+import { useEffect } from "react";
+import { useNavigate } from "react-router";
+import { HostFailoverControls } from "#app/components/party-room/host-failover-controls.tsx";
+import { RoomQueuePanel } from "#app/components/party-room/room-queue-panel.tsx";
+import { Button } from "#app/components/ui/button.tsx";
+import { toast } from "#app/components/ui/use-toast.ts";
+import { writeActiveRoomCode } from "#app/features/party-room/api.client.ts";
+import { canAddTracks } from "#app/features/party-room/capabilities.ts";
+import { useOptionalPartyRoom } from "#app/features/party-room/party-room-provider.tsx";
+import { type RoomRole } from "#app/features/party-room/constants.ts";
+
+export function GuestRoomLivePanel({
+  code,
+  role,
+  displayName,
+}: {
+  code: string;
+  role: RoomRole;
+  displayName: string;
+}) {
+  const party = useOptionalPartyRoom();
+  const navigate = useNavigate();
+  const canAdd = canAddTracks(role);
+  const refresh = party?.refresh;
+
+  useEffect(() => {
+    writeActiveRoomCode(code);
+    void refresh?.();
+  }, [code, refresh]);
+
+  return (
+    <div className="space-y-6">
+      <HostFailoverControls />
+
+      {party?.loading && !party.room ? (
+        <p className="text-sm text-muted-foreground">Syncing room…</p>
+      ) : null}
+
+      {party?.error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {party.error}
+        </p>
+      ) : null}
+
+      <RoomQueuePanel />
+
+      {!party?.room && !party?.loading ? (
+        <p className="text-sm text-muted-foreground">
+          {canAdd
+            ? "You can add tracks from Search. Queue updates live once connected."
+            : "Search & audition only until a DJ/Host promotes you."}
+        </p>
+      ) : null}
+
+      <section className="space-y-3 border-t border-border/60 pt-4 text-sm text-muted-foreground">
+        <p>
+          Signed in as{" "}
+          <span className="text-foreground">{party?.room?.me?.displayName ?? displayName}</span> (
+          <span className="capitalize">{party?.room?.me?.role ?? role}</span>)
+        </p>
+        <p>
+          Room <span className="font-mono text-foreground">{code}</span>
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void (async () => {
+              try {
+                await party?.leave();
+                toast({ title: "Left room" });
+                void navigate("/");
+              } catch (err: unknown) {
+                toast({
+                  title: "Could not leave",
+                  description: err instanceof Error ? err.message : undefined,
+                  variant: "destructive",
+                });
+              }
+            })();
+          }}
+        >
+          Leave room
+        </Button>
+      </section>
+    </div>
+  );
+}
