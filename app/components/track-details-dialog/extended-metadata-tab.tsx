@@ -8,9 +8,10 @@ import { type TrackDetails } from "../track-details-dialog";
 interface ExtendedMetadataTabProps {
   track: TrackDetails;
   onSave: (changes: any) => void;
+  disabled?: boolean;
 }
 
-export function ExtendedMetadataTab({ track, onSave }: ExtendedMetadataTabProps) {
+export function ExtendedMetadataTab({ track, onSave, disabled = false }: ExtendedMetadataTabProps) {
   const [trackNumber, setTrackNumber] = useState(track.trackNumber?.toString() ?? "");
   const [albumArtist, setAlbumArtist] = useState(track.albumArtist ?? "");
   const [bpm, setBpm] = useState(track.bpm?.toString() ?? "");
@@ -198,7 +199,7 @@ export function ExtendedMetadataTab({ track, onSave }: ExtendedMetadataTabProps)
       </div>
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="submit" disabled={!hasChanges}>
+        <Button type="submit" disabled={!hasChanges || disabled}>
           Save Changes
         </Button>
       </div>
