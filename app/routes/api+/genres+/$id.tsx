@@ -9,8 +9,35 @@ const UpdateGenreSchema = z.object({
   name: z.string().min(1, "Genre name is required").max(100),
 });
 
-export async function clientAction() {
-  throw new Error("This route should only be called on the server");
+export async function clientAction(args: Route.ClientActionArgs) {
+  // Proxy PUT/DELETE requests to server for curator/admin authentication
+  const { request, params } = args;
+  const method = request.method;
+  const genreId = params.id;
+
+  let fetchOptions: RequestInit = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  };
+
+  if (method === "PUT") {
+    const body = await request.json();
+    fetchOptions.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(`/api/genres/${genreId}`, fetchOptions);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Response(JSON.stringify(error), {
+      status: response.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return response.json();
 }
 
 /**

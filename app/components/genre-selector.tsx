@@ -47,12 +47,13 @@ export function GenreSelector({
   const allGenres = genresFetcher.data?.genres ?? [];
   const isLoading = genresFetcher.state !== "idle";
 
-  // Load all genres on mount
+  // Load all genres on mount (only once)
   useEffect(() => {
     if (genresFetcher.state === "idle" && !genresFetcher.data) {
       genresFetcher.load("/api/genres");
     }
-  }, [genresFetcher]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps array - only load once on mount
 
   // Close dropdown when clicking outside
   useEffect(() => {

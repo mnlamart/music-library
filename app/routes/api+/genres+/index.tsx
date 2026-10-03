@@ -9,12 +9,35 @@ const CreateGenreSchema = z.object({
   name: z.string().min(1, "Genre name is required").max(100),
 });
 
-export async function clientLoader() {
-  throw new Error("This route should only be called on the server");
+export async function clientLoader(args: Route.ClientLoaderArgs) {
+  // Genres are public and fetched via loader, no client-side override needed
+  const response = await fetch("/api/genres");
+  const data = await response.json();
+  return data;
 }
 
-export async function clientAction() {
-  throw new Error("This route should only be called on the server");
+export async function clientAction(args: Route.ClientActionArgs) {
+  // Proxy POST requests to server for curator/admin authentication
+  const { request } = args;
+  const body = await request.json();
+
+  const response = await fetch("/api/genres", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Response(JSON.stringify(error), {
+      status: response.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return response.json();
 }
 
 /**
