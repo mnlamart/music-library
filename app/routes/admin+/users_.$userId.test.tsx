@@ -102,6 +102,7 @@ test("admin user detail renders moderation controls", async () => {
   await screen.findByRole("heading", { level: 1, name: target.username }, { timeout: 5000 });
   await screen.findByRole("button", { name: /disable account/i }, { timeout: 5000 });
   await screen.findByRole("button", { name: /promote to admin/i }, { timeout: 5000 });
+  await screen.findByRole("button", { name: /promote to curator/i }, { timeout: 5000 });
 });
 
 function runAction(cookie: string, userId: string, fields: Record<string, string>) {
@@ -132,6 +133,23 @@ async function createTargetUser() {
     data: { ...createUser(), roles: { connect: { name: "user" } } },
   });
 }
+
+test("promote-curator action connects the curator role", async () => {
+  const { cookie } = await createAdminSession();
+  const target = await createTargetUser();
+
+  const response = await runAction(cookie, target.id, { intent: "promote-curator" });
+
+  expect(response).toBeInstanceOf(Response);
+  expect((response as Response).status).toBe(302);
+  expect((response as Response).headers.get("Location")).toBe(`/admin/users/${target.id}`);
+
+  const updated = await prisma.user.findUniqueOrThrow({
+    where: { id: target.id },
+    include: { roles: true },
+  });
+  expect(updated.roles.map((role) => role.name)).toContain("curator");
+});
 
 test("disable action sets disabledAt and redirects back to the detail page", async () => {
   const { cookie } = await createAdminSession();

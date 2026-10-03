@@ -4,9 +4,11 @@ import { createUser } from "#tests/db-utils.ts";
 import {
   deleteUserAsAdmin,
   demoteFromAdmin,
+  demoteFromCurator,
   disableUser,
   enableUser,
   promoteToAdmin,
+  promoteToCurator,
 } from "./admin-users.server.ts";
 
 describe("admin user moderation", () => {
@@ -56,6 +58,45 @@ describe("admin user moderation", () => {
 
     const updated = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(updated.disabledAt).toBeNull();
+  });
+
+  test("promoteToCurator connects the curator role and its permissions", async () => {
+    const user = await prisma.user.create({
+      data: {
+        ...createUser(),
+        roles: { connect: { name: "user" } },
+      },
+    });
+
+    await expect(promoteToCurator(user.id)).resolves.toEqual({ ok: true });
+    await expect(promoteToCurator(user.id)).resolves.toEqual({ ok: true });
+
+    const updated = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: { roles: true },
+    });
+    expect(updated.roles.map((role) => role.name).sort()).toEqual(["curator", "user"]);
+
+    const curatorRole = await prisma.role.findUniqueOrThrow({
+      where: { name: "curator" },
+      include: { permissions: true },
+    });
+    expect(curatorRole.permissions).toHaveLength(7);
+
+    await expect(demoteFromCurator(user.id)).resolves.toEqual({ ok: true });
+    const demoted = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      include: { roles: true },
+    });
+    expect(demoted.roles.map((role) => role.name)).toEqual(["user"]);
+  });
+
+  test("promoteToCurator reports a missing user instead of throwing", async () => {
+    await expect(promoteToCurator("no-such-user")).resolves.toEqual({
+      ok: false,
+      reason: "not-found",
+      error: "User not found",
+    });
   });
 
   test("promoteToAdmin connects admin role", async () => {

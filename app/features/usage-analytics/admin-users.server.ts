@@ -106,9 +106,91 @@ export async function demoteFromAdmin({
   return { ok: true };
 }
 
+const CURATOR_PERMISSIONS = [
+  {
+    action: "update",
+    entity: "metadata",
+    access: "any",
+    description: "Update any track/artist/album metadata",
+  },
+  {
+    action: "read",
+    entity: "metadata-history",
+    access: "any",
+    description: "Read any metadata edit history",
+  },
+  {
+    action: "restore",
+    entity: "metadata",
+    access: "any",
+    description: "Restore metadata from history",
+  },
+  {
+    action: "update",
+    entity: "artist",
+    access: "any",
+    description: "Update any artist",
+  },
+  {
+    action: "merge",
+    entity: "artist",
+    access: "any",
+    description: "Merge duplicate artists",
+  },
+  {
+    action: "update",
+    entity: "album",
+    access: "any",
+    description: "Update any album",
+  },
+  {
+    action: "merge",
+    entity: "album",
+    access: "any",
+    description: "Merge duplicate albums",
+  },
+] as const;
+
+/**
+ * Production databases that applied schema migrations without the curator seed
+ * row throw P2025 on `connect: { name: "curator" }`. Create the role (and its
+ * permissions) before connecting so promotion cannot 500.
+ */
+async function ensureCuratorRole() {
+  const permissions = [];
+  for (const permission of CURATOR_PERMISSIONS) {
+    const row = await prisma.permission.upsert({
+      where: {
+        action_entity_access: {
+          action: permission.action,
+          entity: permission.entity,
+          access: permission.access,
+        },
+      },
+      update: {},
+      create: permission,
+    });
+    permissions.push({ id: row.id });
+  }
+
+  await prisma.role.upsert({
+    where: { name: "curator" },
+    update: {
+      permissions: { connect: permissions },
+    },
+    create: {
+      name: "curator",
+      description: "Can edit and manage metadata for tracks, artists, and albums",
+      permissions: { connect: permissions },
+    },
+  });
+}
+
 export async function promoteToCurator(userId: string): Promise<ModerationResult> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
   if (!user) return notFound;
+
+  await ensureCuratorRole();
 
   await prisma.user.update({
     where: { id: userId },
