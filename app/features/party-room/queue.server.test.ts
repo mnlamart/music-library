@@ -8,6 +8,7 @@ import {
   removeQueueItem,
   reorderUpcoming,
   setTransport,
+  skipNext,
   skipToIndex,
 } from "./queue.server.ts";
 import {
@@ -269,6 +270,33 @@ describe("party-room queue mutations", () => {
     expect(jumped?.currentIndex).toBe(2);
     // History above pointer remains
     expect(jumped?.queue.map((q) => q.position)).toEqual([0, 1, 2]);
+  });
+
+  test("skipNext advances mid-queue and stops at the last track instead of staying playing", async () => {
+    const host = await makeUser();
+    const room = await createRoom({ userId: host.id, displayName: "Host" });
+    const tracks = await Promise.all([makeTrackWithAudio("1"), makeTrackWithAudio("2")]);
+    for (const t of tracks) {
+      await addTrackToQueue({
+        roomId: room.id,
+        actor: { type: "user", userId: host.id },
+        trackId: t.id,
+      });
+    }
+
+    const mid = await skipNext({
+      roomId: room.id,
+      actor: { type: "user", userId: host.id },
+    });
+    expect(mid?.currentIndex).toBe(1);
+    expect(mid?.isPlaying).toBe(true);
+
+    const ended = await skipNext({
+      roomId: room.id,
+      actor: { type: "user", userId: host.id },
+    });
+    expect(ended?.currentIndex).toBe(1);
+    expect(ended?.isPlaying).toBe(false);
   });
 });
 

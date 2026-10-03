@@ -260,4 +260,57 @@ describe("rooms API", () => {
     });
     expect(activeA).toBe(1);
   });
+
+  test("skip at last queue item stops playback instead of staying playing", async () => {
+    const { cookie } = await createUserCookie("Host");
+
+    const createRes = await createRoomAction({
+      request: new Request("http://localhost/api/rooms", {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Host", defaultJoinRole: "listener" }),
+      }),
+    });
+    const created = (await createRes.json()) as { code: string };
+    const t1 = await makeTrackWithAudio("One");
+    const t2 = await makeTrackWithAudio("Two");
+
+    for (const track of [t1, t2]) {
+      const addRes = await queueAction({
+        request: new Request(`http://localhost/api/rooms/${created.code}/queue`, {
+          method: "POST",
+          headers: { cookie, "Content-Type": "application/json" },
+          body: JSON.stringify({ intent: "add_track", trackId: track.id }),
+        }),
+        params: { roomCode: created.code },
+      });
+      expect(addRes.status).toBe(200);
+    }
+
+    const firstSkip = await queueAction({
+      request: new Request(`http://localhost/api/rooms/${created.code}/queue`, {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ intent: "skip" }),
+      }),
+      params: { roomCode: created.code },
+    });
+    expect(firstSkip.status).toBe(200);
+    const mid = (await firstSkip.json()) as { currentIndex: number; isPlaying: boolean };
+    expect(mid.currentIndex).toBe(1);
+    expect(mid.isPlaying).toBe(true);
+
+    const lastSkip = await queueAction({
+      request: new Request(`http://localhost/api/rooms/${created.code}/queue`, {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ intent: "skip" }),
+      }),
+      params: { roomCode: created.code },
+    });
+    expect(lastSkip.status).toBe(200);
+    const ended = (await lastSkip.json()) as { currentIndex: number; isPlaying: boolean };
+    expect(ended.currentIndex).toBe(1);
+    expect(ended.isPlaying).toBe(false);
+  });
 });

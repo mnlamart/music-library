@@ -330,7 +330,13 @@ export async function skipToIndex({
 export async function skipNext({ roomId, actor }: { roomId: string; actor: ParticipantActor }) {
   const room = await loadOpenRoom(roomId);
   const count = await prisma.roomQueueItem.count({ where: { roomId } });
-  const next = Math.min(room.currentIndex + 1, Math.max(0, count - 1));
+  const next = room.currentIndex + 1;
+  // End of queue (or empty): stop instead of clamping to the last row and
+  // leaving isPlaying true. Host auto-skip on `ended` would otherwise stall
+  // with a silent speaker while the room still reports "playing".
+  if (count === 0 || next >= count) {
+    return setTransport({ roomId, actor, isPlaying: false });
+  }
   return skipToIndex({ roomId, actor, index: next });
 }
 
