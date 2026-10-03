@@ -139,6 +139,75 @@ describe("party-room lifecycle", () => {
     ).rejects.toMatchObject({ code: "room_full" });
   });
 
+  test("guest joining a second room vacates the previous open seat", async () => {
+    const hostA = await makeUser("Host A");
+    const hostB = await makeUser("Host B");
+    const roomA = await createRoom({ userId: hostA.id, displayName: "Host A" });
+    const roomB = await createRoom({ userId: hostB.id, displayName: "Host B" });
+
+    const guest = await joinRoom({
+      code: roomA.code,
+      actor: { type: "guest", displayName: "Walkup" },
+    });
+
+    const moved = await joinRoom({
+      code: roomB.code,
+      actor: {
+        type: "guest",
+        displayName: "Walkup",
+        guestToken: guest.guestToken,
+      },
+    });
+
+    expect(moved.roomId).toBe(roomB.id);
+    expect(moved.participant.leftAt).toBeNull();
+
+    const stillInA = await prisma.roomParticipant.findFirst({
+      where: { id: guest.participant.id },
+    });
+    expect(stillInA?.leftAt).not.toBeNull();
+
+    const activeA = await prisma.roomParticipant.count({
+      where: { roomId: roomA.id, leftAt: null },
+    });
+    expect(activeA).toBe(1);
+
+    const activeB = await prisma.roomParticipant.count({
+      where: { roomId: roomB.id, leftAt: null },
+    });
+    expect(activeB).toBe(2);
+  });
+
+  test("last guest moving to another room starts empty-room TTL on the old room", async () => {
+    const hostA = await makeUser("Host A");
+    const hostB = await makeUser("Host B");
+    const roomA = await createRoom({ userId: hostA.id, displayName: "Host A" });
+    const roomB = await createRoom({ userId: hostB.id, displayName: "Host B" });
+
+    const guest = await joinRoom({
+      code: roomA.code,
+      actor: { type: "guest", displayName: "Last One" },
+    });
+    await leaveRoom({
+      roomId: roomA.id,
+      actor: { type: "user", userId: hostA.id },
+    });
+
+    await joinRoom({
+      code: roomB.code,
+      actor: {
+        type: "guest",
+        displayName: "Last One",
+        guestToken: guest.guestToken,
+      },
+    });
+
+    const vacated = await prisma.room.findUniqueOrThrow({ where: { id: roomA.id } });
+    expect(vacated.status).toBe("open");
+    expect(vacated.emptySince).not.toBeNull();
+    expect(vacated.currentHostParticipantId).toBeNull();
+  });
+
   test("leave and end room; codes stop working for ended rooms", async () => {
     const host = await makeUser();
     const room = await createRoom({ userId: host.id, displayName: "Host" });
