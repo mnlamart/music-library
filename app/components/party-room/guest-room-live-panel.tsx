@@ -73,7 +73,10 @@ export function GuestRoomLivePanel({
           onClick={() => {
             void (async () => {
               try {
-                await party?.leave();
+                if (!party) {
+                  throw new Error("Not in a room");
+                }
+                await party.leave(code);
                 toast({ title: "Left room" });
                 void navigate("/");
               } catch (err: unknown) {

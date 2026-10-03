@@ -13,6 +13,7 @@ import {
   reportRoomPlayEvent,
   writeActiveRoomCode,
   ACTIVE_ROOM_CODE_KEY,
+  resolveRoomActionCode,
 } from "./api.client.ts";
 
 describe("party-room api.client (backend #294 contract)", () => {
@@ -257,6 +258,24 @@ describe("party-room api.client (backend #294 contract)", () => {
         body: JSON.stringify({ intent: "reorder", orderedUpcomingIds: ["q2", "q1"] }),
       }),
     );
+  });
+
+  it("resolves leave/end room code from override, then live ref, then sessionStorage", () => {
+    expect(
+      resolveRoomActionCode({
+        override: "AB3K9Q",
+        refCode: "XXXXXX",
+        storedCode: "YYYYYY",
+      }),
+    ).toBe("AB3K9Q");
+    expect(resolveRoomActionCode({ override: null, refCode: "AB3K9Q", storedCode: "YYYYYY" })).toBe(
+      "AB3K9Q",
+    );
+    expect(resolveRoomActionCode({ override: null, refCode: null, storedCode: "AB3K9Q" })).toBe(
+      "AB3K9Q",
+    );
+    expect(resolveRoomActionCode({ override: "", refCode: null, storedCode: null })).toBeNull();
+    expect(resolveRoomActionCode({})).toBeNull();
   });
 
   it("reportRoomPlayEvent posts to play-events", async () => {

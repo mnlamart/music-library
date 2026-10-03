@@ -273,6 +273,20 @@ describe("Party Room UI affordances", () => {
     expect(screen.getByText("Walkup")).toBeInTheDocument();
   });
 
+  it("guest Leave room posts using the known join code even before snapshot sync", async () => {
+    const leave = vi.fn().mockResolvedValue(undefined);
+    mockParty = {
+      ...mockParty,
+      room: null,
+      loading: true,
+      refresh: vi.fn(),
+      leave,
+    };
+    renderWithRouter(<GuestRoomLivePanel code="AB3K9Q" role="listener" displayName="Walkup" />);
+    fireEvent.click(screen.getByRole("button", { name: /leave room/i }));
+    await waitFor(() => expect(leave).toHaveBeenCalledWith("AB3K9Q"));
+  });
+
   it("guest Room tab reflects live host role after takeover", () => {
     mockParty = {
       ...mockParty,
