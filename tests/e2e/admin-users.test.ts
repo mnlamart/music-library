@@ -2,7 +2,7 @@
  * E2E: admin user monitoring — list, disable, blocked login.
  */
 import { expect } from "@playwright/test";
-import { test } from "#tests/playwright-utils.ts";
+import { test, dismissOverlays } from "#tests/playwright-utils.ts";
 
 test.describe("Admin users monitoring", { tag: "@slow" }, () => {
   test("admin can list users, disable one, and that user cannot log in", async ({
@@ -29,7 +29,9 @@ test.describe("Admin users monitoring", { tag: "@slow" }, () => {
     await page.getByRole("button", { name: /disable account/i }).click();
     await page.waitForLoadState("domcontentloaded");
     await expect(page.getByText(/disabled/i).first()).toBeVisible();
-
+    // The success toast sits over Logout until overlays are dismissed.
+    await expect(page.getByTestId("toast").getByText(/user disabled/i)).toBeVisible();
+    await dismissOverlays(page);
     await page.getByRole("button", { name: /user menu/i }).click();
     await page.getByRole("menuitem", { name: /logout/i }).click();
     await page.waitForURL(/\/(login)?$/);

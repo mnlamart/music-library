@@ -124,6 +124,48 @@ Implementation tickets: [On-Repeat Snapshots #198](https://github.com/mnlamart/m
 
 - **Room Play Event** — Room-scoped play start/complete for the speaker’s playback. Does **not** write personal `play_started` / `play_completed` **UsageEvent**s and does not feed personal listening insights.
 
+### Curator System
+
+- **Curator** — Trusted user role with permissions to edit track/artist/album metadata, merge duplicates, and manage data quality. Assigned by admins only. See ADR-031.
+
+- **Edit Lock** — Optimistic lock acquired when curator opens edit dialog, preventing concurrent edits. Released on save/close or after 30-minute timeout. Other curators see read-only view until released. Force-unlock available with required reason. See ADR-032.
+
+- **BroadcastChannel Sync** — Real-time synchronization of curator state across browser tabs using BroadcastChannel API. Syncs lock releases, edits, selection state, queue updates. Same-browser only (not cross-device). See ADR-033.
+
+- **Review Queue** — Centralized queue aggregating data quality issues from four sources: user reports, system-detected issues, curator flags, and import errors. Organized in tabs (User Reports, Duplicates, Data Quality, Import Errors). Curators can claim items, resolve with fixes, or dismiss as invalid. See ADR-035.
+
+- **Duplicate Detection** — Automated detection of duplicate artists/albums using Levenshtein distance on normalized names. Runs daily as background job, caches results. Presents exact matches and fuzzy matches separately. Curators review and merge duplicates. See ADR-034.
+
+- **Selection Mode** — Toggleable mode (curator tools menu) that shows checkboxes on track rows in library. Enables multi-track selection for bulk operations. Selection state persists in localStorage and syncs via BroadcastChannel. Curators can disable to use library like regular users.
+
+- **Bulk Edit** — Curator operation to update metadata fields on 2+ selected tracks simultaneously. Soft limit of 100 tracks with override option. Shows live progress log, handles partial failures (keep/rollback/retry), supports cancellation with rollback. Requires comment for audit trail.
+
+- **Merge Operation** — Combining duplicate artists or albums into a single entity. Shows metadata comparison, track list (flat or grouped by album), and smart recommendations. All source entity tracks relinked to target. Source entities soft-deleted with merged marker. Creates audit trail entry.
+
+- **Artist Split** — Separating one artist into two distinct artists (e.g., different artists with same name). Curator manually selects tracks to move, system provides smart suggestions based on patterns. Prompts for new artist names. Creates audit trail entry.
+
+- **Curator Notes** — Threaded comments on tracks/artists/albums visible only to curators and admins. Categorized (Question, Warning, Info, Resolved). Supports @ mentions (notifies mentioned curator). Badge indicator on entity rows shows note count.
+
+- **Audit Trail** — Complete history of all curator actions. Per-entity: edit history tab in details dialogs. System-wide: audit log page with filtering by curator, date range, action type, entity name. All entries include curator name, timestamp, changes, and optional comment.
+
+- **Undo System** — Quick undo (5 minutes, own edits, no comment) via toast notification. Delayed undo/restore (anytime, any curator's edits, comment required) via History tab. Both create audit trail entries. Version-based restore to any point in history.
+
+- **Session Recovery** — Automatic save of curator workflow state (selection, open dialogs with unsaved changes, filters, scroll position) to localStorage. On page load, prompt offers to restore or discard. Expires after 24 hours (selection) or 2 hours (unsaved changes). See ADR-036.
+
+- **Curator Dashboard** — Central hub for curator work. Tabs: Overview (metrics, queue summary, leaderboard, activity feed), Queue (embedded review queue), Reports (data quality reports), Activity (filterable curator actions). Metrics show library completeness percentage, per-field breakdown, trend graphs. Leaderboard ranks curators by edits/merges/quality contributions with time filters.
+
+- **Genre Management** — Multi-genre tagging system (ADR-037). Tracks can have unlimited genres (flat list, no hierarchy). Curators build genre list from scratch. Genre management page supports create, rename, delete, merge, view tracks per genre. Genre select component: multi-select dropdown + tag input, displays as removable pills.
+
+- **Metadata Clipboard** — Three copy/paste modes: (1) Field-level copy icon per field, (2) Selective bulk template (checkbox which fields to copy), (3) Apply from similar track (search, side-by-side comparison, pick fields). Works across windows/tabs.
+
+- **Curator Tools Menu** — Global dropdown (pencil icon in header) providing access to all curator features: Selection Mode toggle, Curator Dashboard, Duplicates, Genre Management, Review Queue, My Stats, Clear Session.
+
+- **Data Quality Dashboard** — Section of curator dashboard showing metadata completeness (overall % + per-field breakdown + trends), problem tracks summary (counts by issue type, clickable to filter library), curator leaderboard, and live activity feed.
+
+- **Duplicate Detection Algorithm** — Levenshtein distance on normalized names (lowercase, trim, remove punctuation, remove "the" prefix). Artists: distance ≤ 2 for names < 10 chars, ≤ 3 for ≥ 10 chars. Albums: same artist + similar name, OR similar artist + similar name + year within ±2. Blocking strategy (group by first 2 chars) reduces comparisons by ~95%.
+
+- **Curator Badge** — Achievement earned for milestones (100 edits, 50 merges, 100 quality fixes, 7-day streak). Progressive levels (1-10). Displayed on profile, leaderboard, and in edit history next to curator name.
+
 ### Generic
 
 - **Epic Stack** — The full-stack framework this project is built on (React Router v7, Prisma, SQLite, Tailwind, Fly.io).

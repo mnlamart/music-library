@@ -16,6 +16,7 @@ import {
 import { HoneypotProvider } from "remix-utils/honeypot/react";
 import { useToast } from "#app/components/toaster.tsx";
 import { useServiceWorkerUpdateToast } from "#app/hooks/use-service-worker-update-toast.tsx";
+import { initCuratorSync, cleanupCuratorSync } from "#app/features/curator/sync.client.ts";
 import { type Route } from "./+types/root.ts";
 import appleTouchIconAssetUrl from "./assets/favicons/apple-touch-icon.png";
 import faviconAssetUrl from "./assets/favicons/favicon.svg";
@@ -390,6 +391,14 @@ function App() {
   const loaderData = useLoaderData<typeof loader>();
   useServiceWorkerUpdateToast();
   useToast(loaderData.toast);
+
+  // Initialize curator sync on mount
+  useEffect(() => {
+    initCuratorSync();
+    return () => {
+      cleanupCuratorSync();
+    };
+  }, []);
 
   const queryClient = new QueryClient({
     defaultOptions: {

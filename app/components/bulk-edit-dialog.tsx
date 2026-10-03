@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { ArtistAutocomplete } from "#app/components/artist-autocomplete";
 import { Button } from "#app/components/ui/button";
@@ -36,8 +36,10 @@ interface BulkEditFormData {
 }
 
 interface BulkEditResponse {
-  success: boolean;
-  updated: number;
+  success?: boolean;
+  updated?: number;
+  updatedCount?: number;
+  error?: string;
   errors?: Array<{ trackId: string; error: string }>;
 }
 
@@ -99,7 +101,6 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
     // Build changes object - only include non-empty fields
     const changes: Record<string, any> = {};
     if (formData.artistId) changes.artistId = formData.artistId;
-    if (formData.albumName.trim()) changes.albumName = formData.albumName.trim();
     if (formData.genre.trim()) changes.genre = formData.genre.trim();
     if (formData.year.trim()) {
       const yearNum = parseInt(formData.year, 10);
@@ -125,28 +126,36 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
       return;
     }
 
-    const formDataToSend = new FormData();
-    formDataToSend.append("trackIds", JSON.stringify(trackIds));
-    formDataToSend.append("changes", JSON.stringify(changes));
-    formDataToSend.append("comment", formData.comment);
-
-    fetcher.submit(formDataToSend, {
-      method: "POST",
-      action: "/api/metadata/tracks/bulk-edit",
-    });
+    fetcher.submit(
+      {
+        trackIds,
+        changes,
+        comment: formData.comment,
+      },
+      {
+        method: "POST",
+        action: "/api/metadata/tracks/bulk-edit",
+        encType: "application/json",
+      },
+    );
   };
 
-  // Handle response
-  if (fetcher.data && fetcher.state === "idle") {
+  const handledResponseRef = useRef<BulkEditResponse | undefined>(undefined);
+
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data) return;
+    if (handledResponseRef.current === fetcher.data) return;
+    handledResponseRef.current = fetcher.data;
+
     if (fetcher.data.success) {
+      const updated = fetcher.data.updatedCount ?? fetcher.data.updated ?? 0;
       toast({
         title: "Success",
-        description: `${fetcher.data.updated} track(s) updated successfully`,
+        description: `${updated} track(s) updated successfully`,
         variant: "success",
       });
       onSuccess();
       onClose();
-      // Reset form
       setFormData({
         artistId: null,
         artistName: "",
@@ -159,16 +168,26 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
         label: "",
         comment: "",
       });
-    } else if (fetcher.data.errors) {
+      return;
+    }
+
+    if (fetcher.data.errors) {
       const errorCount = fetcher.data.errors.length;
-      const successCount = fetcher.data.updated;
+      const successCount = fetcher.data.updatedCount ?? fetcher.data.updated ?? 0;
       toast({
         title: "Partial Success",
         description: `${successCount} track(s) updated, ${errorCount} failed`,
         variant: "destructive",
       });
+      return;
     }
-  }
+
+    toast({
+      title: "Error",
+      description: fetcher.data.error ?? "Bulk edit failed",
+      variant: "destructive",
+    });
+  }, [fetcher.state, fetcher.data, onSuccess, onClose]);
 
   const handleClose = () => {
     if (!isSubmitting) {
@@ -204,8 +223,9 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
                 value={formData.albumName}
                 onChange={(e) => setFormData((prev) => ({ ...prev, albumName: e.target.value }))}
                 placeholder="Leave blank to keep existing"
-                disabled={isSubmitting}
+                disabled
               />
+              <p className="text-xs text-muted-foreground mt-1">Album editing coming soon</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

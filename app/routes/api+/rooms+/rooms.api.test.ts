@@ -210,6 +210,57 @@ describe("rooms API", () => {
     expect(leaveSetCookie).toMatch(/Max-Age=0|max-age=0/i);
   });
 
+  test("guest joining a second room via cookie leaves the first seat", async () => {
+    const hostA = await createUserCookie("Host A");
+    const hostB = await createUserCookie("Host B");
+
+    const roomARes = await createRoomAction({
+      request: new Request("http://localhost/api/rooms", {
+        method: "POST",
+        headers: { cookie: hostA.cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Host A" }),
+      }),
+    });
+    const roomA = (await roomARes.json()) as { code: string; roomId: string };
+
+    const roomBRes = await createRoomAction({
+      request: new Request("http://localhost/api/rooms", {
+        method: "POST",
+        headers: { cookie: hostB.cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Host B" }),
+      }),
+    });
+    const roomB = (await roomBRes.json()) as { code: string };
+
+    const joinA = await joinRoomAction({
+      request: new Request(`http://localhost/api/rooms/${roomA.code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Walkup" }),
+      }),
+      params: { roomCode: roomA.code },
+    });
+    const guestSetCookie = joinA.headers.get("Set-Cookie");
+    expect(guestSetCookie).toBeTruthy();
+    const guestCookie = parseString(guestSetCookie!)!;
+    const guestCookieHeader = `${guestCookie.name}=${guestCookie.value}`;
+
+    const joinB = await joinRoomAction({
+      request: new Request(`http://localhost/api/rooms/${roomB.code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie: guestCookieHeader },
+        body: JSON.stringify({ displayName: "Walkup" }),
+      }),
+      params: { roomCode: roomB.code },
+    });
+    expect(joinB.status).toBe(200);
+
+    const activeA = await prisma.roomParticipant.count({
+      where: { roomId: roomA.roomId, leftAt: null },
+    });
+    expect(activeA).toBe(1);
+  });
+
   test("skip at last queue item stops playback instead of staying playing", async () => {
     const { cookie } = await createUserCookie("Host");
 

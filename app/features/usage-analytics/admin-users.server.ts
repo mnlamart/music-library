@@ -106,6 +106,40 @@ export async function demoteFromAdmin({
   return { ok: true };
 }
 
+export async function promoteToCurator(userId: string): Promise<ModerationResult> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!user) return notFound;
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      roles: {
+        connect: { name: "curator" },
+      },
+    },
+  });
+  return { ok: true };
+}
+
+export async function demoteFromCurator(userId: string): Promise<ModerationResult> {
+  const user = await findUserRoles(userId);
+  if (!user) return notFound;
+
+  if (!user.roles.some((role) => role.name === "curator")) {
+    return forbidden("This user is not a curator");
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      roles: {
+        disconnect: { name: "curator" },
+      },
+    },
+  });
+  return { ok: true };
+}
+
 export async function deleteUserAsAdmin({
   targetUserId,
   actorUserId,

@@ -346,27 +346,30 @@ export async function joinRoom({ code, actor }: { code: string; actor: JoinActor
   let token = actor.guestToken ?? null;
   let tokenHash = token ? hashGuestToken(token) : null;
 
-  if (tokenHash) {
+  if (token && tokenHash) {
+    // Guests can walk up to a new join URL without a Leave UI for the old room.
+    // Vacate any other open seat first so we do not mint a second live seat
+    // (ghost participant → empty-room TTL never starts).
+    const elsewhere = await prisma.roomParticipant.findFirst({
+      where: {
+        guestTokenHash: tokenHash,
+        leftAt: null,
+        room: { status: ROOM_STATUS.open },
+        NOT: { roomId: room.id },
+      },
+      select: { roomId: true },
+    });
+    if (elsewhere) {
+      await leaveRoom({
+        roomId: elsewhere.roomId,
+        actor: { type: "guest", guestToken: token },
+      });
+    }
+
     const existing = await prisma.roomParticipant.findFirst({
       where: { roomId: room.id, guestTokenHash: tokenHash },
     });
     if (existing) {
-      const elsewhere = await prisma.roomParticipant.findFirst({
-        where: {
-          guestTokenHash: tokenHash,
-          leftAt: null,
-          room: { status: ROOM_STATUS.open },
-          NOT: { roomId: room.id },
-        },
-        select: { id: true },
-      });
-      if (elsewhere) {
-        throw new PartyRoomError(
-          "already_in_room",
-          "Leave your current room before joining another",
-          409,
-        );
-      }
       const participant = await prisma.roomParticipant.update({
         where: { id: existing.id },
         data: {

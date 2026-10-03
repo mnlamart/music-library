@@ -9,10 +9,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#app/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#app/components/ui/tabs";
 import { Input } from "#app/components/ui/input";
 import { Label } from "#app/components/ui/label";
 import { Textarea } from "#app/components/ui/textarea";
 import { Icon } from "#app/components/ui/icon";
+import { ImageUploader } from "#app/components/image-uploader";
+import { AlbumHistoryTab } from "#app/components/album-edit-dialog/album-history-tab";
 
 export interface Album {
   id: string;
@@ -20,6 +23,9 @@ export interface Album {
   artistId: string;
   year: number | null;
   coverImageId: string | null;
+  coverImage?: {
+    objectKey: string;
+  } | null;
   artist: {
     id: string;
     name: string;
@@ -35,6 +41,9 @@ interface AlbumEditDialogProps {
 
 export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEditDialogProps) {
   const editFetcher = useFetcher();
+  const restoreFetcher = useFetcher();
+  const [activeTab, setActiveTab] = useState("metadata");
+  const [coverObjectKey, setCoverObjectKey] = useState(album.coverImage?.objectKey || null);
 
   const [formData, setFormData] = useState({
     name: album.name,
@@ -43,7 +52,7 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
     comment: "",
   });
 
-  const isSubmitting = editFetcher.state !== "idle";
+  const isSubmitting = editFetcher.state !== "idle" || restoreFetcher.state !== "idle";
   const hasChanges =
     formData.name !== album.name ||
     formData.artistId !== album.artistId ||
@@ -69,7 +78,27 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
     );
   };
 
-  if (editFetcher.state === "idle" && editFetcher.data && open) {
+  const handleRestore = (editId: string, comment: string | null) => {
+    if (!comment) return;
+
+    restoreFetcher.submit(
+      { comment },
+      {
+        method: "POST",
+        action: `/api/metadata/albums/${album.id}/restore/${editId}`,
+        encType: "application/json",
+      },
+    );
+  };
+
+  const handleCoverUploaded = (objectKey: string) => {
+    setCoverObjectKey(objectKey);
+  };
+
+  if (
+    (editFetcher.state === "idle" && editFetcher.data && open) ||
+    (restoreFetcher.state === "idle" && restoreFetcher.data && open)
+  ) {
     setTimeout(() => {
       onOpenChange(false);
       onSaved?.();
@@ -78,74 +107,97 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Album</DialogTitle>
           <DialogDescription>
-            Update album details. Cover images cannot be edited directly.
+            Update album details. All changes are logged for curator review.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="metadata">Metadata</TabsTrigger>
+            <TabsTrigger value="cover">Cover Art</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="metadata" className="space-y-4 mt-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">
+                  Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="artist">Artist</Label>
+                <div className="text-sm text-muted-foreground">{album.artist.name}</div>
+                <p className="text-xs text-muted-foreground">
+                  To change the artist, use the merge albums feature
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="year">Year</Label>
+                <Input
+                  id="year"
+                  type="number"
+                  min="1900"
+                  max="2100"
+                  value={formData.year}
+                  onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+                  placeholder="e.g., 1969"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="comment">Comment (optional)</Label>
+                <Textarea
+                  id="comment"
+                  value={formData.comment}
+                  onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                  placeholder="Explain why you made these changes..."
+                  rows={2}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={!hasChanges || isSubmitting}>
+                  {isSubmitting && <Icon name="update" className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="cover" className="mt-4">
+            <ImageUploader
+              entityType="album"
+              entityId={album.id}
+              currentImageUrl={coverObjectKey}
+              onImageUploaded={handleCoverUploaded}
             />
-          </div>
+          </TabsContent>
 
-          <div className="space-y-2">
-            <Label htmlFor="artist">Artist</Label>
-            <div className="text-sm text-muted-foreground">{album.artist.name}</div>
-            <p className="text-xs text-muted-foreground">
-              To change the artist, use the merge albums feature
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="year">Year</Label>
-            <Input
-              id="year"
-              type="number"
-              min="1900"
-              max="2100"
-              value={formData.year}
-              onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-              placeholder="e.g., 1969"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="comment">Comment (optional)</Label>
-            <Textarea
-              id="comment"
-              value={formData.comment}
-              onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-              placeholder="Explain why you made these changes..."
-              rows={2}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!hasChanges || isSubmitting}>
-              {isSubmitting && <Icon name="update" className="mr-2 h-4 w-4 animate-spin" />}
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </form>
+          <TabsContent value="history" className="mt-4">
+            <AlbumHistoryTab albumId={album.id} onRestore={handleRestore} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

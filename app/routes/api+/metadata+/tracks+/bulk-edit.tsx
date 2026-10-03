@@ -214,6 +214,7 @@ export async function action({ request }: Route.ActionArgs) {
   return data({
     success: true,
     updatedCount: result.length,
+    updated: result.length,
   });
 }
 

@@ -24,9 +24,11 @@ import {
 import {
   deleteUserAsAdmin,
   demoteFromAdmin,
+  demoteFromCurator,
   disableUser,
   enableUser,
   promoteToAdmin,
+  promoteToCurator,
   type ModerationResult,
 } from "#app/features/usage-analytics/admin-users.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
@@ -168,6 +170,24 @@ export async function action({ request, params }: Route.ActionArgs) {
         description: "Admin role removed.",
       });
     }
+    case "promote-curator": {
+      const result = await promoteToCurator(userId);
+      if (!result.ok) return failed(result);
+      return redirectWithToast(`/admin/users/${userId}`, {
+        type: "success",
+        title: "Promoted to curator",
+        description: "Curator role connected.",
+      });
+    }
+    case "demote-curator": {
+      const result = await demoteFromCurator(userId);
+      if (!result.ok) return failed(result);
+      return redirectWithToast(`/admin/users/${userId}`, {
+        type: "success",
+        title: "Demoted from curator",
+        description: "Curator role removed.",
+      });
+    }
     case "delete": {
       const confirmUsername = String(formData.get("confirmUsername") ?? "");
       const target = await prisma.user.findUnique({
@@ -222,6 +242,7 @@ export default function AdminUserDetailRoute({ loaderData, actionData }: Route.C
   const { user, actorId } = loaderData;
   const isSelf = user.id === actorId;
   const isAdmin = user.roles.includes("admin");
+  const isCurator = user.roles.includes("curator");
   const isDisabled = Boolean(user.disabledAt);
   const deleteCheck = useDoubleCheck();
 
@@ -323,6 +344,21 @@ export default function AdminUserDetailRoute({ loaderData, actionData }: Route.C
                 <input type="hidden" name="intent" value="demote" />
                 <Button type="submit" variant="outline" disabled={isSelf} className="w-full">
                   Demote from admin
+                </Button>
+              </Form>
+            )}
+            {!isCurator ? (
+              <Form method="post">
+                <input type="hidden" name="intent" value="promote-curator" />
+                <Button type="submit" variant="secondary" className="w-full">
+                  Promote to curator
+                </Button>
+              </Form>
+            ) : (
+              <Form method="post">
+                <input type="hidden" name="intent" value="demote-curator" />
+                <Button type="submit" variant="outline" className="w-full">
+                  Demote from curator
                 </Button>
               </Form>
             )}
