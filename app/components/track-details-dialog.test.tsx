@@ -6,9 +6,29 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, expect, test, vi } from "vitest";
 import { TrackDetailsDialog } from "./track-details-dialog";
 
+vi.mock("#app/hooks/use-lock", () => ({
+  useLock: () => ({
+    lock: null,
+    isLocked: false,
+    isLockedByOther: false,
+    isLoading: false,
+    error: null,
+    acquire: vi.fn(),
+    release: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
 const mockLoad = vi.fn();
 let fetcherState: "idle" | "loading" = "idle";
-let fetcherData: { track: unknown } | undefined = undefined;
+let fetcherData:
+  | {
+      track: unknown;
+      isCurator?: boolean;
+      notesCount?: number;
+      currentUserId?: string;
+    }
+  | undefined = undefined;
 
 vi.mock("react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router")>();
@@ -33,12 +53,43 @@ beforeEach(() => {
   fetcherData = undefined;
 });
 
-function renderDialog(open = false) {
+const curatorTrack = {
+  id: "track-1",
+  title: "Test Song",
+  artist: { id: "artist-1", name: "Test Artist" },
+  albumRecord: null,
+  duration: 180,
+  createdAt: "2025-01-01T00:00:00.000Z",
+  releaseDate: null,
+  originalDate: null,
+  coverImage: null,
+  service: { displayName: "YouTube" },
+  serviceUrl: null,
+  genre: null,
+  genres: [],
+  year: null,
+  trackNumber: null,
+  albumArtist: null,
+  bpm: null,
+  label: null,
+  isrc: null,
+  originalYear: null,
+  totalTracks: null,
+  totalDiscs: null,
+  lyrics: null,
+};
+
+function renderDialog(
+  open = false,
+  props: { initialTab?: "basic" | "extended" | "history" | "notes" } = {},
+) {
   const router = createMemoryRouter(
     [
       {
         path: "/",
-        element: <TrackDetailsDialog trackId="track-1" open={open} onOpenChange={vi.fn()} />,
+        element: (
+          <TrackDetailsDialog trackId="track-1" open={open} onOpenChange={vi.fn()} {...props} />
+        ),
       },
     ],
     { initialEntries: ["/"] },
@@ -114,6 +165,33 @@ test("shows Open on YouTube button when serviceUrl is present", () => {
   renderDialog(true);
 
   expect(screen.getByText("Open on YouTube")).toBeDefined();
+});
+
+test("opens the notes tab for curators when initialTab is notes", () => {
+  fetcherData = {
+    track: curatorTrack,
+    isCurator: true,
+    notesCount: 2,
+    currentUserId: "user-1",
+  };
+
+  renderDialog(true, { initialTab: "notes" });
+
+  expect(screen.getByRole("tab", { name: /notes/i }).getAttribute("data-state")).toBe("active");
+  expect(screen.getByText("Add a note")).toBeDefined();
+});
+
+test("keeps curators on the basic tab when no initial tab is requested", () => {
+  fetcherData = {
+    track: curatorTrack,
+    isCurator: true,
+    notesCount: 2,
+    currentUserId: "user-1",
+  };
+
+  renderDialog(true);
+
+  expect(screen.getByRole("tab", { name: "Basic" }).getAttribute("data-state")).toBe("active");
 });
 
 test("does not show YouTube button when serviceUrl is null", () => {

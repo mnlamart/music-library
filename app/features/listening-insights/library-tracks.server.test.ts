@@ -86,6 +86,7 @@ describe("listLibraryQueueSpineTracks", () => {
 
 describe("listLibraryUserTracks most-played sorts", () => {
   beforeEach(async () => {
+    await prisma.curatorNote.deleteMany();
     await prisma.usageEvent.deleteMany();
     await prisma.trackAudioFile.deleteMany();
     await prisma.userTrack.deleteMany();
@@ -208,5 +209,58 @@ describe("listLibraryUserTracks most-played sorts", () => {
     });
 
     expect(userTracks.map((ut) => ut.track.title)).toEqual(["Newer", "Older"]);
+  });
+
+  test("includes curator note counts on library tracks for date added and most played", async () => {
+    const user = await prisma.user.create({ data: createUser() });
+    const noted = await createTrack("Noted");
+    const plain = await createTrack("Plain");
+    await addToLibrary(user.id, noted.id, new Date("2026-01-01T00:00:00.000Z"));
+    await addToLibrary(user.id, plain.id, new Date("2026-03-01T00:00:00.000Z"));
+
+    const parent = await prisma.curatorNote.create({
+      data: {
+        entityType: "track",
+        entityId: noted.id,
+        curatorId: user.id,
+        content: "Check the mastering",
+      },
+    });
+    await prisma.curatorNote.create({
+      data: {
+        entityType: "track",
+        entityId: noted.id,
+        curatorId: user.id,
+        parentId: parent.id,
+        content: "Agreed",
+      },
+    });
+    await prisma.curatorNote.create({
+      data: {
+        entityType: "artist",
+        entityId: noted.artistId,
+        curatorId: user.id,
+        content: "Not a track note",
+      },
+    });
+
+    const countsByTitle = (
+      userTracks: Awaited<ReturnType<typeof listLibraryUserTracks>>["userTracks"],
+    ) =>
+      Object.fromEntries(userTracks.map((row) => [row.track.title, row.track.curatorNotesCount]));
+
+    const dateAdded = await listLibraryUserTracks({
+      userId: user.id,
+      sort: "dateAdded",
+      limit: 10,
+    });
+    expect(countsByTitle(dateAdded.userTracks)).toEqual({ Noted: 2, Plain: 0 });
+
+    const mostPlayed = await listLibraryUserTracks({
+      userId: user.id,
+      sort: "mostPlayedEver",
+      limit: 10,
+    });
+    expect(countsByTitle(mostPlayed.userTracks)).toEqual({ Noted: 2, Plain: 0 });
   });
 });

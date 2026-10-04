@@ -35,7 +35,9 @@ import { type TrackPopularityStats } from "#app/utils/discover.ts";
 import { formatPopularityStats } from "#app/utils/popularity-format.ts";
 import { useIsMobile } from "#app/utils/use-mobile.ts";
 import { AddToPlaylistMenu } from "./add-to-playlist-menu";
+import { NotesBadge } from "./notes-badge";
 import { AddToRoomQueueAction } from "./party-room/add-to-room-queue-action";
+import { TrackDetailsDialog } from "./track-details-dialog";
 
 interface TrackListItemData {
   id: string;
@@ -104,6 +106,8 @@ interface TrackListItemProps {
   isSelected?: boolean;
   /** Callback when checkbox is toggled */
   onToggleSelection?: (trackId: string) => void;
+  /** Curator notes on this track. The badge stays hidden when this is 0. */
+  curatorNotesCount?: number;
 }
 
 /**
@@ -161,11 +165,13 @@ export const TrackListItem = memo(function TrackListItem({
   showCheckbox = false,
   isSelected = false,
   onToggleSelection,
+  curatorNotesCount = 0,
 }: TrackListItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionsSheetOpen, setIsActionsSheetOpen] = useState(false);
   const [isPlaylistSheetOpen, setIsPlaylistSheetOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
   const isMobile = useIsMobile();
   const { currentTrack, currentIndex, playTrack, playNextTrack, addToUpNext, addToQueue } =
     useAudioPlayer();
@@ -360,9 +366,10 @@ export const TrackListItem = memo(function TrackListItem({
             {/* Title and Artist */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <div className="font-medium text-sm truncate group-hover:text-foreground transition-colors">
+                <div className="min-w-0 truncate font-medium text-sm group-hover:text-foreground transition-colors">
                   {track.title}
                 </div>
+                <NotesBadge count={curatorNotesCount} onClick={() => setIsNotesOpen(true)} />
                 {isDeleted && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -635,6 +642,15 @@ export const TrackListItem = memo(function TrackListItem({
         If the Sheet is under the row div, tapping the dimmed overlay to dismiss fires the
         row's play handler. stopPropagation on SheetContent does not cover the Overlay sibling.
       */}
+      {curatorNotesCount > 0 ? (
+        <TrackDetailsDialog
+          trackId={track.id}
+          open={isNotesOpen}
+          onOpenChange={setIsNotesOpen}
+          initialTab="notes"
+        />
+      ) : null}
+
       {isMobile && (
         <>
           {/* Actions Sheet */}

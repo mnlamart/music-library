@@ -49,6 +49,21 @@ vi.mock("#app/utils/use-mobile.ts", () => ({
   useIsMobile: () => mockIsMobile,
 }));
 
+vi.mock("./track-details-dialog", () => ({
+  TrackDetailsDialog: ({
+    trackId,
+    open,
+    initialTab,
+  }: {
+    trackId: string;
+    open: boolean;
+    initialTab?: string;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label={`Notes for ${trackId} on ${initialTab ?? "basic"}`} />
+    ) : null,
+}));
+
 vi.mock("./add-to-playlist-menu", () => ({
   AddToPlaylistMenu: ({ playlists }: { playlists?: Array<{ id: string; title: string }> }) => (
     <div data-testid="add-to-playlist-menu">
@@ -268,6 +283,30 @@ test("showQuickAddToPlaylist renders add button and opens playlist menu on deskt
 
   await user.click(screen.getByRole("button", { name: "Add to playlist" }));
   expect(screen.getByText("My Playlist")).toBeDefined();
+});
+
+test("hides the notes badge when the track has no curator notes", () => {
+  renderTrackListItem({ track: playableTrack, curatorNotesCount: 0 });
+
+  expect(screen.queryByTitle("0 notes")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+test("shows the notes badge when the track has curator notes", () => {
+  renderTrackListItem({ track: playableTrack, curatorNotesCount: 2 });
+
+  expect(screen.getByTitle("2 notes")).toBeDefined();
+  expect(screen.getByText("2")).toBeDefined();
+});
+
+test("clicking the notes badge opens track notes without starting playback", async () => {
+  const user = userEvent.setup();
+  renderTrackListItem({ track: playableTrack, curatorNotesCount: 1 });
+
+  await user.click(screen.getByTitle("1 note"));
+
+  expect(screen.getByRole("dialog", { name: "Notes for track-1 on notes" })).toBeDefined();
+  expect(mockPlayTrack).not.toHaveBeenCalled();
 });
 
 test("showQuickAddToPlaylist opens playlist sheet directly on mobile", async () => {

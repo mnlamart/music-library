@@ -54,16 +54,22 @@ interface TrackDetailsDialogProps {
   trackId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: "basic" | "extended" | "history" | "notes";
 }
 
-export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetailsDialogProps) {
+export function TrackDetailsDialog({
+  trackId,
+  open,
+  onOpenChange,
+  initialTab = "basic",
+}: TrackDetailsDialogProps) {
   const fetcher = useFetcher<{
     track: TrackDetails;
     isCurator: boolean;
     notesCount: number;
     currentUserId: string;
   }>();
-  const [activeTab, setActiveTab] = useState("basic");
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<any>(null);
   const [showUndoToast, setShowUndoToast] = useState(false);
@@ -82,6 +88,12 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
     autoAcquire: open && isCurator,
     autoRelease: true,
   });
+
+  useEffect(() => {
+    if (open) {
+      setActiveTab(initialTab);
+    }
+  }, [open, initialTab, trackId]);
 
   useEffect(() => {
     if (open && fetcher.state === "idle" && !fetcher.data) {
