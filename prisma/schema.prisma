@@ -597,6 +597,9 @@ model TrackEdit {
   artistId    String
   albumId     String?
   genre       String?
+  // Ordered genre ids as a JSON array. The first id is the primary genre.
+  // Null on edits saved before multi-genre snapshots.
+  genreIds    String?
   year        Int?
   trackNumber Int?
   albumArtist String?

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { ArtistAutocomplete } from "#app/components/artist-autocomplete";
+import { GenreSelector, type Genre } from "#app/components/genre-selector";
 import { Button } from "#app/components/ui/button";
 import {
   Dialog,
@@ -26,7 +27,7 @@ interface BulkEditFormData {
   artistId: string | null;
   artistName: string;
   albumName: string;
-  genre: string;
+  genres: Genre[];
   year: string;
   albumArtist: string;
   trackNumber: string;
@@ -34,6 +35,19 @@ interface BulkEditFormData {
   label: string;
   comment: string;
 }
+
+const emptyForm: BulkEditFormData = {
+  artistId: null,
+  artistName: "",
+  albumName: "",
+  genres: [],
+  year: "",
+  albumArtist: "",
+  trackNumber: "",
+  bpm: "",
+  label: "",
+  comment: "",
+};
 
 interface BulkEditResponse {
   success?: boolean;
@@ -45,18 +59,7 @@ interface BulkEditResponse {
 
 export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditDialogProps) {
   const [showMoreFields, setShowMoreFields] = useState(false);
-  const [formData, setFormData] = useState<BulkEditFormData>({
-    artistId: null,
-    artistName: "",
-    albumName: "",
-    genre: "",
-    year: "",
-    albumArtist: "",
-    trackNumber: "",
-    bpm: "",
-    label: "",
-    comment: "",
-  });
+  const [formData, setFormData] = useState<BulkEditFormData>(emptyForm);
 
   const fetcher = useFetcher<BulkEditResponse>();
   const isSubmitting = fetcher.state !== "idle";
@@ -86,6 +89,24 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
     }
   };
 
+  const handleCreateGenre = async (name: string): Promise<Genre> => {
+    const response = await fetch("/api/genres", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      const errorData = (await response.json()) as { error?: string };
+      throw new Error(errorData.error || "Failed to create genre");
+    }
+
+    const data = (await response.json()) as {
+      genre: { id: string; name: string; trackCount: number };
+    };
+    return data.genre;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -101,7 +122,9 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
     // Build changes object - only include non-empty fields
     const changes: Record<string, any> = {};
     if (formData.artistId) changes.artistId = formData.artistId;
-    if (formData.genre.trim()) changes.genre = formData.genre.trim();
+    if (formData.genres.length > 0) {
+      changes.genreIds = formData.genres.map((genre) => genre.id);
+    }
     if (formData.year.trim()) {
       const yearNum = parseInt(formData.year, 10);
       if (!isNaN(yearNum)) changes.year = yearNum;
@@ -156,18 +179,7 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
       });
       onSuccess();
       onClose();
-      setFormData({
-        artistId: null,
-        artistName: "",
-        albumName: "",
-        genre: "",
-        year: "",
-        albumArtist: "",
-        trackNumber: "",
-        bpm: "",
-        label: "",
-        comment: "",
-      });
+      setFormData(emptyForm);
       return;
     }
 
@@ -228,18 +240,18 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
               <p className="text-xs text-muted-foreground mt-1">Album editing coming soon</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="genre">Genre</Label>
-                <Input
-                  id="genre"
-                  value={formData.genre}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, genre: e.target.value }))}
-                  placeholder="Leave blank to keep existing"
-                  disabled={isSubmitting}
-                />
-              </div>
+            <GenreSelector
+              selectedGenres={formData.genres}
+              onChange={(genres) => setFormData((prev) => ({ ...prev, genres }))}
+              onCreateNew={handleCreateGenre}
+              label="Genres"
+              disabled={isSubmitting}
+            />
+            <p className="text-xs text-muted-foreground">
+              Replaces genres on every selected track. Leave empty to keep existing genres.
+            </p>
 
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="year">Year</Label>
                 <Input

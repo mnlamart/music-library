@@ -22,6 +22,9 @@ vi.mock("#app/utils/db.server.ts", () => ({
     trackEdit: {
       create: vi.fn(),
     },
+    genre: {
+      findMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -375,6 +378,7 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
         artistId: "artist-1",
         albumId: null,
         genre: "Rock",
+        genres: [{ id: "genre-rock", name: "Rock" }],
         year: 2020,
         trackNumber: 1,
         albumArtist: null,
@@ -427,6 +431,7 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
         artistId: "artist-1",
         albumId: null,
         genre: "Rock",
+        genreIds: JSON.stringify(["genre-rock"]),
         year: 2020,
         trackNumber: 1,
         albumArtist: null,
@@ -689,5 +694,231 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
     expect(updateCall).toBeDefined();
     expect(updateCall?.data.releaseDate).toBeNull();
     expect(updateCall?.data.originalDate).toBeNull();
+  });
+
+  test("sets genre ids on the track relation and syncs the legacy genre string", async () => {
+    const mockTracks = [
+      {
+        id: "track-1",
+        title: "Track 1",
+        artistId: "artist-1",
+        albumId: null,
+        genre: "Rock",
+        genres: [
+          { id: "genre-pop", name: "Pop" },
+          { id: "genre-rock", name: "Rock" },
+        ],
+        year: 2020,
+        trackNumber: 1,
+        albumArtist: null,
+        bpm: null,
+        label: null,
+        isrc: null,
+        releaseDate: null,
+        originalDate: null,
+        originalYear: null,
+        totalTracks: null,
+        totalDiscs: null,
+        lyrics: null,
+      },
+      {
+        id: "track-2",
+        title: "Track 2",
+        artistId: "artist-1",
+        albumId: null,
+        genre: null,
+        genres: [],
+        year: null,
+        trackNumber: null,
+        albumArtist: null,
+        bpm: null,
+        label: null,
+        isrc: null,
+        releaseDate: null,
+        originalDate: null,
+        originalYear: null,
+        totalTracks: null,
+        totalDiscs: null,
+        lyrics: null,
+      },
+    ];
+
+    vi.mocked(prisma.track.findMany).mockResolvedValue(mockTracks as never);
+    vi.mocked(prisma.genre.findMany).mockResolvedValue([
+      { id: "genre-soul", name: "Soul" },
+      { id: "genre-jazz", name: "Jazz" },
+    ] as never);
+
+    const mockTrackEditCreate = vi.fn().mockResolvedValue({});
+    const mockTrackUpdate = vi.fn().mockImplementation((args: { where: { id: string } }) =>
+      Promise.resolve({
+        id: args.where.id,
+        title: "Track",
+        artistId: "artist-1",
+      }),
+    );
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
+      return callback({
+        trackEdit: { create: mockTrackEditCreate },
+        track: { update: mockTrackUpdate },
+      });
+    });
+
+    const response: any = await action(
+      makeRequest({
+        trackIds: ["track-1", "track-2"],
+        changes: { genreIds: ["genre-jazz", "genre-soul"] },
+        comment: "Retag selected tracks",
+      }) as never,
+    );
+
+    expect(response.data.success).toBe(true);
+    expect(response.data.updatedCount).toBe(2);
+    expect(prisma.genre.findMany).toHaveBeenCalledTimes(1);
+
+    expect(mockTrackUpdate).toHaveBeenNthCalledWith(1, {
+      where: { id: "track-1" },
+      data: {
+        genre: "Jazz",
+        genres: { set: [{ id: "genre-jazz" }, { id: "genre-soul" }] },
+      },
+      select: {
+        id: true,
+        title: true,
+        artistId: true,
+      },
+    });
+    expect(mockTrackUpdate).toHaveBeenNthCalledWith(2, {
+      where: { id: "track-2" },
+      data: {
+        genre: "Jazz",
+        genres: { set: [{ id: "genre-jazz" }, { id: "genre-soul" }] },
+      },
+      select: {
+        id: true,
+        title: true,
+        artistId: true,
+      },
+    });
+
+    expect(mockTrackEditCreate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          genre: "Rock",
+          genreIds: JSON.stringify(["genre-rock", "genre-pop"]),
+        }),
+      }),
+    );
+    expect(mockTrackEditCreate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          genre: null,
+          genreIds: JSON.stringify([]),
+        }),
+      }),
+    );
+  });
+
+  test("clears genre tags when genreIds is an empty array", async () => {
+    vi.mocked(prisma.track.findMany).mockResolvedValue([
+      {
+        id: "track-1",
+        title: "Track 1",
+        artistId: "artist-1",
+        albumId: null,
+        genre: "Rock",
+        genres: [{ id: "genre-rock", name: "Rock" }],
+        year: null,
+        trackNumber: null,
+        albumArtist: null,
+        bpm: null,
+        label: null,
+        isrc: null,
+        releaseDate: null,
+        originalDate: null,
+        originalYear: null,
+        totalTracks: null,
+        totalDiscs: null,
+        lyrics: null,
+      },
+    ] as never);
+
+    const mockTrackUpdate = vi.fn().mockResolvedValue({
+      id: "track-1",
+      title: "Track 1",
+      artistId: "artist-1",
+    });
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
+      return callback({
+        trackEdit: { create: vi.fn().mockResolvedValue({}) },
+        track: { update: mockTrackUpdate },
+      });
+    });
+
+    await action(
+      makeRequest({
+        trackIds: ["track-1"],
+        changes: { genreIds: [] },
+        comment: "Clear genres",
+      }) as never,
+    );
+
+    expect(prisma.genre.findMany).not.toHaveBeenCalled();
+    expect(mockTrackUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          genre: null,
+          genres: { set: [] },
+        },
+      }),
+    );
+  });
+
+  test("rejects unknown genre ids", async () => {
+    vi.mocked(prisma.track.findMany).mockResolvedValue([
+      {
+        id: "track-1",
+        title: "Track 1",
+        artistId: "artist-1",
+        albumId: null,
+        genre: null,
+        genres: [],
+        year: null,
+        trackNumber: null,
+        albumArtist: null,
+        bpm: null,
+        label: null,
+        isrc: null,
+        releaseDate: null,
+        originalDate: null,
+        originalYear: null,
+        totalTracks: null,
+        totalDiscs: null,
+        lyrics: null,
+      },
+    ] as never);
+    vi.mocked(prisma.genre.findMany).mockResolvedValue([
+      { id: "genre-jazz", name: "Jazz" },
+    ] as never);
+
+    try {
+      await action(
+        makeRequest({
+          trackIds: ["track-1"],
+          changes: { genreIds: ["genre-jazz", "genre-missing"] },
+          comment: "Retag",
+        }) as never,
+      );
+      expect.unreachable("action should have thrown");
+    } catch (e: any) {
+      expect(e.init.status).toBe(404);
+      expect(e.data.error).toBe("One or more genres not found");
+    }
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

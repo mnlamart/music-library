@@ -3,6 +3,13 @@ import { z } from "zod";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireCuratorRole } from "#app/utils/permissions.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import {
+  parseGenreIdSnapshot,
+  primaryGenreName,
+  resolveOrderedGenres,
+  snapshotGenreIds,
+  type GenreRef,
+} from "#app/utils/track-genres.server.ts";
 import { type Route } from "./+types/$trackId.restore.$editId.ts";
 
 const RestoreSchema = z.object({
@@ -55,6 +62,12 @@ export async function action({ request, params }: Route.ActionArgs) {
       artistId: true,
       albumId: true,
       genre: true,
+      genres: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       year: true,
       trackNumber: true,
       albumArtist: true,
@@ -84,6 +97,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       artistId: true,
       albumId: true,
       genre: true,
+      genreIds: true,
       year: true,
       trackNumber: true,
       albumArtist: true,
@@ -129,6 +143,23 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
   }
 
+  const parsedGenreIds = parseGenreIdSnapshot(editToRestore.genreIds);
+  if (parsedGenreIds.status === "invalid") {
+    throw data({ error: "Invalid genre snapshot" }, { status: 400 });
+  }
+
+  let restoredGenres: GenreRef[] | undefined;
+  if (parsedGenreIds.status === "present") {
+    const resolved = await resolveOrderedGenres(parsedGenreIds.ids);
+    if (!resolved.ok) {
+      throw data(
+        { error: "One or more genres from the restored version no longer exist" },
+        { status: 404 },
+      );
+    }
+    restoredGenres = resolved.genres;
+  }
+
   // Perform restore: create history entry with current state, then update track
   const result = await prisma.$transaction(async (tx) => {
     // Create history entry with current state (before restore)
@@ -142,6 +173,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         artistId: track.artistId,
         albumId: track.albumId,
         genre: track.genre,
+        genreIds: snapshotGenreIds(track.genres, track.genre),
         year: track.year,
         trackNumber: track.trackNumber,
         albumArtist: track.albumArtist,
@@ -173,7 +205,13 @@ export async function action({ request, params }: Route.ActionArgs) {
         title: editToRestore.title,
         artistId: editToRestore.artistId,
         albumId: editToRestore.albumId,
-        genre: editToRestore.genre,
+        genre:
+          restoredGenres !== undefined ? primaryGenreName(restoredGenres) : editToRestore.genre,
+        ...(restoredGenres !== undefined && {
+          genres: {
+            set: restoredGenres.map((genre) => ({ id: genre.id })),
+          },
+        }),
         year: editToRestore.year,
         trackNumber: editToRestore.trackNumber,
         albumArtist: editToRestore.albumArtist,
