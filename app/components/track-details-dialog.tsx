@@ -1,5 +1,5 @@
-import { useFetcher, useSubmit } from "react-router";
-import { useEffect, useState } from "react";
+import { useFetcher } from "react-router";
+import { useEffect, useRef, useState } from "react";
 import { TrackThumbnail } from "#app/components/track-thumbnail";
 import { Button } from "#app/components/ui/button";
 import {
@@ -56,22 +56,37 @@ interface TrackDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+type MetadataWriteResult = {
+  edit?: { id?: string };
+  error?: string;
+};
+
+function isSuccessfulMetadataWrite(data: unknown): data is { edit: { id: string } } {
+  if (!data || typeof data !== "object") return false;
+  if ("error" in data && (data as MetadataWriteResult).error) return false;
+  const edit = (data as MetadataWriteResult).edit;
+  return !!edit && typeof edit.id === "string" && edit.id.length > 0;
+}
+
 export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetailsDialogProps) {
-  const fetcher = useFetcher<{
+  const detailsFetcher = useFetcher<{
     track: TrackDetails;
     isCurator: boolean;
     notesCount: number;
     currentUserId: string;
   }>();
+  const editFetcher = useFetcher<MetadataWriteResult>();
+  const restoreFetcher = useFetcher<MetadataWriteResult>();
   const [activeTab, setActiveTab] = useState("basic");
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<any>(null);
   const [showUndoToast, setShowUndoToast] = useState(false);
-  const submit = useSubmit();
+  const handledEdit = useRef<unknown>(null);
+  const handledRestore = useRef<unknown>(null);
 
-  const track = fetcher.data?.track;
-  const isCurator = fetcher.data?.isCurator ?? false;
-  const isLoading = fetcher.state !== "idle";
+  const track = detailsFetcher.data?.track;
+  const isCurator = detailsFetcher.data?.isCurator ?? false;
+  const isLoading = detailsFetcher.state !== "idle" && !detailsFetcher.data;
 
   // Lock integration - only acquire if curator
   const {
@@ -84,18 +99,46 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
   });
 
   useEffect(() => {
-    if (open && fetcher.state === "idle" && !fetcher.data) {
-      fetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
+    if (open && detailsFetcher.state === "idle" && !detailsFetcher.data) {
+      detailsFetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
     }
-  }, [open, trackId, fetcher]);
+  }, [open, trackId, detailsFetcher]);
 
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data) {
-      // Reload track details after successful edit
+    if (detailsFetcher.state === "idle" && detailsFetcher.data) {
       setShowCommentDialog(false);
       setPendingChanges(null);
     }
-  }, [fetcher.state, fetcher.data]);
+  }, [detailsFetcher.state, detailsFetcher.data]);
+
+  useEffect(() => {
+    if (editFetcher.state !== "idle" || !editFetcher.data) return;
+    if (handledEdit.current === editFetcher.data) return;
+    if (!isSuccessfulMetadataWrite(editFetcher.data)) return;
+    handledEdit.current = editFetcher.data;
+
+    broadcastCuratorMessage({
+      type: "ENTITY_UPDATED",
+      entityType: "track",
+      entityId: trackId,
+    });
+    setShowUndoToast(true);
+    detailsFetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
+  }, [editFetcher.state, editFetcher.data, trackId, detailsFetcher]);
+
+  useEffect(() => {
+    if (restoreFetcher.state !== "idle" || !restoreFetcher.data) return;
+    if (handledRestore.current === restoreFetcher.data) return;
+    if (!isSuccessfulMetadataWrite(restoreFetcher.data)) return;
+    handledRestore.current = restoreFetcher.data;
+
+    broadcastCuratorMessage({
+      type: "ENTITY_UPDATED",
+      entityType: "track",
+      entityId: trackId,
+    });
+    detailsFetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
+  }, [restoreFetcher.state, restoreFetcher.data, trackId, detailsFetcher]);
 
   // BroadcastChannel integration
   useEffect(() => {
@@ -115,12 +158,12 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
         message.entityId === trackId
       ) {
         // Track was updated by another curator, reload track details
-        fetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
+        detailsFetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
       }
     });
 
     return cleanup;
-  }, [open, trackId, refreshLock, fetcher]);
+  }, [open, trackId, refreshLock, detailsFetcher]);
 
   const serviceDateAdded = track
     ? formatServiceDateAdded({
@@ -138,47 +181,29 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
   const handleSubmitWithComment = (comment: string | null) => {
     if (!pendingChanges) return;
 
-    const formData = new FormData();
-    Object.entries(pendingChanges).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        formData.append(key, String(value));
-      }
-    });
-    if (comment) {
-      formData.append("comment", comment);
-    }
+    const payload = comment == null ? pendingChanges : { ...pendingChanges, comment };
 
-    submit(formData, {
+    editFetcher.submit(payload, {
       method: "POST",
       action: `/api/metadata/tracks/${trackId}/edit`,
-    });
-
-    // Broadcast the update
-    broadcastCuratorMessage({
-      type: "ENTITY_UPDATED",
-      entityType: "track",
-      entityId: trackId,
+      encType: "application/json",
     });
 
     setShowCommentDialog(false);
     setPendingChanges(null);
-
-    // Show undo toast after successful edit
-    setShowUndoToast(true);
-    // Note: We'll get the edit ID from the response, but for now we'll reload history
-    fetcher.load(`/api/metadata/tracks/${trackId}/history`);
   };
 
   const handleRestore = (editId: string, comment: string | null) => {
     if (!comment) return;
 
-    const formData = new FormData();
-    formData.append("comment", comment);
-
-    submit(formData, {
-      method: "POST",
-      action: `/api/metadata/tracks/${trackId}/restore/${editId}`,
-    });
+    restoreFetcher.submit(
+      { comment },
+      {
+        method: "POST",
+        action: `/api/metadata/tracks/${trackId}/restore/${editId}`,
+        encType: "application/json",
+      },
+    );
   };
 
   return (
@@ -248,9 +273,9 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
                     <TabsTrigger value="history">History</TabsTrigger>
                     <TabsTrigger value="notes">
                       Notes
-                      {fetcher.data?.notesCount ? (
+                      {detailsFetcher.data?.notesCount ? (
                         <span className="ml-1 rounded-full bg-primary/20 px-1.5 py-0.5 text-xs">
-                          {fetcher.data.notesCount}
+                          {detailsFetcher.data.notesCount}
                         </span>
                       ) : null}
                     </TabsTrigger>
@@ -277,11 +302,11 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
                   </TabsContent>
 
                   <TabsContent value="notes" className="mt-4">
-                    {fetcher.data?.currentUserId && (
+                    {detailsFetcher.data?.currentUserId && (
                       <CuratorNotes
                         entityType="track"
                         entityId={trackId}
-                        currentUserId={fetcher.data.currentUserId}
+                        currentUserId={detailsFetcher.data.currentUserId}
                       />
                     )}
                   </TabsContent>
@@ -341,7 +366,7 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
           trackId={trackId}
           onUndo={() => {
             // Reload track details after undo
-            fetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
+            detailsFetcher.load(`/resources/track-details?trackId=${encodeURIComponent(trackId)}`);
           }}
         />
       )}
