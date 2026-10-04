@@ -72,9 +72,22 @@ export async function action({ request, params }: Route.ActionArgs) {
     throw data({ error: "Artist not found" }, { status: 404 });
   }
 
-  // Update artist and create edit history in a transaction
+  // Snapshot the current artist first so restore can recover the pre-edit values.
   const { artist, edit } = await prisma.$transaction(async (tx) => {
-    // Update artist
+    const artistEdit = await tx.artistEdit.create({
+      data: {
+        artistId,
+        editedBy: userId,
+        comment: comment || null,
+        name: existingArtist.name,
+        bio: existingArtist.bio,
+        imageUrl: existingArtist.imageUrl,
+        website: existingArtist.website,
+        genre: existingArtist.genre,
+        country: existingArtist.country,
+      },
+    });
+
     const normalizedName = normalizeArtistName(name);
     const updatedArtist = await tx.artist.update({
       where: { id: artistId },
@@ -86,21 +99,6 @@ export async function action({ request, params }: Route.ActionArgs) {
         country: country !== undefined ? country : undefined,
         imageUrl: imageUrl !== undefined ? imageUrl : undefined,
         website: website !== undefined ? website : undefined,
-      },
-    });
-
-    // Create edit history entry
-    const artistEdit = await tx.artistEdit.create({
-      data: {
-        artistId,
-        editedBy: userId,
-        comment: comment || null,
-        name: updatedArtist.name,
-        bio: updatedArtist.bio,
-        imageUrl: updatedArtist.imageUrl,
-        website: updatedArtist.website,
-        genre: updatedArtist.genre,
-        country: updatedArtist.country,
       },
     });
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { action } from "./artists.$id.edit.tsx";
+import { action as restoreAction } from "./artists+/$id.restore.$editId.tsx";
 
 vi.mock("#app/utils/auth.server.ts", () => ({
   requireUserId: vi.fn(),
@@ -185,9 +186,75 @@ describe("POST /api/metadata/artists/:id/edit", () => {
     });
 
     expect(edits).toHaveLength(1);
-    expect(edits[0]?.name).toBe("Updated Name");
-    expect(edits[0]?.bio).toBe("Updated bio");
+    expect(edits[0]?.name).toBe("Original Name");
+    expect(edits[0]?.bio).toBe("Original bio");
     expect(edits[0]?.comment).toBe("Test edit");
+  });
+
+  test("restore can recover the pre-edit artist snapshot", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
+        roles: { connect: { name: "curator" } },
+      },
+    });
+
+    const artist = await prisma.artist.create({
+      data: {
+        name: "The Beatles",
+        normalizedName: "thebeatles",
+        bio: "British rock band",
+        genre: "Rock",
+        country: "UK",
+      },
+    });
+
+    const editResult = await action({
+      request: new Request(`http://localhost/api/metadata/artists/${artist.id}/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Beatles",
+          bio: "Wrong bio",
+          genre: "Pop",
+          country: "US",
+          comment: "Bad rename",
+        }),
+      }),
+      params: { id: artist.id },
+    } as any);
+
+    expect(editResult.data.artist.name).toBe("Beatles");
+    expect(editResult.data.edit.name).toBe("The Beatles");
+
+    const restoreResult = await restoreAction({
+      request: new Request(
+        `http://localhost/api/metadata/artists/${artist.id}/restore/${editResult.data.edit.id}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comment: "Undo the bad rename" }),
+        },
+      ),
+      params: { id: artist.id, editId: editResult.data.edit.id },
+    } as any);
+
+    expect(restoreResult.data.artist.name).toBe("The Beatles");
+    expect(restoreResult.data.artist.bio).toBe("British rock band");
+    expect(restoreResult.data.artist.genre).toBe("Rock");
+    expect(restoreResult.data.artist.country).toBe("UK");
+
+    const artistInDb = await prisma.artist.findUnique({ where: { id: artist.id } });
+    expect(artistInDb?.name).toBe("The Beatles");
+    expect(artistInDb?.bio).toBe("British rock band");
   });
 
   test("returns 404 for non-existent artist", async () => {
