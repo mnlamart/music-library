@@ -1,5 +1,6 @@
 import { useState, useCallback, memo, type PointerEvent, type ReactNode } from "react";
 import { useAudioPlayer } from "#app/components/audio-player-provider";
+import { TrackDetailsDialog } from "#app/components/track-details-dialog";
 import { TrackThumbnail } from "#app/components/track-thumbnail";
 import { Button } from "#app/components/ui/button";
 import { Checkbox } from "#app/components/ui/checkbox";
@@ -104,6 +105,12 @@ interface TrackListItemProps {
   isSelected?: boolean;
   /** Callback when checkbox is toggled */
   onToggleSelection?: (trackId: string) => void;
+  /**
+   * When true, "View track details" opens the curator metadata editor
+   * (`TrackDetailsDialog`) instead of the read-only details view.
+   * Library passes this for curators and admins.
+   */
+  isCurator?: boolean;
 }
 
 /**
@@ -161,11 +168,13 @@ export const TrackListItem = memo(function TrackListItem({
   showCheckbox = false,
   isSelected = false,
   onToggleSelection,
+  isCurator = false,
 }: TrackListItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionsSheetOpen, setIsActionsSheetOpen] = useState(false);
   const [isPlaylistSheetOpen, setIsPlaylistSheetOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const isMobile = useIsMobile();
   const { currentTrack, currentIndex, playTrack, playNextTrack, addToUpNext, addToQueue } =
     useAudioPlayer();
@@ -188,6 +197,11 @@ export const TrackListItem = memo(function TrackListItem({
   const handleOpenDetailsSheet = useCallback(() => {
     setIsActionsSheetOpen(false);
     setIsDetailsSheetOpen(true);
+  }, []);
+
+  const handleOpenTrackEditor = useCallback(() => {
+    setIsActionsSheetOpen(false);
+    setIsEditorOpen(true);
   }, []);
 
   const hasAudioFiles = isPlayableTrack({ audioFiles: track.audioFiles, isDeleted });
@@ -480,68 +494,80 @@ export const TrackListItem = memo(function TrackListItem({
                 onPointerDown={handleMenuPointerDown}
                 onClick={handleMenuClick}
               >
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                      <Icon name="eye-open" className="h-4 w-4 mr-2" />
-                      View track details
-                    </DropdownMenuItem>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle className="text-left">
-                        <div className="flex items-center gap-3">
-                          <TrackThumbnail
-                            coverImage={track.coverImage}
-                            thumbnailUrl={track.thumbnailUrl}
-                            alt={track.title}
-                            size="md"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium text-sm truncate" title={track.title}>
-                              {track.title}
-                            </div>
-                            <div
-                              className="text-xs text-muted-foreground truncate"
-                              title={track.artist.name}
-                            >
-                              {track.artist.name}
+                {isCurator ? (
+                  <DropdownMenuItem
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleOpenTrackEditor();
+                    }}
+                  >
+                    <Icon name="eye-open" className="h-4 w-4 mr-2" />
+                    View track details
+                  </DropdownMenuItem>
+                ) : (
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        <Icon name="eye-open" className="h-4 w-4 mr-2" />
+                        View track details
+                      </DropdownMenuItem>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle className="text-left">
+                          <div className="flex items-center gap-3">
+                            <TrackThumbnail
+                              coverImage={track.coverImage}
+                              thumbnailUrl={track.thumbnailUrl}
+                              alt={track.title}
+                              size="md"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-sm truncate" title={track.title}>
+                                {track.title}
+                              </div>
+                              <div
+                                className="text-xs text-muted-foreground truncate"
+                                title={track.artist.name}
+                              >
+                                {track.artist.name}
+                              </div>
                             </div>
                           </div>
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="mt-6 space-y-4">
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium">Track Information</div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <div>Artist: {track.artist.name}</div>
+                            <div>Duration: {formatDuration(track.duration)}</div>
+                            <div>Added: {new Date(userTrack.createdAt).toLocaleDateString()}</div>
+                            {track.service?.displayName && (
+                              <div>Source: {track.service.displayName}</div>
+                            )}
+                            {serviceDateAdded && <div>Date added: {serviceDateAdded}</div>}
+                          </div>
                         </div>
-                      </DialogTitle>
-                    </DialogHeader>
-                    <div className="mt-6 space-y-4">
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium">Track Information</div>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <div>Artist: {track.artist.name}</div>
-                          <div>Duration: {formatDuration(track.duration)}</div>
-                          <div>Added: {new Date(userTrack.createdAt).toLocaleDateString()}</div>
-                          {track.service?.displayName && (
-                            <div>Source: {track.service.displayName}</div>
-                          )}
-                          {serviceDateAdded && <div>Date added: {serviceDateAdded}</div>}
-                        </div>
+                        {track.serviceUrl && (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                track.serviceUrl && window.open(track.serviceUrl, "_blank")
+                              }
+                              className="flex-1"
+                            >
+                              <Icon name="link-2" className="h-4 w-4 mr-2" />
+                              Open on YouTube
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      {track.serviceUrl && (
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              track.serviceUrl && window.open(track.serviceUrl, "_blank")
-                            }
-                            className="flex-1"
-                          >
-                            <Icon name="link-2" className="h-4 w-4 mr-2" />
-                            Open on YouTube
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                    </DialogContent>
+                  </Dialog>
+                )}
                 {track.serviceUrl && (
                   <DropdownMenuItem asChild>
                     <a
@@ -667,7 +693,7 @@ export const TrackListItem = memo(function TrackListItem({
                 <Button
                   variant="ghost"
                   className="w-full justify-start h-12 text-base"
-                  onClick={handleOpenDetailsSheet}
+                  onClick={isCurator ? handleOpenTrackEditor : handleOpenDetailsSheet}
                 >
                   <Icon name="eye-open" className="h-5 w-5 mr-3" />
                   View track details
@@ -839,6 +865,16 @@ export const TrackListItem = memo(function TrackListItem({
           </Sheet>
         </>
       )}
+
+      {/*
+        Sibling of the row, same as the mobile sheets: the dialog portals to
+        document.body, but React events still bubble through this tree. Keeping
+        it outside the playable row means opening or using the editor does not
+        start playback.
+      */}
+      {isCurator && isEditorOpen ? (
+        <TrackDetailsDialog trackId={track.id} open={isEditorOpen} onOpenChange={setIsEditorOpen} />
+      ) : null}
     </>
   );
 });
