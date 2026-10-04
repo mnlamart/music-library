@@ -14,6 +14,14 @@ import { type FullTrack } from "#app/types/frontend/shared";
 import { AudioPlayerProvider, useAudioPlayer } from "./audio-player-provider";
 import { TrackListItem } from "./track-list-item";
 
+vi.mock("#app/utils/user.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#app/utils/user.ts")>();
+  return {
+    ...actual,
+    useOptionalUser: () => undefined,
+  };
+});
+
 vi.mock("#app/components/track-details-dialog", () => ({
   TrackDetailsDialog: vi.fn(() => null),
 }));

@@ -93,7 +93,8 @@ export function FlagForReviewDialog({
                 <SelectTrigger id="flag-type">
                   <SelectValue placeholder="Select an issue type" />
                 </SelectTrigger>
-                <SelectContent>
+                {/* DialogContent is z-53. The shared select menu is z-50 and renders under it. */}
+                <SelectContent className="z-[70]">
                   {FLAG_TYPES.map((type) => (
                     <SelectItem key={type.value} value={type.value}>
                       {type.label}

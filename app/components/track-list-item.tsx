@@ -1,5 +1,6 @@
 import { useState, useCallback, memo, type PointerEvent, type ReactNode } from "react";
 import { useAudioPlayer } from "#app/components/audio-player-provider";
+import { FlagForReviewDialog } from "#app/components/flag-for-review-dialog.tsx";
 import { TrackThumbnail } from "#app/components/track-thumbnail";
 import { Button } from "#app/components/ui/button";
 import { Checkbox } from "#app/components/ui/checkbox";
@@ -34,6 +35,7 @@ import { formatServiceDateAdded } from "#app/utils/service-date.ts";
 import { type TrackPopularityStats } from "#app/utils/discover.ts";
 import { formatPopularityStats } from "#app/utils/popularity-format.ts";
 import { useIsMobile } from "#app/utils/use-mobile.ts";
+import { useOptionalUser, userIsCuratorOrAdmin } from "#app/utils/user.ts";
 import { AddToPlaylistMenu } from "./add-to-playlist-menu";
 import { AddToRoomQueueAction } from "./party-room/add-to-room-queue-action";
 
@@ -166,7 +168,10 @@ export const TrackListItem = memo(function TrackListItem({
   const [isActionsSheetOpen, setIsActionsSheetOpen] = useState(false);
   const [isPlaylistSheetOpen, setIsPlaylistSheetOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
+  const [isFlagDialogOpen, setIsFlagDialogOpen] = useState(false);
   const isMobile = useIsMobile();
+  const user = useOptionalUser();
+  const canFlagForReview = userIsCuratorOrAdmin(user);
   const { currentTrack, currentIndex, playTrack, playNextTrack, addToUpNext, addToQueue } =
     useAudioPlayer();
 
@@ -188,6 +193,12 @@ export const TrackListItem = memo(function TrackListItem({
   const handleOpenDetailsSheet = useCallback(() => {
     setIsActionsSheetOpen(false);
     setIsDetailsSheetOpen(true);
+  }, []);
+
+  // Open after the menu or sheet finishes closing. Opening a dialog in the same
+  // turn as a Radix menu close traps focus in a loop.
+  const openFlagDialog = useCallback(() => {
+    window.setTimeout(() => setIsFlagDialogOpen(true), 0);
   }, []);
 
   const hasAudioFiles = isPlayableTrack({ audioFiles: track.audioFiles, isDeleted });
@@ -542,6 +553,12 @@ export const TrackListItem = memo(function TrackListItem({
                     </div>
                   </DialogContent>
                 </Dialog>
+                {canFlagForReview && (
+                  <DropdownMenuItem onSelect={openFlagDialog}>
+                    <Icon name="file-text" className="h-4 w-4 mr-2" />
+                    Flag for review
+                  </DropdownMenuItem>
+                )}
                 {track.serviceUrl && (
                   <DropdownMenuItem asChild>
                     <a
@@ -672,6 +689,19 @@ export const TrackListItem = memo(function TrackListItem({
                   <Icon name="eye-open" className="h-5 w-5 mr-3" />
                   View track details
                 </Button>
+                {canFlagForReview && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-12 text-base"
+                    onClick={() => {
+                      setIsActionsSheetOpen(false);
+                      openFlagDialog();
+                    }}
+                  >
+                    <Icon name="file-text" className="h-5 w-5 mr-3" />
+                    Flag for review
+                  </Button>
+                )}
                 {track.serviceUrl && (
                   <Button variant="ghost" className="w-full justify-start h-12 text-base" asChild>
                     <a href={track.serviceUrl} target="_blank" rel="noopener noreferrer">
@@ -838,6 +868,15 @@ export const TrackListItem = memo(function TrackListItem({
             </SheetContent>
           </Sheet>
         </>
+      )}
+      {canFlagForReview && (
+        <FlagForReviewDialog
+          entityType="track"
+          entityId={track.id}
+          entityName={track.title}
+          open={isFlagDialogOpen}
+          onOpenChange={setIsFlagDialogOpen}
+        />
       )}
     </>
   );
