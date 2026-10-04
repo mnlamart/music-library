@@ -39,6 +39,8 @@ export type LibraryOfflineLoaderData = {
   direction: "desc";
   playlists: [];
   isCurator: false;
+  genreId: null;
+  genre: null;
 };
 
 export type PlaylistsIndexOfflineLoaderData = {
@@ -167,6 +169,8 @@ export const OFFLINE_ROUTE_POLICIES: Record<string, StubEntry> = {
       direction: "desc" as const,
       playlists: [],
       isCurator: false,
+      genreId: null,
+      genre: null,
     } satisfies LibraryOfflineLoaderData;
   }),
 

@@ -209,4 +209,154 @@ describe("listLibraryUserTracks most-played sorts", () => {
 
     expect(userTracks.map((ut) => ut.track.title)).toEqual(["Newer", "Older"]);
   });
+
+  test("genreId returns only that user's active library tracks tagged with the genre", async () => {
+    const user = await prisma.user.create({ data: createUser() });
+    const otherUser = await prisma.user.create({ data: createUser() });
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const taggedNew = await createTrack("Tagged New");
+    const taggedOld = await createTrack("Tagged Old");
+    const untagged = await createTrack("Untagged");
+    const otherUsersTrack = await createTrack("Other Library");
+    const removed = await createTrack("Removed");
+    const silent = await createTrack("Silent");
+    const playable = await createTrack("Playable");
+
+    const genre = await prisma.genre.create({
+      data: {
+        name: `Jazz ${suffix}`,
+        normalizedName: `jazz ${suffix}`,
+        tracks: {
+          connect: [
+            { id: taggedNew.id },
+            { id: taggedOld.id },
+            { id: otherUsersTrack.id },
+            { id: removed.id },
+            { id: silent.id },
+            { id: playable.id },
+          ],
+        },
+      },
+    });
+    const emptyGenre = await prisma.genre.create({
+      data: {
+        name: `Empty ${suffix}`,
+        normalizedName: `empty ${suffix}`,
+      },
+    });
+
+    try {
+      await addToLibrary(user.id, taggedOld.id, new Date("2026-01-01T00:00:00.000Z"));
+      await addToLibrary(user.id, taggedNew.id, new Date("2026-03-01T00:00:00.000Z"));
+      await addToLibrary(user.id, untagged.id, new Date("2026-04-01T00:00:00.000Z"));
+      await addToLibrary(otherUser.id, otherUsersTrack.id, new Date("2026-05-01T00:00:00.000Z"));
+      await prisma.userTrack.create({
+        data: {
+          userId: user.id,
+          trackId: removed.id,
+          isActive: false,
+          deletedAt: new Date("2026-05-02T00:00:00.000Z"),
+          createdAt: new Date("2026-05-02T00:00:00.000Z"),
+        },
+      });
+      await addToLibrary(user.id, silent.id, new Date("2026-02-01T00:00:00.000Z"));
+      await addToLibrary(user.id, playable.id, new Date("2026-02-15T00:00:00.000Z"));
+      await prisma.trackAudioFile.create({
+        data: { trackId: playable.id, objectKey: `audio/${playable.id}.mp3`, format: "mp3" },
+      });
+
+      const { userTracks } = await listLibraryUserTracks({
+        userId: user.id,
+        sort: "dateAdded",
+        genreId: genre.id,
+        limit: 10,
+      });
+
+      expect(userTracks.map((row) => row.track.title)).toEqual([
+        "Tagged New",
+        "Playable",
+        "Silent",
+        "Tagged Old",
+      ]);
+
+      const empty = await listLibraryUserTracks({
+        userId: user.id,
+        sort: "dateAdded",
+        genreId: emptyGenre.id,
+        limit: 10,
+      });
+      expect(empty.userTracks).toEqual([]);
+
+      const playableOnly = await listLibraryUserTracks({
+        userId: user.id,
+        sort: "dateAdded",
+        genreId: genre.id,
+        hasAudioOnly: true,
+        limit: 10,
+      });
+      expect(playableOnly.userTracks.map((row) => row.track.title)).toEqual(["Playable"]);
+
+      await seedCompleted(user.id, untagged.id, new Date("2026-06-01T00:00:00.000Z"), 4);
+      const mostPlayed = await listLibraryUserTracks({
+        userId: user.id,
+        sort: "mostPlayedEver",
+        genreId: genre.id,
+        limit: 10,
+        now: new Date("2026-06-15T00:00:00.000Z"),
+      });
+      expect(mostPlayed.userTracks.map((row) => row.track.title)).not.toContain("Untagged");
+      expect(mostPlayed.userTracks.map((row) => row.track.id)).toEqual(
+        expect.arrayContaining([taggedNew.id, taggedOld.id, silent.id, playable.id]),
+      );
+    } finally {
+      await prisma.genre.deleteMany({ where: { id: { in: [genre.id, emptyGenre.id] } } });
+    }
+  });
+
+  test("genre filter paginates matching tracks only", async () => {
+    const user = await prisma.user.create({ data: createUser() });
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const oldest = await createTrack("Oldest Tagged");
+    const middle = await createTrack("Middle Tagged");
+    const newest = await createTrack("Newest Tagged");
+    const untagged = await createTrack("Newest Untagged");
+    const genre = await prisma.genre.create({
+      data: {
+        name: `Page ${suffix}`,
+        normalizedName: `page ${suffix}`,
+        tracks: { connect: [{ id: oldest.id }, { id: middle.id }, { id: newest.id }] },
+      },
+    });
+
+    try {
+      await addToLibrary(user.id, oldest.id, new Date("2026-01-01T00:00:00.000Z"));
+      await addToLibrary(user.id, middle.id, new Date("2026-02-01T00:00:00.000Z"));
+      await addToLibrary(user.id, newest.id, new Date("2026-03-01T00:00:00.000Z"));
+      await addToLibrary(user.id, untagged.id, new Date("2026-04-01T00:00:00.000Z"));
+
+      const page1 = await listLibraryUserTracks({
+        userId: user.id,
+        sort: "dateAdded",
+        genreId: genre.id,
+        limit: 2,
+      });
+      expect(page1.userTracks.map((row) => row.track.title)).toEqual([
+        "Newest Tagged",
+        "Middle Tagged",
+      ]);
+      expect(page1.pagination.hasNext).toBe(true);
+
+      const page2 = await listLibraryUserTracks({
+        userId: user.id,
+        sort: "dateAdded",
+        genreId: genre.id,
+        limit: 2,
+        cursor: page1.pagination.nextCursor,
+      });
+      expect(page2.userTracks.map((row) => row.track.title)).toEqual(["Oldest Tagged"]);
+      expect(page2.pagination.hasNext).toBe(false);
+    } finally {
+      await prisma.genre.delete({ where: { id: genre.id } });
+    }
+  });
 });
