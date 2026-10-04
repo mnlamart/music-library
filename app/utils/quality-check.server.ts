@@ -1,4 +1,5 @@
 import { prisma } from "./db.server.ts";
+import { getInstanceInfo } from "./litefs.server.ts";
 
 interface QualityIssue {
   trackId: string;
@@ -163,12 +164,87 @@ async function createQueueItems(issues: QualityIssue[]): Promise<number> {
   return createdCount;
 }
 
+/** Poll once a minute; the check itself runs at most once per UTC day. */
+export const QUALITY_CHECK_TICK_INTERVAL_MS = 60 * 1000;
+/** Daily run window opens at 02:00 UTC. */
+export const QUALITY_CHECK_HOUR_UTC = 2;
+/** Space out retries so a failing scan is not repeated on every tick. */
+export const QUALITY_CHECK_RETRY_DELAY_MS = 15 * 60 * 1000;
+
+let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let lastSuccessDay: string | null = null;
+let nextRetryAt: number | null = null;
+let inFlight = false;
+
+export function resetQualityCheckSchedulerForTests(): void {
+  lastSuccessDay = null;
+  nextRetryAt = null;
+  inFlight = false;
+}
+
+export function stopQualityCheckScheduler(): void {
+  if (intervalHandle !== null) {
+    clearInterval(intervalHandle);
+    intervalHandle = null;
+  }
+}
+
 /**
- * Schedule the quality check job
- * This should be called from a cron job or task scheduler
+ * One scheduler tick. Runs the quality check on the LiteFS primary once the UTC
+ * hour reaches {@link QUALITY_CHECK_HOUR_UTC}, and not again until the next UTC day.
  */
-export async function scheduleQualityCheck() {
-  // In production, this would be scheduled via cron or a task scheduler
-  // For now, we'll just run it immediately when called
-  return runQualityCheck();
+export async function processQualityCheckTick(options?: {
+  now?: Date;
+  skipPrimaryCheck?: boolean;
+  run?: typeof runQualityCheck;
+}): Promise<void> {
+  if (inFlight) return;
+
+  const now = options?.now ?? new Date();
+  if (now.getUTCHours() < QUALITY_CHECK_HOUR_UTC) return;
+
+  const day = now.toISOString().slice(0, 10);
+  if (lastSuccessDay === day) return;
+  if (nextRetryAt !== null && now.getTime() < nextRetryAt) return;
+
+  inFlight = true;
+  try {
+    if (!options?.skipPrimaryCheck) {
+      const { currentIsPrimary } = await getInstanceInfo();
+      if (!currentIsPrimary) return;
+    }
+
+    const run = options?.run ?? runQualityCheck;
+    const result = await run();
+    if (result.success) {
+      lastSuccessDay = day;
+      nextRetryAt = null;
+      return;
+    }
+
+    nextRetryAt = now.getTime() + QUALITY_CHECK_RETRY_DELAY_MS;
+  } catch (error) {
+    nextRetryAt = now.getTime() + QUALITY_CHECK_RETRY_DELAY_MS;
+    console.error("Quality check tick failed", error);
+  } finally {
+    inFlight = false;
+  }
+}
+
+/**
+ * Start the in-process quality check on the same lifecycle as the other
+ * background jobs. Idempotent: a second call does not register another interval.
+ */
+export function scheduleQualityCheck(): void {
+  if (intervalHandle !== null) return;
+
+  const runTick = () => {
+    void processQualityCheckTick();
+  };
+
+  void runTick();
+  intervalHandle = setInterval(runTick, QUALITY_CHECK_TICK_INTERVAL_MS);
+  console.log(
+    `Quality check scheduler started (hour UTC: ${QUALITY_CHECK_HOUR_UTC}, tick: ${QUALITY_CHECK_TICK_INTERVAL_MS}ms)`,
+  );
 }

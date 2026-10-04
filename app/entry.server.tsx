@@ -50,6 +50,14 @@ if (process.env.NODE_ENV !== "test") {
   );
 }
 
+// Review-queue quality check (system detection). Daily at 02:00 UTC on the
+// LiteFS primary — same in-process interval as the other background jobs.
+if (process.env.NODE_ENV !== "test") {
+  void import("./utils/quality-check.server.ts").then(({ scheduleQualityCheck }) => {
+    scheduleQualityCheck();
+  });
+}
+
 const MODE = process.env.NODE_ENV ?? "development";
 
 type DocRequestArgs = Parameters<HandleDocumentRequestFunction>;
