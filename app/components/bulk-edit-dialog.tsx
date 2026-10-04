@@ -210,6 +210,7 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
 
             <ArtistAutocomplete
               value={formData.artistId}
+              artistName={formData.artistId ? formData.artistName : null}
               onChange={handleArtistChange}
               onCreateNew={handleCreateArtist}
               label="Artist"
