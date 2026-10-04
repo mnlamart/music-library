@@ -26,6 +26,14 @@ vi.mock("#app/components/ui/use-toast.ts", () => ({
   toast: vi.fn(),
 }));
 
+vi.mock("#app/utils/user.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#app/utils/user.ts")>();
+  return {
+    ...actual,
+    useOptionalUser: () => ({ id: "user-1", roles: [] }),
+  };
+});
+
 vi.mock("#app/features/offline-storage/resolve-playback-url.client.ts", () => ({
   resolveTrackPlaybackSource: vi.fn().mockResolvedValue("https://cdn.example/track.mp3"),
   resolvePlaybackAudioUrl: vi.fn().mockResolvedValue(null),

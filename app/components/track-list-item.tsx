@@ -34,8 +34,10 @@ import { formatServiceDateAdded } from "#app/utils/service-date.ts";
 import { type TrackPopularityStats } from "#app/utils/discover.ts";
 import { formatPopularityStats } from "#app/utils/popularity-format.ts";
 import { useIsMobile } from "#app/utils/use-mobile.ts";
+import { useOptionalUser } from "#app/utils/user.ts";
 import { AddToPlaylistMenu } from "./add-to-playlist-menu";
 import { AddToRoomQueueAction } from "./party-room/add-to-room-queue-action";
+import { ReportIssueDialog } from "./report-issue-dialog";
 
 interface TrackListItemData {
   id: string;
@@ -118,6 +120,7 @@ interface TrackListItemProps {
  * - Responsive action menu (sheet on mobile, dropdown on desktop)
  * - Add to playlist functionality with duplicate detection
  * - External link actions
+ * - Report Issue for any signed-in user
  *
  * @param track - Track data including title, artist, duration, etc.
  * @param userTrack - User-specific track data (creation date, etc.)
@@ -166,7 +169,9 @@ export const TrackListItem = memo(function TrackListItem({
   const [isActionsSheetOpen, setIsActionsSheetOpen] = useState(false);
   const [isPlaylistSheetOpen, setIsPlaylistSheetOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
   const isMobile = useIsMobile();
+  const user = useOptionalUser();
   const { currentTrack, currentIndex, playTrack, playNextTrack, addToUpNext, addToQueue } =
     useAudioPlayer();
 
@@ -189,6 +194,19 @@ export const TrackListItem = memo(function TrackListItem({
     setIsActionsSheetOpen(false);
     setIsDetailsSheetOpen(true);
   }, []);
+
+  const handleOpenReportDialog = useCallback(() => {
+    setIsActionsSheetOpen(false);
+    // Opening a dialog in the same turn as a menu or sheet close loops Radix
+    // focus restoration. On mobile, also wait for the sheet close animation so
+    // its overlay does not cover the dialog.
+    window.setTimeout(
+      () => {
+        setIsReportDialogOpen(true);
+      },
+      isMobile ? 300 : 0,
+    );
+  }, [isMobile]);
 
   const hasAudioFiles = isPlayableTrack({ audioFiles: track.audioFiles, isDeleted });
 
@@ -542,6 +560,12 @@ export const TrackListItem = memo(function TrackListItem({
                     </div>
                   </DialogContent>
                 </Dialog>
+                {user ? (
+                  <DropdownMenuItem onSelect={handleOpenReportDialog}>
+                    <Icon name="question-mark-circled" className="h-4 w-4 mr-2" />
+                    Report Issue
+                  </DropdownMenuItem>
+                ) : null}
                 {track.serviceUrl && (
                   <DropdownMenuItem asChild>
                     <a
@@ -672,6 +696,16 @@ export const TrackListItem = memo(function TrackListItem({
                   <Icon name="eye-open" className="h-5 w-5 mr-3" />
                   View track details
                 </Button>
+                {user ? (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-12 text-base"
+                    onClick={handleOpenReportDialog}
+                  >
+                    <Icon name="question-mark-circled" className="h-5 w-5 mr-3" />
+                    Report Issue
+                  </Button>
+                ) : null}
                 {track.serviceUrl && (
                   <Button variant="ghost" className="w-full justify-start h-12 text-base" asChild>
                     <a href={track.serviceUrl} target="_blank" rel="noopener noreferrer">
@@ -839,6 +873,14 @@ export const TrackListItem = memo(function TrackListItem({
           </Sheet>
         </>
       )}
+      {isReportDialogOpen ? (
+        <ReportIssueDialog
+          trackId={track.id}
+          trackTitle={track.title}
+          open={isReportDialogOpen}
+          onOpenChange={setIsReportDialogOpen}
+        />
+      ) : null}
     </>
   );
 });

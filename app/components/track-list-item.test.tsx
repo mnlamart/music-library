@@ -17,6 +17,31 @@ const mockAddToUpNext = vi.fn();
 const mockAddToQueue = vi.fn();
 const mockToast = vi.fn();
 
+const { mockUserRef, mockSubmit } = vi.hoisted(() => ({
+  mockUserRef: { current: { id: "user-1" } as { id: string } | undefined },
+  mockSubmit: vi.fn(),
+}));
+
+vi.mock("#app/utils/user.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#app/utils/user.ts")>();
+  return {
+    ...actual,
+    useOptionalUser: () => mockUserRef.current,
+  };
+});
+
+vi.mock("react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router")>();
+  return {
+    ...actual,
+    useFetcher: () => ({
+      state: "idle" as const,
+      data: undefined,
+      submit: mockSubmit,
+    }),
+  };
+});
+
 let mockPlayerState: {
   currentTrack: FullTrack | null;
   currentIndex: number;
@@ -104,6 +129,8 @@ function renderTrackListItem(props: Partial<ComponentProps<typeof TrackListItem>
 
 beforeEach(() => {
   mockIsMobile = false;
+  mockUserRef.current = { id: "user-1" };
+  mockSubmit.mockReset();
   mockPlayerState = {
     currentTrack: null,
     currentIndex: 0,
@@ -268,6 +295,67 @@ test("showQuickAddToPlaylist renders add button and opens playlist menu on deskt
 
   await user.click(screen.getByRole("button", { name: "Add to playlist" }));
   expect(screen.getByText("My Playlist")).toBeDefined();
+});
+
+test("signed-in user sees Report Issue in the desktop overflow menu", async () => {
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  expect(screen.getByRole("menuitem", { name: "Report Issue" })).toBeDefined();
+});
+
+test("signed-in user sees Report Issue in the mobile actions sheet", async () => {
+  mockIsMobile = true;
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  await user.click(screen.getByRole("button", { name: "Report Issue" }));
+  expect(await screen.findByRole("dialog", { name: "Report Issue" })).toBeDefined();
+  expect(screen.getByText(/Report a problem with "Test Song"/)).toBeDefined();
+});
+
+test("signed-out user does not see Report Issue", async () => {
+  mockUserRef.current = undefined;
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  expect(screen.queryByRole("menuitem", { name: "Report Issue" })).toBeNull();
+});
+
+test("submitting Report Issue posts trackId, issueType, and description", async () => {
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  await user.click(screen.getByRole("menuitem", { name: "Report Issue" }));
+  expect(await screen.findByRole("dialog", { name: "Report Issue" })).toBeDefined();
+
+  const issueType = document.querySelector("select");
+  if (!(issueType instanceof HTMLSelectElement)) {
+    throw new Error("Expected the report issue type select");
+  }
+  await user.selectOptions(issueType, "wrong_metadata");
+  await user.type(screen.getByLabelText(/description/i), "The artist name is wrong");
+  await user.click(screen.getByRole("button", { name: "Submit Report" }));
+
+  expect(mockSubmit).toHaveBeenCalledTimes(1);
+  const [formData, options] = mockSubmit.mock.calls[0] as [
+    FormData,
+    { method: string; action: string },
+  ];
+  expect(Object.fromEntries(formData.entries())).toEqual({
+    trackId: "track-1",
+    issueType: "wrong_metadata",
+    description: "The artist name is wrong",
+  });
+  expect(options).toEqual({ method: "POST", action: "/api/curator/queue/report" });
 });
 
 test("showQuickAddToPlaylist opens playlist sheet directly on mobile", async () => {
