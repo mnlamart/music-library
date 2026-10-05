@@ -48,6 +48,11 @@ interface AddToPlaylistMenuProps {
   playlists?: Playlist[];
   /** Optional callback when track is successfully added (used to close sheets on mobile) */
   onSuccess?: () => void;
+  /**
+   * Shrink the playlist list within a height-capped parent so "New playlist"
+   * stays inside the sheet. Desktop dropdowns omit this and keep a fixed list.
+   */
+  constrainHeight?: boolean;
 }
 
 /**
@@ -60,6 +65,7 @@ export function AddToPlaylistMenu({
   trackTitle,
   playlists,
   onSuccess,
+  constrainHeight = false,
 }: AddToPlaylistMenuProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [duplicatePlaylist, setDuplicatePlaylist] = useState<Playlist | null>(null);
@@ -247,9 +253,51 @@ export function AddToPlaylistMenu({
 
   const isBusy = fetcher.state !== "idle" || createFetcher.state !== "idle";
 
+  const playlistListBody = isLoadingPlaylists ? (
+    <div role="status" aria-label="Loading playlists" className="space-y-1">
+      {PLAYLIST_SKELETON_KEYS.map((key) => (
+        <div key={key} className="px-2 py-2" aria-hidden="true">
+          <Skeleton className="h-4 w-2/3 mb-1.5" />
+          <Skeleton className="h-3 w-1/4" />
+        </div>
+      ))}
+    </div>
+  ) : filteredPlaylists.length === 0 ? (
+    <div
+      className="py-8 text-center text-sm text-muted-foreground"
+      role="status"
+      aria-live="polite"
+    >
+      {searchQuery ? "No playlists found" : "No playlists yet"}
+    </div>
+  ) : (
+    <div role="list" aria-label="Available playlists" className="space-y-1">
+      {filteredPlaylists.map((playlist) => (
+        <button
+          key={playlist.id}
+          onClick={() => handleAddToPlaylist(playlist)}
+          disabled={isBusy}
+          role="listitem"
+          aria-label={`Add "${trackTitle}" to ${playlist.title}`}
+          aria-describedby={`playlist-info-${playlist.id}`}
+          className="w-full text-left px-2 py-2 rounded hover:bg-accent transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        >
+          <div className="font-medium text-sm">{playlist.title}</div>
+          <div id={`playlist-info-${playlist.id}`} className="text-xs text-muted-foreground">
+            {playlist._count.tracks} {playlist._count.tracks === 1 ? "track" : "tracks"}
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <>
-      <div className="w-full p-2" role="dialog" aria-label="Add to playlist">
+      <div
+        className={constrainHeight ? "flex min-h-0 w-full shrink flex-col p-2" : "w-full p-2"}
+        role="dialog"
+        aria-label="Add to playlist"
+      >
         <label htmlFor="playlist-search" className="sr-only">
           Search playlists
         </label>
@@ -258,7 +306,7 @@ export function AddToPlaylistMenu({
           placeholder="Search playlists..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="mb-2"
+          className="mb-2 shrink-0"
           aria-describedby="playlist-count"
         />
 
@@ -267,50 +315,17 @@ export function AddToPlaylistMenu({
           available
         </div>
 
-        <ScrollArea className="h-64">
-          {isLoadingPlaylists ? (
-            <div role="status" aria-label="Loading playlists" className="space-y-1">
-              {PLAYLIST_SKELETON_KEYS.map((key) => (
-                <div key={key} className="px-2 py-2" aria-hidden="true">
-                  <Skeleton className="h-4 w-2/3 mb-1.5" />
-                  <Skeleton className="h-3 w-1/4" />
-                </div>
-              ))}
-            </div>
-          ) : filteredPlaylists.length === 0 ? (
-            <div
-              className="py-8 text-center text-sm text-muted-foreground"
-              role="status"
-              aria-live="polite"
-            >
-              {searchQuery ? "No playlists found" : "No playlists yet"}
-            </div>
-          ) : (
-            <div role="list" aria-label="Available playlists" className="space-y-1">
-              {filteredPlaylists.map((playlist) => (
-                <button
-                  key={playlist.id}
-                  onClick={() => handleAddToPlaylist(playlist)}
-                  disabled={isBusy}
-                  role="listitem"
-                  aria-label={`Add "${trackTitle}" to ${playlist.title}`}
-                  aria-describedby={`playlist-info-${playlist.id}`}
-                  className="w-full text-left px-2 py-2 rounded hover:bg-accent transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                >
-                  <div className="font-medium text-sm">{playlist.title}</div>
-                  <div
-                    id={`playlist-info-${playlist.id}`}
-                    className="text-xs text-muted-foreground"
-                  >
-                    {playlist._count.tracks} {playlist._count.tracks === 1 ? "track" : "tracks"}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </ScrollArea>
+        {constrainHeight ? (
+          <div className="h-64 min-h-0 shrink overflow-y-auto" data-testid="add-to-playlist-list">
+            {playlistListBody}
+          </div>
+        ) : (
+          <ScrollArea className="h-64" data-testid="add-to-playlist-list">
+            {playlistListBody}
+          </ScrollArea>
+        )}
 
-        <div className="mt-2 border-t pt-2">
+        <div className="mt-2 shrink-0 border-t pt-2">
           {isCreating ? (
             <div
               className="space-y-2"

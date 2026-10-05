@@ -779,8 +779,12 @@ export const TrackListItem = memo(function TrackListItem({
         <>
           {/* Actions Sheet */}
           <Sheet open={isActionsSheetOpen} onOpenChange={setIsActionsSheetOpen}>
-            <SheetContent side="bottom" className="h-[60vh]">
-              <SheetHeader>
+            <SheetContent
+              side="bottom"
+              className="flex h-[60vh] flex-col gap-0 overflow-hidden"
+              data-testid="track-actions-sheet"
+            >
+              <SheetHeader className="shrink-0">
                 <SheetTitle className="text-left">
                   <div className="flex items-center gap-3">
                     <TrackThumbnail
@@ -803,7 +807,10 @@ export const TrackListItem = memo(function TrackListItem({
                   </div>
                 </SheetTitle>
               </SheetHeader>
-              <div className="mt-6 space-y-1">
+              <div
+                className="mt-6 min-h-0 flex-1 space-y-1 overflow-y-auto"
+                data-testid="track-actions-scroll"
+              >
                 <Button
                   variant="ghost"
                   className="w-full justify-start h-12 text-base"

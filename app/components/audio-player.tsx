@@ -608,7 +608,8 @@ function PlayerNowPlayingSheet({
               </SheetTrigger>
               <SheetContent
                 side="bottom"
-                className="flex max-h-[60vh] flex-col"
+                className="flex max-h-[60vh] flex-col overflow-y-auto"
+                data-testid="player-add-to-playlist-sheet"
                 onOpenAutoFocus={(e) => e.preventDefault()}
               >
                 <SheetHeader className="text-left flex-shrink-0">
@@ -617,7 +618,7 @@ function PlayerNowPlayingSheet({
                     Add this track to one of your playlists
                   </SheetDescription>
                 </SheetHeader>
-                <AddToPlaylistMenu trackId={track.id} trackTitle={track.title} />
+                <AddToPlaylistMenu constrainHeight trackId={track.id} trackTitle={track.title} />
               </SheetContent>
             </Sheet>
             <SleepTimerControl
