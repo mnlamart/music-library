@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
 import { parseString } from "set-cookie-parser";
 import { afterEach, expect, test, vi } from "vitest";
@@ -200,6 +201,95 @@ test("duplicate groups from a successful lookup are shown", async () => {
   expect(screen.getByRole("heading", { name: "Exact Duplicate Albums" })).toBeTruthy();
   expect(screen.getByText(/Abbey Road by The Beatles/)).toBeTruthy();
   expect(screen.queryByText(/your library is clean/i)).toBeNull();
+});
+
+test("merge these shows the chosen artist pair and can be confirmed", async () => {
+  const user = userEvent.setup();
+  const cookieHeader = await createSession("admin");
+  stubDuplicateFetch(async (url) => {
+    if (url.includes("/albums")) return Response.json(emptyGroups);
+    return Response.json({
+      exact: [
+        {
+          normalizedName: "the beatles",
+          artists: [
+            { id: "artist-1", name: "The Beatles", trackCount: 10, albumCount: 2 },
+            { id: "artist-2", name: "Beatles", trackCount: 1, albumCount: 0 },
+          ],
+          totalTracks: 11,
+        },
+      ],
+      fuzzy: [],
+    });
+  });
+
+  renderDuplicatesPage(cookieHeader);
+
+  await user.click(await screen.findByRole("button", { name: "Merge These →" }, { timeout: 5000 }));
+
+  const dialog = await screen.findByRole("dialog", { name: "Merge Artists" });
+  expect(dialog).toHaveTextContent("The Beatles");
+  expect(dialog).toHaveTextContent("Beatles");
+  expect(screen.queryByText("No artist selected")).toBeNull();
+
+  await user.type(screen.getByLabelText(/Merge Reason/), "Same artist");
+  await user.click(screen.getByLabelText(/I understand this action/));
+  expect(screen.getByRole("button", { name: "Confirm Merge" })).toBeEnabled();
+});
+
+test("a later album group replaces the pair already shown in the merge dialog", async () => {
+  const user = userEvent.setup();
+  const cookieHeader = await createSession("admin");
+  stubDuplicateFetch(async (url) => {
+    if (url.includes("/albums")) {
+      return Response.json({
+        exact: [
+          {
+            normalizedName: "north album",
+            artistId: "artist-1",
+            artistName: "Host",
+            albums: [
+              { id: "album-north", name: "North Album", year: null, trackCount: 4 },
+              { id: "album-north-2", name: "North Album Copy", year: null, trackCount: 1 },
+            ],
+            totalTracks: 5,
+          },
+          {
+            normalizedName: "south album",
+            artistId: "artist-1",
+            artistName: "Host",
+            albums: [
+              { id: "album-south", name: "South Album", year: null, trackCount: 3 },
+              { id: "album-south-2", name: "South Album Copy", year: null, trackCount: 1 },
+            ],
+            totalTracks: 4,
+          },
+        ],
+        fuzzy: [],
+      });
+    }
+    return Response.json(emptyGroups);
+  });
+
+  renderDuplicatesPage(cookieHeader);
+
+  const mergeButtons = await screen.findAllByRole(
+    "button",
+    { name: "Merge These →" },
+    { timeout: 5000 },
+  );
+  await user.click(mergeButtons[0]!);
+  expect(await screen.findByRole("dialog", { name: "Merge Albums" })).toHaveTextContent(
+    "North Album",
+  );
+
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  await user.click(mergeButtons[1]!);
+
+  const dialog = await screen.findByRole("dialog", { name: "Merge Albums" });
+  expect(dialog).toHaveTextContent("South Album");
+  expect(dialog).not.toHaveTextContent("North Album");
+  expect(screen.queryByText("No album selected")).toBeNull();
 });
 
 test("duplicate lookups use a trusted origin and only the session cookie", async () => {

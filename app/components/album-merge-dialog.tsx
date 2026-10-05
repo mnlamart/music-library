@@ -43,6 +43,18 @@ export function AlbumMergeDialog({
   const [comment, setComment] = useState("");
   const [keepAsAlias, setKeepAsAlias] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
+  const [appliedPair, setAppliedPair] = useState(
+    `${initialSource?.id ?? ""}:${initialTarget?.id ?? ""}`,
+  );
+  const nextPair = `${initialSource?.id ?? ""}:${initialTarget?.id ?? ""}`;
+  // The dialog stays mounted across groups. Apply the latest pair before paint.
+  if (appliedPair !== nextPair) {
+    setAppliedPair(nextPair);
+    setSourceAlbum(initialSource);
+    setTargetAlbum(initialTarget);
+    setComment("");
+    setConfirmed(false);
+  }
 
   const isSubmitting = mergeFetcher.state !== "idle";
   const canSubmit = sourceAlbum && targetAlbum && comment.trim() && confirmed;
