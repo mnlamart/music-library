@@ -120,6 +120,31 @@ describe("awardCuratorBadges", () => {
     expect(await prisma.curatorBadge.count({ where: { curatorId: curator.id } })).toBe(2);
   });
 
+  test("overlapping awards store each badge once", async () => {
+    const curator = await createCurator("RaceCurator");
+    const { track, artist } = await createTrack("Race Track");
+    await prisma.trackEdit.create({
+      data: {
+        trackId: track.id,
+        editedBy: curator.id,
+        title: track.title,
+        artistId: artist.id,
+        genre: "Jazz",
+      },
+    });
+    resetBadgeAwardCache();
+
+    const results = await Promise.all([awardCuratorBadges(), awardCuratorBadges()]);
+
+    expect(results.filter((result) => result.skipped)).toHaveLength(1);
+    expect(results.reduce((sum, result) => sum + result.awarded, 0)).toBe(1);
+    expect(
+      (await prisma.curatorBadge.findMany({ where: { curatorId: curator.id } })).map(
+        (badge) => badge.badgeType,
+      ),
+    ).toEqual(["first_edit"]);
+  });
+
   test("counts merges, genre changes, and resolved user reports without awarding early", async () => {
     const curator = await createCurator("StatsCurator");
     const { track, artist } = await createTrack("Genre Track", "Jazz");
