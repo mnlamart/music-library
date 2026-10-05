@@ -52,6 +52,46 @@ export interface MetadataIssues {
   artistsWithoutGenre: number;
 }
 
+const placeholderTitleWhere = {
+  OR: [
+    { title: { in: ["Unknown", "Track", "Untitled", "N/A", "", "Audio"] } },
+    { title: { startsWith: "Track " } },
+    { title: { startsWith: "Untitled" } },
+  ],
+};
+
+const suspiciousDurationWhere = {
+  // Track.duration is stored in seconds, not milliseconds.
+  OR: [{ duration: { lt: 5 } }, { duration: { gt: 2 * 60 * 60 } }],
+};
+
+const missingEssentialsWhere = {
+  OR: [{ duration: null }, { coverImageId: null }, { year: null }],
+};
+
+function invalidYearWhere(currentYear: number) {
+  return {
+    AND: [
+      { year: { not: null } },
+      {
+        OR: [{ year: { lt: 1850 } }, { year: { gt: currentYear + 1 } }],
+      },
+    ],
+  };
+}
+
+/** Tracks matching any track-level metadata issue. Excludes artist-only rows. */
+function trackLevelMetadataIssueWhere(currentYear: number) {
+  return {
+    OR: [
+      placeholderTitleWhere,
+      suspiciousDurationWhere,
+      missingEssentialsWhere,
+      invalidYearWhere(currentYear),
+    ],
+  };
+}
+
 export async function getMetadataIssues(): Promise<MetadataIssues> {
   const currentYear = new Date().getFullYear();
 
@@ -62,36 +102,10 @@ export async function getMetadataIssues(): Promise<MetadataIssues> {
     invalidYears,
     artistsWithoutGenre,
   ] = await Promise.all([
-    prisma.track.count({
-      where: {
-        OR: [
-          { title: { in: ["Unknown", "Track", "Untitled", "N/A", "", "Audio"] } },
-          { title: { startsWith: "Track " } },
-          { title: { startsWith: "Untitled" } },
-        ],
-      },
-    }),
-    prisma.track.count({
-      where: {
-        // Track.duration is stored in seconds, not milliseconds.
-        OR: [{ duration: { lt: 5 } }, { duration: { gt: 2 * 60 * 60 } }],
-      },
-    }),
-    prisma.track.count({
-      where: {
-        OR: [{ duration: null }, { coverImageId: null }, { year: null }],
-      },
-    }),
-    prisma.track.count({
-      where: {
-        AND: [
-          { year: { not: null } },
-          {
-            OR: [{ year: { lt: 1850 } }, { year: { gt: currentYear + 1 } }],
-          },
-        ],
-      },
-    }),
+    prisma.track.count({ where: placeholderTitleWhere }),
+    prisma.track.count({ where: suspiciousDurationWhere }),
+    prisma.track.count({ where: missingEssentialsWhere }),
+    prisma.track.count({ where: invalidYearWhere(currentYear) }),
     prisma.artist.count({
       where: {
         OR: [{ genre: null }, { genre: "" }],
@@ -109,6 +123,12 @@ export async function getMetadataIssues(): Promise<MetadataIssues> {
     invalidYears,
     artistsWithoutGenre,
   };
+}
+
+/** Distinct tracks with at least one track-level metadata issue. */
+export async function countTracksWithMetadataIssues(): Promise<number> {
+  const currentYear = new Date().getFullYear();
+  return prisma.track.count({ where: trackLevelMetadataIssueWhere(currentYear) });
 }
 
 export interface StorageStats {
