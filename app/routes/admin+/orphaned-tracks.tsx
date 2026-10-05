@@ -45,6 +45,42 @@ type TabType = (typeof TABS)[number];
 
 const PAGE_SIZE = 50;
 
+const FAILED_DOWNLOAD_ERROR_CATEGORIES = [
+  "AUTH",
+  "RATE_LIMITED",
+  "GEO_BLOCKED",
+  "VIDEO_UNAVAILABLE",
+  "NETWORK",
+  "COOKIE_EXPIRED",
+  "FILE_NOT_FOUND",
+  "FORMAT_UNAVAILABLE",
+  "UNKNOWN",
+] as const;
+
+function orphanPageHref({
+  tab,
+  page,
+  serviceFilter,
+  errorCategoryFilter,
+  ageFilter,
+}: {
+  tab: string;
+  page: number;
+  serviceFilter: string;
+  errorCategoryFilter: string;
+  ageFilter: string;
+}) {
+  const params = new URLSearchParams();
+  params.set("tab", tab);
+  if (page > 1) params.set("page", String(page));
+  if (tab === "missing-audio" && serviceFilter !== "all") params.set("service", serviceFilter);
+  if (tab === "failed-downloads" && errorCategoryFilter !== "all") {
+    params.set("errorCategory", errorCategoryFilter);
+  }
+  if (tab === "unused-tracks" && ageFilter !== "30d") params.set("age", ageFilter);
+  return `?${params.toString()}`;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   await requireUserWithRole(request, "admin");
 
@@ -190,7 +226,8 @@ function ErrorBadge({ category }: { category: string }) {
 }
 
 export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps) {
-  const { stats, tab, tabData, serviceFilter, ageFilter } = loaderData;
+  const { stats, tab, tabData, page, totalPages, serviceFilter, errorCategoryFilter, ageFilter } =
+    loaderData;
 
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 
@@ -308,6 +345,28 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
                     <SelectItem value="local">Local</SelectItem>
                   </SelectContent>
                 </Select>
+                <Button type="submit" variant="outline" size="sm">
+                  Filter
+                </Button>
+              </Form>
+            )}
+
+            {tab === "failed-downloads" && (
+              <Form method="get" className="flex gap-2">
+                <input type="hidden" name="tab" value={tab} />
+                <select
+                  name="errorCategory"
+                  aria-label="Error category"
+                  defaultValue={errorCategoryFilter}
+                  className="border-input bg-background h-10 rounded-md border px-3 text-sm"
+                >
+                  <option value="all">All categories</option>
+                  {FAILED_DOWNLOAD_ERROR_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
                 <Button type="submit" variant="outline" size="sm">
                   Filter
                 </Button>
@@ -552,6 +611,58 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
               )}
             </TableBody>
           </Table>
+        )}
+
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between gap-3 border-t pt-4">
+            <p className="text-muted-foreground text-sm">
+              Page {page} of {totalPages}
+            </p>
+            <div className="flex gap-2">
+              {page > 1 ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link
+                    to={orphanPageHref({
+                      tab,
+                      page: page - 1,
+                      serviceFilter,
+                      errorCategoryFilter,
+                      ageFilter,
+                    })}
+                  >
+                    <Icon name="chevron-double-left" />
+                    Previous
+                  </Link>
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled>
+                  <Icon name="chevron-double-left" />
+                  Previous
+                </Button>
+              )}
+              {page < totalPages ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link
+                    to={orphanPageHref({
+                      tab,
+                      page: page + 1,
+                      serviceFilter,
+                      errorCategoryFilter,
+                      ageFilter,
+                    })}
+                  >
+                    Next
+                    <Icon name="chevron-double-right" />
+                  </Link>
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled>
+                  Next
+                  <Icon name="chevron-double-right" />
+                </Button>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
