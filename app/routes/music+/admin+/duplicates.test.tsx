@@ -1,22 +1,83 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen } from "@testing-library/react";
+import { useEffect, useState } from "react";
+import { act, render, screen, within } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import DuplicatesRoute from "./duplicates.tsx";
 
+const { toastSpy, fetcherControls } = vi.hoisted(() => {
+  type Snapshot = {
+    state: "idle" | "submitting" | "loading";
+    data:
+      | {
+          success?: boolean;
+          trackId?: string;
+          objectsDeleted?: number;
+          objectsPreserved?: number;
+        }
+      | undefined;
+    formData: FormData | undefined;
+    submit: ReturnType<typeof vi.fn>;
+  };
+  const listeners = new Set<() => void>();
+  let snapshot: Snapshot = {
+    state: "idle",
+    data: undefined,
+    formData: undefined,
+    submit: vi.fn(),
+  };
+  const publish = (next: Snapshot) => {
+    snapshot = next;
+    listeners.forEach((listener) => listener());
+  };
+  return {
+    toastSpy: vi.fn(),
+    fetcherControls: {
+      get: () => snapshot,
+      reset: () => {
+        publish({
+          state: "idle",
+          data: undefined,
+          formData: undefined,
+          submit: vi.fn(),
+        });
+      },
+      set: (partial: Partial<Omit<Snapshot, "submit">>) => {
+        publish({ ...snapshot, ...partial });
+      },
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    },
+  };
+});
+
+vi.mock("#app/components/ui/use-toast.ts", () => ({
+  useToast: () => ({ toast: toastSpy }),
+}));
+
 vi.mock("react-router", async (importOriginal) => {
+  const React = await import("react");
   const actual = await importOriginal<typeof import("react-router")>();
   return {
     ...actual,
-    useFetcher: () => ({
-      state: "idle",
-      data: undefined,
-      submit: vi.fn(),
-      formData: undefined,
-    }),
+    useFetcher: () => {
+      const [, rerender] = React.useState(0);
+      React.useEffect(() => fetcherControls.subscribe(() => rerender((count) => count + 1)), []);
+      return fetcherControls.get();
+    },
   };
+});
+
+beforeEach(() => {
+  toastSpy.mockClear();
+  fetcherControls.reset();
 });
 
 const exactGroup = {
@@ -81,35 +142,39 @@ const similarGroup = {
 function renderDashboard(
   groups: Array<typeof exactGroup | typeof similarGroup>,
   path = "/music/admin/duplicates",
+  groupsRef?: { setGroups?: (next: typeof groups) => void },
 ) {
   const filter = (new URL(path, "http://localhost").searchParams.get("filter") ?? "all") as
     | "all"
     | "exact"
     | "similar"
     | "intentional";
-  const router = createMemoryRouter(
-    [
-      {
-        path: "/music/admin/duplicates",
-        element: (
-          <DuplicatesRoute
-            loaderData={{
-              stats: {
-                storageSaved: 2048,
-                duplicateGroups: groups.length,
-                totalDuplicates: groups.length,
-              },
-              groups,
-              filter,
-            }}
-            params={{}}
-            matches={[] as never}
-          />
-        ),
-      },
-    ],
-    { initialEntries: [path] },
-  );
+
+  function Harness() {
+    const [currentGroups, setCurrentGroups] = useState(groups);
+    useEffect(() => {
+      if (groupsRef) groupsRef.setGroups = setCurrentGroups;
+    }, []);
+    return (
+      <DuplicatesRoute
+        loaderData={{
+          stats: {
+            storageSaved: 2048,
+            duplicateGroups: currentGroups.length,
+            totalDuplicates: currentGroups.length,
+          },
+          groups: currentGroups,
+          filter,
+        }}
+        params={{}}
+        matches={[] as never}
+      />
+    );
+  }
+
+  const router = createMemoryRouter([{ path: "/music/admin/duplicates", element: <Harness /> }], {
+    initialEntries: [path],
+  });
   return render(<RouterProvider router={router} />);
 }
 
@@ -128,4 +193,100 @@ test("hides keep both when viewing intentional groups", async () => {
 
   expect(await screen.findByRole("button", { name: /intentional/i })).toBeEnabled();
   expect(screen.queryByRole("button", { name: /keep both/i })).not.toBeInTheDocument();
+});
+
+test("shows Track Deleted when deleting the last extra unmounts the group", async () => {
+  const user = userEvent.setup();
+  const groupsRef: {
+    setGroups?: (next: Array<typeof exactGroup | typeof similarGroup>) => void;
+  } = {};
+  renderDashboard([exactGroup], "/music/admin/duplicates", groupsRef);
+
+  expect(screen.getAllByRole("button", { name: /^delete$/i })).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: /^delete$/i }));
+
+  const dialog = await screen.findByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+  expect(fetcherControls.get().submit).toHaveBeenCalledWith(null, {
+    method: "DELETE",
+    action: "/api/admin/tracks/t2",
+  });
+
+  const success = { success: true, trackId: "t2" };
+
+  // Action data arrives while revalidation is still in flight. The card hides
+  // itself (one track left) but stays mounted.
+  await act(async () => {
+    fetcherControls.set({ state: "loading", data: success });
+  });
+  expect(screen.queryByRole("heading", { name: "Original Song" })).not.toBeInTheDocument();
+
+  // Revalidation finishes in the same update that drops the group, so the card
+  // unmounts without committing an idle render.
+  await act(async () => {
+    fetcherControls.set({ state: "idle", data: success });
+    groupsRef.setGroups?.([]);
+  });
+
+  expect(toastSpy).toHaveBeenCalledTimes(1);
+  expect(toastSpy).toHaveBeenCalledWith({
+    title: "Track Deleted",
+    description: "Track has been removed from the database.",
+  });
+});
+
+test("shows Track Deleted once when the group stays mounted after delete", async () => {
+  const user = userEvent.setup();
+  const copy = exactGroup.tracks[1];
+  if (!copy) throw new Error("expected a duplicate track");
+  const triple = {
+    ...exactGroup,
+    tracks: [
+      ...exactGroup.tracks,
+      {
+        ...copy,
+        trackId: "t3",
+        title: "Third Copy",
+        fileName: "third.mp3",
+        audioFileId: "a3",
+      },
+    ],
+  };
+  renderDashboard([triple]);
+
+  const deleteButton = screen.getAllByRole("button", { name: /^delete$/i })[0];
+  if (!deleteButton) throw new Error("expected a delete button");
+  await user.click(deleteButton);
+  const dialog = await screen.findByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
+
+  const success = { success: true, trackId: "t2" };
+  await act(async () => {
+    fetcherControls.set({ state: "loading", data: success });
+  });
+  await act(async () => {
+    fetcherControls.set({ state: "idle", data: success });
+  });
+
+  expect(screen.getByRole("heading", { name: "Original Song" })).toBeInTheDocument();
+  expect(screen.queryByText("Copy Song")).not.toBeInTheDocument();
+  expect(toastSpy).toHaveBeenCalledTimes(1);
+  expect(toastSpy).toHaveBeenCalledWith({
+    title: "Track Deleted",
+    description: "Track has been removed from the database.",
+  });
+});
+
+test("cancel on Delete track does not send DELETE", async () => {
+  const user = userEvent.setup();
+  renderDashboard([exactGroup]);
+
+  await user.click(screen.getByRole("button", { name: /^delete$/i }));
+  const dialog = await screen.findByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: /^cancel$/i }));
+
+  expect(fetcherControls.get().submit).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(screen.getByText("Copy Song")).toBeInTheDocument();
 });
