@@ -4,21 +4,32 @@
  * TrackListItem UI tests. Queue action *behavior* (order, queue sheet visibility) lives in
  * audio-player-queue.integration.test.tsx — these tests only cover menu wiring and visibility.
  */
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, type ReactNode } from "react";
+import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { type FullTrack } from "#app/types/frontend/shared";
 import { TrackListItem } from "./track-list-item";
 
-const mockPlayTrack = vi.fn();
-const mockPlayNextTrack = vi.fn();
-const mockAddToUpNext = vi.fn();
-const mockAddToQueue = vi.fn();
-const mockToast = vi.fn();
+type MockUser = {
+  id: string;
+  roles: Array<{
+    name: string;
+    permissions: Array<{ action: string; entity: string; access: string }>;
+  }>;
+};
 
-const { mockUserRef, mockSubmit } = vi.hoisted(() => ({
-  mockUserRef: { current: { id: "user-1" } as { id: string } | undefined },
+const signedInListener: MockUser = {
+  id: "user-1",
+  roles: [{ name: "user", permissions: [] }],
+};
+
+const userState = vi.hoisted(() => ({
+  current: undefined as MockUser | null | undefined,
+}));
+
+const { mockSubmit } = vi.hoisted(() => ({
   mockSubmit: vi.fn(),
 }));
 
@@ -26,9 +37,15 @@ vi.mock("#app/utils/user.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("#app/utils/user.ts")>();
   return {
     ...actual,
-    useOptionalUser: () => mockUserRef.current,
+    useOptionalUser: () => userState.current,
   };
 });
+
+const mockPlayTrack = vi.fn();
+const mockPlayNextTrack = vi.fn();
+const mockAddToUpNext = vi.fn();
+const mockAddToQueue = vi.fn();
+const mockToast = vi.fn();
 
 vi.mock("react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router")>();
@@ -124,12 +141,25 @@ const mockUserTrack = {
 };
 
 function renderTrackListItem(props: Partial<ComponentProps<typeof TrackListItem>> = {}) {
-  return render(<TrackListItem track={mockTrack} userTrack={mockUserTrack} index={0} {...props} />);
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/",
+        element: <TrackListItem track={mockTrack} userTrack={mockUserTrack} index={0} {...props} />,
+      },
+    ],
+    { initialEntries: ["/"] },
+  );
+  return render(<RouterProvider router={router} />);
+}
+
+function userWithRole(name: string): MockUser {
+  return { id: `${name}-1`, roles: [{ name, permissions: [] }] };
 }
 
 beforeEach(() => {
+  userState.current = signedInListener;
   mockIsMobile = false;
-  mockUserRef.current = { id: "user-1" };
   mockSubmit.mockReset();
   mockPlayerState = {
     currentTrack: null,
@@ -319,7 +349,7 @@ test("signed-in user sees Report Issue in the mobile actions sheet", async () =>
 });
 
 test("signed-out user does not see Report Issue", async () => {
-  mockUserRef.current = undefined;
+  userState.current = undefined;
   const user = userEvent.setup();
 
   renderTrackListItem();
@@ -356,6 +386,77 @@ test("submitting Report Issue posts trackId, issueType, and description", async 
     description: "The artist name is wrong",
   });
   expect(options).toEqual({ method: "POST", action: "/api/curator/queue/report" });
+});
+
+test("hides Flag for review from listeners on the desktop overflow menu", async () => {
+  userState.current = userWithRole("user");
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  expect(screen.queryByRole("menuitem", { name: /flag for review/i })).toBeNull();
+});
+
+test("hides Flag for review when signed out", async () => {
+  userState.current = undefined;
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  expect(screen.queryByRole("menuitem", { name: /flag for review/i })).toBeNull();
+});
+
+test("curator can open Flag for review from the desktop overflow menu", async () => {
+  userState.current = userWithRole("curator");
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  await user.click(screen.getByRole("menuitem", { name: /flag for review/i }));
+
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("heading", { name: "Flag for Review" })).toBeDefined();
+  expect(within(dialog).getByText(/Test Song/)).toBeDefined();
+});
+
+test("admin can open Flag for review from the desktop overflow menu", async () => {
+  userState.current = userWithRole("admin");
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  expect(screen.getByRole("menuitem", { name: /flag for review/i })).toBeDefined();
+});
+
+test("curator can open Flag for review from the mobile actions sheet", async () => {
+  mockIsMobile = true;
+  userState.current = userWithRole("curator");
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  await user.click(screen.getByRole("button", { name: /flag for review/i }));
+
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("heading", { name: "Flag for Review" })).toBeDefined();
+  expect(within(dialog).getByText(/Test Song/)).toBeDefined();
+  expect(mockPlayTrack).not.toHaveBeenCalled();
+});
+
+test("mobile actions sheet hides Flag for review from listeners", async () => {
+  mockIsMobile = true;
+  userState.current = userWithRole("user");
+  const user = userEvent.setup();
+
+  renderTrackListItem();
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  expect(screen.queryByRole("button", { name: /flag for review/i })).toBeNull();
 });
 
 test("showQuickAddToPlaylist opens playlist sheet directly on mobile", async () => {

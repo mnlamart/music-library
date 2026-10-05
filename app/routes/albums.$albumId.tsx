@@ -1,6 +1,7 @@
 import { data, Link } from "react-router";
 import { useState } from "react";
 import { AlbumEditDialog } from "#app/components/album-edit-dialog.tsx";
+import { FlagForReviewDialog } from "#app/components/flag-for-review-dialog.tsx";
 import { Breadcrumbs, type BreadcrumbHandle } from "#app/components/breadcrumbs.tsx";
 import { MusicEntityHeader } from "#app/components/music-entity-header.tsx";
 import { OfflineRouteBlocker } from "#app/components/offline/offline-route-blocker.tsx";
@@ -14,7 +15,7 @@ import {
   loadLibraryStatusByTrackId,
   loadUserPlaylists,
 } from "#app/utils/track-list-loader.server.ts";
-import { useOptionalUser, userHasPermission } from "#app/utils/user.ts";
+import { useOptionalUser, userHasPermission, userIsCuratorOrAdmin } from "#app/utils/user.ts";
 import { type Route } from "./+types/albums.$albumId.ts";
 
 export const handle: BreadcrumbHandle = {
@@ -91,7 +92,9 @@ export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
   const { album, playlists } = loaderData;
   const user = useOptionalUser();
   const canEdit = userHasPermission(user, "update:album:any");
+  const canFlagForReview = userIsCuratorOrAdmin(user);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const coverImageUrl = album.coverImage ? `/resources/images/${album.coverImage.objectKey}` : null;
 
   return (
@@ -118,16 +121,21 @@ export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
               <span>
                 {album.tracks.length} track{album.tracks.length !== 1 ? "s" : ""}
               </span>
-              {canEdit && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditDialogOpen(true)}
-                  className="ml-auto"
-                >
-                  <Icon name="pencil-1" className="mr-2 h-4 w-4" />
-                  Edit Album
-                </Button>
+              {(canEdit || canFlagForReview) && (
+                <div className="ml-auto flex items-center gap-2">
+                  {canEdit && (
+                    <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+                      <Icon name="pencil-1" className="mr-2 h-4 w-4" />
+                      Edit Album
+                    </Button>
+                  )}
+                  {canFlagForReview && (
+                    <Button variant="outline" size="sm" onClick={() => setFlagDialogOpen(true)}>
+                      <Icon name="file-text" className="mr-2 h-4 w-4" />
+                      Flag for review
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           }
@@ -179,6 +187,15 @@ export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
             open={editDialogOpen}
             onOpenChange={setEditDialogOpen}
             onSaved={() => window.location.reload()}
+          />
+        )}
+        {canFlagForReview && (
+          <FlagForReviewDialog
+            entityType="album"
+            entityId={album.id}
+            entityName={album.name}
+            open={flagDialogOpen}
+            onOpenChange={setFlagDialogOpen}
           />
         )}
       </div>

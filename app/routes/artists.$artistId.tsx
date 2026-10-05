@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { data, useFetcher } from "react-router";
 import { AlbumCard } from "#app/components/album-card.tsx";
 import { ArtistEditDialog } from "#app/components/artist-edit-dialog.tsx";
+import { FlagForReviewDialog } from "#app/components/flag-for-review-dialog.tsx";
 import { Breadcrumbs, type BreadcrumbHandle } from "#app/components/breadcrumbs.tsx";
 import { InfiniteScrollSentinel } from "#app/components/infinite-scroll-sentinel.tsx";
 import { MusicEntityHeader } from "#app/components/music-entity-header.tsx";
@@ -14,7 +15,7 @@ import { getUserId } from "#app/utils/auth.server.ts";
 import { getArtistTitle } from "#app/utils/breadcrumb-utils.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { loadUserPlaylists } from "#app/utils/track-list-loader.server.ts";
-import { useOptionalUser, userHasPermission } from "#app/utils/user.ts";
+import { useOptionalUser, userHasPermission, userIsCuratorOrAdmin } from "#app/utils/user.ts";
 import { type Route } from "./+types/artists.$artistId.ts";
 
 export const handle: BreadcrumbHandle = {
@@ -87,11 +88,13 @@ export default function ArtistRoute({ loaderData }: Route.ComponentProps) {
   const { artist, initialTracks, pagination: initialPagination, playlists } = loaderData;
   const user = useOptionalUser();
   const canEdit = userHasPermission(user, "update:artist:any");
+  const canFlagForReview = userIsCuratorOrAdmin(user);
 
   const fetcher = useFetcher<ArtistTracksResponse>();
   const [tracks, setTracks] = useState(initialTracks);
   const [pagination, setPagination] = useState(initialPagination);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const requestedArtistRef = useRef<string | null>(null);
 
   // Reset the accumulated list whenever navigation re-runs the loader with a
@@ -142,16 +145,21 @@ export default function ArtistRoute({ loaderData }: Route.ComponentProps) {
               {artist.genre ? <span>{artist.genre}</span> : null}
               {artist.genre ? <span aria-hidden="true">·</span> : null}
               <span>{formatArtistSummary(artist.albums.length, artist.trackCount)}</span>
-              {canEdit && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditDialogOpen(true)}
-                  className="ml-auto"
-                >
-                  <Icon name="pencil-1" className="mr-2 h-4 w-4" />
-                  Edit Artist
-                </Button>
+              {(canEdit || canFlagForReview) && (
+                <div className="ml-auto flex items-center gap-2">
+                  {canEdit && (
+                    <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+                      <Icon name="pencil-1" className="mr-2 h-4 w-4" />
+                      Edit Artist
+                    </Button>
+                  )}
+                  {canFlagForReview && (
+                    <Button variant="outline" size="sm" onClick={() => setFlagDialogOpen(true)}>
+                      <Icon name="file-text" className="mr-2 h-4 w-4" />
+                      Flag for review
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           }
@@ -235,6 +243,15 @@ export default function ArtistRoute({ loaderData }: Route.ComponentProps) {
             open={editDialogOpen}
             onOpenChange={setEditDialogOpen}
             onSaved={() => window.location.reload()}
+          />
+        )}
+        {canFlagForReview && (
+          <FlagForReviewDialog
+            entityType="artist"
+            entityId={artist.id}
+            entityName={artist.name}
+            open={flagDialogOpen}
+            onOpenChange={setFlagDialogOpen}
           />
         )}
       </div>
