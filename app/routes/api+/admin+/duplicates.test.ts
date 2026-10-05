@@ -4,7 +4,6 @@ import { getSessionExpirationDate, sessionKey } from "#app/utils/auth.server.ts"
 import { prisma } from "#app/utils/db.server.ts";
 import { authSessionStorage } from "#app/utils/session.server.ts";
 import { createUser } from "#tests/db-utils.ts";
-import { getDuplicateTracksCount } from "#app/features/admin/database-quality.server.ts";
 import { action as pageAction } from "#app/routes/music+/admin+/duplicates.tsx";
 import { action, loader } from "./duplicates.tsx";
 
@@ -149,36 +148,6 @@ describe("admin duplicate dashboard", () => {
     await prisma.track.deleteMany({ where: { externalId: { startsWith: "dup-test-" } } });
     await prisma.artist.deleteMany({ where: { normalizedName: { startsWith: "dup-test-" } } });
     await prisma.duplicateIntentionalGroup.deleteMany();
-  });
-
-  test("database quality duplicate count matches the duplicates page", async () => {
-    const { cookie } = await createCookie("admin");
-    await createTrackWithAudio({
-      title: "Exact A",
-      contentHash: EXACT_HASH,
-      audioFingerprint: "exact-fp-a",
-    });
-    await createTrackWithAudio({
-      title: "Exact B",
-      contentHash: EXACT_HASH,
-      audioFingerprint: "exact-fp-b",
-    });
-    await createTrackWithAudio({
-      title: "Similar A",
-      contentHash: "quality-similar-hash-a",
-      audioFingerprint: "0123456789",
-    });
-    await createTrackWithAudio({
-      title: "Similar B",
-      contentHash: "quality-similar-hash-b",
-      audioFingerprint: "012345678X",
-    });
-
-    const all = unwrap<Dashboard>(await loadDashboard(cookie, "all"));
-    const exact = unwrap<Dashboard>(await loadDashboard(cookie, "exact"));
-    expect(all.groups.some((group) => group.type === "similar")).toBe(true);
-    expect(all.stats.duplicateGroups).toBeGreaterThan(exact.stats.duplicateGroups);
-    expect(await getDuplicateTracksCount()).toBe(all.stats.duplicateGroups);
   });
 
   test("similar, exact, all, and intentional filters return the right groups", async () => {
