@@ -1,6 +1,6 @@
 import { type SEOHandle } from "@nasa-gcn/remix-seo";
 import { data, Form, Link, useFetcher, useSearchParams } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { GeneralErrorBoundary } from "#app/components/error-boundary";
 import { Spacer } from "#app/components/spacer.tsx";
 import { Badge } from "#app/components/ui/badge.tsx";
@@ -138,6 +138,7 @@ function DuplicateGroupCard({
   const [deleteTrackId, setDeleteTrackId] = useState<string | null>(null);
   const deleteFetcher = useFetcher();
   const { toast } = useToast();
+  const toastedTrackId = useRef<string | null>(null);
 
   const handleDelete = (trackId: string) => {
     deleteFetcher.submit(null, {
@@ -149,26 +150,32 @@ function DuplicateGroupCard({
 
   const isDeleting = deleteFetcher.state === "submitting";
 
-  // Show toast when deletion completes
+  // Toast when the action payload arrives. A one-track group leaves the loader
+  // data in the same update that returns this fetcher to idle, so the card
+  // unmounts before an idle-only effect can run.
   useEffect(() => {
-    if (deleteFetcher.state === "idle" && deleteFetcher.data?.success) {
-      const { objectsDeleted, objectsPreserved } = deleteFetcher.data;
+    const result = deleteFetcher.data;
+    if (!result?.success) return;
+    const trackId = typeof result.trackId === "string" ? result.trackId : "";
+    if (toastedTrackId.current === trackId) return;
+    toastedTrackId.current = trackId;
 
-      let description = "Track has been removed from the database.";
-      if (objectsDeleted > 0 && objectsPreserved > 0) {
-        description = `Deleted ${objectsDeleted} audio file(s), preserved ${objectsPreserved} shared file(s).`;
-      } else if (objectsPreserved > 0) {
-        description = `Track removed. All ${objectsPreserved} audio file(s) preserved (shared with other tracks).`;
-      } else if (objectsDeleted > 0) {
-        description = `Track and ${objectsDeleted} audio file(s) deleted from storage.`;
-      }
+    const { objectsDeleted, objectsPreserved } = result;
 
-      toast({
-        title: "Track Deleted",
-        description,
-      });
+    let description = "Track has been removed from the database.";
+    if (objectsDeleted > 0 && objectsPreserved > 0) {
+      description = `Deleted ${objectsDeleted} audio file(s), preserved ${objectsPreserved} shared file(s).`;
+    } else if (objectsPreserved > 0) {
+      description = `Track removed. All ${objectsPreserved} audio file(s) preserved (shared with other tracks).`;
+    } else if (objectsDeleted > 0) {
+      description = `Track and ${objectsDeleted} audio file(s) deleted from storage.`;
     }
-  }, [deleteFetcher.state, deleteFetcher.data, toast]);
+
+    toast({
+      title: "Track Deleted",
+      description,
+    });
+  }, [deleteFetcher.data, toast]);
 
   // Filter out deleted tracks
   const visibleTracks = group.tracks.filter(
