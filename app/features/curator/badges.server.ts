@@ -32,6 +32,15 @@ function enqueueAward<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "P2002"
+  );
+}
+
 function asNumber(value: unknown): number {
   if (typeof value === "bigint") return Number(value);
   if (typeof value === "number") return value;
@@ -135,11 +144,13 @@ export async function loadCuratorCounts(): Promise<Map<string, CuratorCounts>> {
   return totals;
 }
 
-export function awardCuratorBadges({
-  force = false,
-  now = Date.now(),
-}: { force?: boolean; now?: number } = {}): Promise<{ awarded: number; skipped: boolean }> {
-  return enqueueAward(() => awardCuratorBadgesOnce({ force, now }));
+export function awardCuratorBadges(options?: {
+  force?: boolean;
+  now?: number;
+}): Promise<{ awarded: number; skipped: boolean }> {
+  // The dashboard loads metrics, the leaderboard, and activity together.
+  // Each one awards badges, so parallel calls must not insert the same row.
+  return enqueueAward(() => awardCuratorBadgesOnce(options));
 }
 
 async function awardCuratorBadgesOnce({
@@ -176,9 +187,9 @@ async function awardCuratorBadgesOnce({
         data: missing.map((row) => ({ curatorId: row.curatorId, badgeType: row.badgeType })),
       });
     } catch (error) {
-      // A second process can still collide. Keep the badges that won the insert
-      // instead of failing the dashboard.
-      if ((error as { code?: unknown }).code !== "P2002") throw error;
+      // A second process can still collide between the lookup and the write.
+      // Keep the badges that won the insert instead of failing the dashboard.
+      if (!isUniqueConstraintError(error)) throw error;
       awarded = 0;
     }
   }

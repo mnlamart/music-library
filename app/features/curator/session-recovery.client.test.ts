@@ -3,6 +3,7 @@ import {
   DIALOGS_MAX_AGE_MS,
   SELECTION_MAX_AGE_MS,
   createDebouncedSessionSaver,
+  dashboardTabToPersist,
   discardSession,
   hasRecoverableSession,
   loadSession,
@@ -129,6 +130,14 @@ describe("curator session recovery", () => {
     discardSession(storage);
     expect(restoreSession(storage, now)).toEqual([]);
     expect(storage.snapshot()).toEqual({});
+  });
+
+  test("a dashboard tab is saved only after the curator changes it", () => {
+    expect(dashboardTabToPersist(null, "activity")).toBeNull();
+    expect(dashboardTabToPersist("activity", "activity")).toBeNull();
+    expect(dashboardTabToPersist("reports", "overview")).toBeNull();
+    expect(dashboardTabToPersist("overview", "activity")).toBe("activity");
+    expect(dashboardTabToPersist("activity", "queue")).toBe("queue");
   });
 
   test("debounced save writes once after the wait", () => {

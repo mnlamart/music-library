@@ -81,6 +81,29 @@ afterEach(async () => {
 });
 
 describe("awardCuratorBadges", () => {
+  test("parallel awards insert a new badge once", async () => {
+    const curator = await createCurator("ParallelBadge");
+    const { track, artist } = await createTrack("Parallel Track");
+    await prisma.trackEdit.create({
+      data: {
+        trackId: track.id,
+        editedBy: curator.id,
+        title: track.title,
+        artistId: artist.id,
+        genre: "Jazz",
+      },
+    });
+    resetBadgeAwardCache();
+
+    const [first, second] = await Promise.all([
+      awardCuratorBadges({ force: true }),
+      awardCuratorBadges({ force: true }),
+    ]);
+
+    expect(first.awarded + second.awarded).toBe(1);
+    expect(await prisma.curatorBadge.count({ where: { curatorId: curator.id } })).toBe(1);
+  });
+
   test("9 edits do not store Getting Started and the 10th does, once", async () => {
     const curator = await createCurator("BadgeCurator");
     const { track, artist } = await createTrack("Badge Track");
