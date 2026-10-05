@@ -111,13 +111,21 @@ export function getSessionSecret(): string[] {
   return [devFallback];
 }
 
+export function formatInvalidEnvMessage(fieldErrors: Record<string, string[] | undefined>): string {
+  const names = Object.keys(fieldErrors).sort();
+  return names.length > 0
+    ? `Invalid environment variables: ${names.join(", ")}`
+    : "Invalid environment variables";
+}
+
 export function init() {
   const parsed = schema.safeParse(process.env);
 
   if (parsed.success === false) {
-    console.error("❌ Invalid environment variables:", parsed.error.flatten().fieldErrors);
+    const message = formatInvalidEnvMessage(parsed.error.flatten().fieldErrors);
+    console.error("❌", message, parsed.error.flatten().fieldErrors);
 
-    throw new Error("Invalid environment variables");
+    throw new Error(message);
   }
 }
 
