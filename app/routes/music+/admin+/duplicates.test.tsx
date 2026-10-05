@@ -129,3 +129,19 @@ test("hides keep both when viewing intentional groups", async () => {
   expect(await screen.findByRole("button", { name: /intentional/i })).toBeEnabled();
   expect(screen.queryByRole("button", { name: /keep both/i })).not.toBeInTheDocument();
 });
+
+test("track title and View open the library track page", async () => {
+  renderDashboard([exactGroup]);
+
+  expect(await screen.findByRole("link", { name: "Original Song" })).toHaveAttribute(
+    "href",
+    "/library/t1",
+  );
+  expect(screen.getByRole("link", { name: "Copy Song" })).toHaveAttribute("href", "/library/t2");
+
+  const viewLinks = screen.getAllByRole("link", { name: "View" });
+  expect(viewLinks.map((link) => link.getAttribute("href"))).toEqual([
+    "/library/t1",
+    "/library/t2",
+  ]);
+});

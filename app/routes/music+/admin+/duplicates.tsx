@@ -219,7 +219,7 @@ function DuplicateGroupCard({
                         Original
                       </Badge>
                     )}
-                    <Link to={`/tracks/${track.trackId}`} className="font-medium hover:underline">
+                    <Link to={`/library/${track.trackId}`} className="font-medium hover:underline">
                       {track.title}
                     </Link>
                   </div>
@@ -234,7 +234,7 @@ function DuplicateGroupCard({
                 </div>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/tracks/${track.trackId}`}>View</Link>
+                    <Link to={`/library/${track.trackId}`}>View</Link>
                   </Button>
                   {index > 0 && (
                     <Button

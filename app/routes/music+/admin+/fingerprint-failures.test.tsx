@@ -5,7 +5,7 @@
  * Pattern follows audio-queue.test.tsx / duplicates page style.
  */
 import { render, screen } from "@testing-library/react";
-import { createRoutesStub } from "react-router";
+import { createMemoryRouter, createRoutesStub, RouterProvider } from "react-router";
 import { parseString } from "set-cookie-parser";
 import { beforeEach, expect, test, vi } from "vitest";
 import { loader as rootLoader } from "#app/root.tsx";
@@ -74,6 +74,61 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => Response.json(emptyLoaderData)) as unknown as typeof fetch,
+  );
+});
+
+test("track title and View open the library track page", async () => {
+  const failureRow: FingerprintFailuresLoaderData["failures"][number] = {
+    id: "audio-file-1",
+    trackId: "track-lovestory",
+    title: "Lovestory",
+    artist: "Meryl",
+    objectKey: "audio/tracks/local/track-lovestory.flac",
+    fileName: "lovestory.flac",
+    format: "flac",
+    mimeType: "audio/flac",
+    fileSize: 1024,
+    uploadedAt: "2026-01-01T00:00:00.000Z",
+    serviceId: null,
+    serviceName: "local",
+    contentHash: "abc",
+    audioFingerprint: null,
+  };
+
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/music/admin/fingerprint-failures",
+        element: (
+          <FingerprintFailuresRoute
+            loaderData={{
+              ...emptyLoaderData,
+              failures: [failureRow],
+              totalFailures: 1,
+              stats: {
+                ...emptyLoaderData.stats,
+                total: 1,
+                fingerprintFailed: 1,
+              },
+            }}
+            params={{}}
+            matches={[] as never}
+          />
+        ),
+      },
+    ],
+    { initialEntries: ["/music/admin/fingerprint-failures"] },
+  );
+
+  render(<RouterProvider router={router} />);
+
+  expect(await screen.findByRole("link", { name: "Lovestory" })).toHaveAttribute(
+    "href",
+    "/library/track-lovestory",
+  );
+  expect(screen.getByRole("link", { name: "View" })).toHaveAttribute(
+    "href",
+    "/library/track-lovestory",
   );
 });
 
