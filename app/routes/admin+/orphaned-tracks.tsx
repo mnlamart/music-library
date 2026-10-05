@@ -183,6 +183,17 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
     setSelectedIds([]);
   }, [tab]);
 
+  // Bulk actions revalidate the loader without changing `tab`. Drop ids that
+  // are no longer on the page so the hidden form cannot submit a removed row.
+  React.useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.length === 0) return current;
+      const loadedIds = new Set(tabData.map((item: any) => item.id));
+      const next = current.filter((id) => loadedIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [tabData]);
+
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
