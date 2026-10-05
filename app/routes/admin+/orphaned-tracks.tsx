@@ -8,13 +8,6 @@ import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "#app/components/ui/select.tsx";
-import {
   Table,
   TableBody,
   TableCell,
@@ -335,16 +328,16 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
             {tab === "missing-audio" && (
               <Form method="get" className="flex gap-2">
                 <input type="hidden" name="tab" value={tab} />
-                <Select name="service" defaultValue={serviceFilter}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Services</SelectItem>
-                    <SelectItem value="youtube">YouTube</SelectItem>
-                    <SelectItem value="local">Local</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select
+                  name="service"
+                  aria-label="Service"
+                  defaultValue={serviceFilter}
+                  className="border-input bg-background h-9 w-36 rounded-md border px-2 text-sm"
+                >
+                  <option value="all">All Services</option>
+                  <option value="youtube">YouTube</option>
+                  <option value="local">Local</option>
+                </select>
                 <Button type="submit" variant="outline" size="sm">
                   Filter
                 </Button>
@@ -376,17 +369,17 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
             {tab === "unused-tracks" && (
               <Form method="get" className="flex gap-2">
                 <input type="hidden" name="tab" value={tab} />
-                <Select name="age" defaultValue={ageFilter}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7d">7 days</SelectItem>
-                    <SelectItem value="30d">30 days</SelectItem>
-                    <SelectItem value="90d">90 days</SelectItem>
-                    <SelectItem value="all">All</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select
+                  name="age"
+                  aria-label="Age"
+                  defaultValue={ageFilter}
+                  className="border-input bg-background h-9 w-36 rounded-md border px-2 text-sm"
+                >
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                  <option value="90d">90 days</option>
+                  <option value="all">All</option>
+                </select>
                 <Button type="submit" variant="outline" size="sm">
                   Filter
                 </Button>
