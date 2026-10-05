@@ -183,6 +183,7 @@ export function BasicMetadataTab({
           placeholder="Track title"
           aria-invalid={errors.title ? true : undefined}
           className={errors.title ? "border-input-invalid" : ""}
+          disabled={disabled}
         />
         {errors.title && (
           <div className="px-4 pt-1 pb-3">
@@ -198,6 +199,7 @@ export function BasicMetadataTab({
         onCreateNew={handleCreateArtist}
         error={errors.artist}
         required
+        disabled={disabled}
       />
 
       <div>
@@ -218,6 +220,7 @@ export function BasicMetadataTab({
         onChange={setGenres}
         onCreateNew={handleCreateGenre}
         label="Genres"
+        disabled={disabled}
       />
 
       <div>
@@ -230,6 +233,7 @@ export function BasicMetadataTab({
           placeholder="Release year"
           min="1900"
           max={new Date().getFullYear() + 1}
+          disabled={disabled}
         />
       </div>
 

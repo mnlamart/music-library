@@ -34,9 +34,9 @@ export interface TrackDetails {
   artist: { id: string; name: string };
   albumRecord: { id: string; name: string } | null;
   duration: number | null;
-  createdAt: string;
-  releaseDate: string | null;
-  originalDate: string | null;
+  createdAt: string | Date;
+  releaseDate: string | Date | null;
+  originalDate: string | Date | null;
   coverImage: { objectKey: string } | null;
   service: { displayName: string } | null;
   serviceUrl: string | null;
@@ -111,6 +111,18 @@ export function TrackDetailsDialog({
     autoAcquire: open && isCurator,
     autoRelease: true,
   });
+
+  // The editor unmounts while Radix still has the dialog open, which leaves
+  // document.body.style.pointerEvents = "none" and blocks the library.
+  useEffect(() => {
+    return () => {
+      const restore = () => {
+        document.body.style.pointerEvents = "";
+      };
+      restore();
+      window.setTimeout(restore, 0);
+    };
+  }, []);
 
   useEffect(() => {
     if (open) {

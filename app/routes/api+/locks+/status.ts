@@ -19,5 +19,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const lock = await getLockStatus(entityType as EntityType, entityId);
 
-  return { lock };
+  // Raw fetch in useLock reads JSON. A plain object is turbo-stream for loaders.
+  return Response.json({ lock });
 }
