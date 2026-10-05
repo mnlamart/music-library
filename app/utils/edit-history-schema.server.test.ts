@@ -76,6 +76,7 @@ describe("Edit History Schema", () => {
           artistId: testArtistId,
           albumId: testAlbumId,
           genre: "Rock",
+          genreIds: JSON.stringify(["genre-rock", "genre-jazz"]),
           year: 2024,
           trackNumber: 1,
           albumArtist: "Test Artist",
@@ -94,6 +95,7 @@ describe("Edit History Schema", () => {
       expect(trackEdit.id).toBeDefined();
       expect(trackEdit.title).toBe("Original Title");
       expect(trackEdit.comment).toBe("Initial snapshot");
+      expect(trackEdit.genreIds).toBe(JSON.stringify(["genre-rock", "genre-jazz"]));
       expect(trackEdit.editedAt).toBeInstanceOf(Date);
     });
 
