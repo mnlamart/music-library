@@ -122,6 +122,7 @@ describe("party-room lifecycle", () => {
     ).rejects.toMatchObject({ code: "invalid_display_name" });
   });
 
+  // 49 sequential joins exceed Vitest's 5s default when the suite is under CI load.
   test("enforces max participants", async () => {
     const host = await makeUser();
     const room = await createRoom({ userId: host.id, displayName: "Host" });
@@ -137,7 +138,7 @@ describe("party-room lifecycle", () => {
     await expect(
       joinRoom({ code: room.code, actor: { type: "guest", displayName: "Overflow" } }),
     ).rejects.toMatchObject({ code: "room_full" });
-  });
+  }, 30_000);
 
   test("guest joining a second room vacates the previous open seat", async () => {
     const hostA = await makeUser("Host A");
