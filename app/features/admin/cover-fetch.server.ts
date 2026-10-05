@@ -253,10 +253,11 @@ export async function uploadTrackCover(
   }
 
   try {
+    // Do not pass albumId. findOrCreateCoverImage reuses an album's current
+    // cover and would drop the file chosen on this upload.
     const coverImage = await findOrCreateCoverImage({
       imageBuffer,
       trackId: track.id,
-      albumId: track.albumId,
     });
 
     await prisma.track.update({
