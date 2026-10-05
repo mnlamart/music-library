@@ -165,6 +165,63 @@ test("disable action sets disabledAt and redirects back to the detail page", asy
   expect(updated.disabledAt).not.toBeNull();
 });
 
+test("own account disables curator promotion along with the other moderation actions", async () => {
+  const { cookie, adminId } = await createAdminSession();
+  const admin = await prisma.user.findUniqueOrThrow({
+    where: { id: adminId },
+    select: { username: true },
+  });
+
+  const App = createRoutesStub([
+    {
+      id: "root",
+      path: "/",
+      loader: async (args) => {
+        args.request.headers.set("cookie", cookie);
+        return rootLoader({ ...args, context: args.context });
+      },
+      HydrateFallback: () => <div>Loading...</div>,
+      children: [
+        {
+          path: "admin/users/:userId",
+          Component: AdminUserDetailRoute,
+          loader: async (args) => {
+            args.request.headers.set("cookie", cookie);
+            return loader({
+              ...args,
+              params: { userId: adminId },
+              context: args.context,
+            });
+          },
+        },
+      ],
+    },
+  ]);
+
+  render(<App initialEntries={[`/admin/users/${adminId}`]} />);
+
+  await screen.findByRole("heading", { level: 1, name: admin.username }, { timeout: 5000 });
+  expect(await screen.findByRole("button", { name: /disable account/i })).toBeDisabled();
+  expect(await screen.findByRole("button", { name: /demote from admin/i })).toBeDisabled();
+  expect(await screen.findByRole("button", { name: /promote to curator/i })).toBeDisabled();
+  expect(await screen.findByRole("button", { name: /delete user/i })).toBeDisabled();
+});
+
+test("promote-curator action refuses the acting admin", async () => {
+  const { cookie, adminId } = await createAdminSession();
+
+  const response = await runAction(cookie, adminId, { intent: "promote-curator" });
+
+  expect(errorOf(response).init?.status).toBe(400);
+  expect(errorOf(response).data?.error).toBe("You cannot promote yourself to curator");
+
+  const actor = await prisma.user.findUniqueOrThrow({
+    where: { id: adminId },
+    include: { roles: true },
+  });
+  expect(actor.roles.map((role) => role.name)).not.toContain("curator");
+});
+
 test("disable action refuses to disable the acting admin", async () => {
   const { cookie, adminId } = await createAdminSession();
 

@@ -240,6 +240,10 @@ export async function promoteToCurator(
   userId: string,
   actorUserId?: string | null,
 ): Promise<ModerationResult> {
+  if (actorUserId && userId === actorUserId) {
+    return forbidden("You cannot promote yourself to curator");
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, username: true },
@@ -267,6 +271,10 @@ export async function demoteFromCurator(
   userId: string,
   actorUserId?: string | null,
 ): Promise<ModerationResult> {
+  if (actorUserId && userId === actorUserId) {
+    return forbidden("You cannot demote yourself from curator");
+  }
+
   const user = await findUserRoles(userId);
   if (!user) return notFound;
 

@@ -99,6 +99,43 @@ describe("admin user moderation", () => {
     });
   });
 
+  test("curator role changes refuse the acting admin", async () => {
+    const admin = await prisma.user.create({
+      data: {
+        ...createUser(),
+        roles: { connect: [{ name: "admin" }, { name: "user" }] },
+      },
+    });
+
+    await expect(promoteToCurator(admin.id, admin.id)).resolves.toEqual({
+      ok: false,
+      reason: "forbidden",
+      error: "You cannot promote yourself to curator",
+    });
+
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+    await prisma.user.update({
+      where: { id: admin.id },
+      data: { roles: { connect: { name: "curator" } } },
+    });
+
+    await expect(demoteFromCurator(admin.id, admin.id)).resolves.toEqual({
+      ok: false,
+      reason: "forbidden",
+      error: "You cannot demote yourself from curator",
+    });
+
+    const roles = await prisma.user.findUniqueOrThrow({
+      where: { id: admin.id },
+      include: { roles: true },
+    });
+    expect(roles.roles.map((role) => role.name)).toContain("curator");
+  });
+
   test("promoteToAdmin connects admin role", async () => {
     const user = await prisma.user.create({
       data: {

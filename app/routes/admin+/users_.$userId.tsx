@@ -350,14 +350,14 @@ export default function AdminUserDetailRoute({ loaderData, actionData }: Route.C
             {!isCurator ? (
               <Form method="post">
                 <input type="hidden" name="intent" value="promote-curator" />
-                <Button type="submit" variant="secondary" className="w-full">
+                <Button type="submit" variant="secondary" disabled={isSelf} className="w-full">
                   Promote to curator
                 </Button>
               </Form>
             ) : (
               <Form method="post">
                 <input type="hidden" name="intent" value="demote-curator" />
-                <Button type="submit" variant="outline" className="w-full">
+                <Button type="submit" variant="outline" disabled={isSelf} className="w-full">
                   Demote from curator
                 </Button>
               </Form>
