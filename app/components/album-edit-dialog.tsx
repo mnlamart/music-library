@@ -43,6 +43,7 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
   const editFetcher = useFetcher();
   const restoreFetcher = useFetcher();
   const [activeTab, setActiveTab] = useState("metadata");
+  const [coverImageId, setCoverImageId] = useState(album.coverImageId);
   const [coverObjectKey, setCoverObjectKey] = useState(album.coverImage?.objectKey || null);
 
   const [formData, setFormData] = useState({
@@ -56,7 +57,8 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
   const hasChanges =
     formData.name !== album.name ||
     formData.artistId !== album.artistId ||
-    formData.year !== (album.year?.toString() || "");
+    formData.year !== (album.year?.toString() || "") ||
+    coverImageId !== album.coverImageId;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +69,7 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
         name: formData.name,
         artistId: formData.artistId,
         year: formData.year ? parseInt(formData.year) : null,
-        coverImageId: album.coverImageId,
+        coverImageId,
         comment: formData.comment,
       },
       {
@@ -91,8 +93,9 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
     );
   };
 
-  const handleCoverUploaded = (objectKey: string) => {
+  const handleCoverUploaded = (objectKey: string, imageId: string) => {
     setCoverObjectKey(objectKey);
+    setCoverImageId(imageId);
   };
 
   if (
