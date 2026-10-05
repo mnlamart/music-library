@@ -90,7 +90,7 @@ export function ReportIssueDialog({
                 <SelectTrigger id="issue-type">
                   <SelectValue placeholder="Select an issue type" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[60]">
                   {ISSUE_TYPES.map((type) => (
                     <SelectItem key={type.value} value={type.value}>
                       {type.label}
