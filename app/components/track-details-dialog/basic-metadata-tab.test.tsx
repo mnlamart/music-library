@@ -86,6 +86,17 @@ function renderTab(onSave = vi.fn()) {
   return onSave;
 }
 
+test("disables artist, genres, and year while another curator holds the lock", () => {
+  render(<BasicMetadataTab track={track} onSave={vi.fn()} disabled />);
+
+  expect(screen.getByRole("textbox", { name: /^title/i })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: /artist/i })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: /^album$/i })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: /genres/i })).toBeDisabled();
+  expect(screen.getByRole("spinbutton", { name: /year/i })).toBeDisabled();
+  expect(screen.getByRole("button", { name: /save changes/i })).toBeDisabled();
+});
+
 test("shows the track artist name in the required Artist field", () => {
   renderTab();
 

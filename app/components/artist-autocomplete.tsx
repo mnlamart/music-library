@@ -227,7 +227,7 @@ export function ArtistAutocomplete({
         )}
       </div>
 
-      {isOpen && (artists.length > 0 || showCreateOption) && (
+      {isOpen && !disabled && (artists.length > 0 || showCreateOption) && (
         <div
           ref={dropdownRef}
           className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md"

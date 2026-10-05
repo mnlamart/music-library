@@ -25,6 +25,10 @@ vi.mock("#app/utils/db.server.ts", () => ({
     genre: {
       findMany: vi.fn(),
     },
+    editLock: {
+      findUnique: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -44,6 +48,8 @@ describe("POST /api/metadata/tracks/:trackId/edit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(requireCuratorRole).mockResolvedValue("user-1");
+    vi.mocked(prisma.editLock.deleteMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.editLock.findUnique).mockResolvedValue(null);
   });
 
   test("requires curator or admin role", async () => {
@@ -441,6 +447,37 @@ describe("POST /api/metadata/tracks/:trackId/edit", () => {
       // Data is in e.data
       expect(e.data.error).toBe("Method not allowed");
     }
+  });
+
+  test("rejects an edit while another curator holds the lock", async () => {
+    vi.mocked(prisma.track.findUnique).mockResolvedValue({
+      id: "track-1",
+      title: "Old Title",
+      artistId: "artist-1",
+    } as never);
+    vi.mocked(prisma.artist.findUnique).mockResolvedValue({ id: "artist-1" } as never);
+    vi.mocked(prisma.editLock.findUnique).mockResolvedValue({
+      id: "lock-1",
+      entityType: "track",
+      entityId: "track-1",
+      lockedBy: "other-user",
+      acquiredAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+      user: { id: "other-user", name: "Ada", username: "ada" },
+    } as never);
+
+    try {
+      await action(
+        makeRequest({ title: "Overwrite", artistId: "artist-1" }, { trackId: "track-1" }) as never,
+      );
+      expect.unreachable("action should have thrown");
+    } catch (e: any) {
+      expect(e.init.status).toBe(409);
+      expect(e.data.error).toBe("Locked");
+      expect(e.data.message).toBe("Ada is currently editing this track");
+    }
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   test("handles invalid JSON body", async () => {

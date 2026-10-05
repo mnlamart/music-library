@@ -1,6 +1,7 @@
 import { data } from "react-router";
 import { z } from "zod";
 import { prisma } from "#app/utils/db.server.ts";
+import { getLockStatus } from "#app/utils/locks.server.ts";
 import { requireCuratorRole } from "#app/utils/permissions.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import {
@@ -121,6 +122,17 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (!album) {
       throw data({ error: "Album not found" }, { status: 404 });
     }
+  }
+
+  const lock = await getLockStatus("track", trackId);
+  if (lock && lock.lockedBy !== userId) {
+    throw data(
+      {
+        error: "Locked",
+        message: `${lock.lockedByName} is currently editing this track`,
+      },
+      { status: 409 },
+    );
   }
 
   let nextGenres: GenreRef[] | undefined;

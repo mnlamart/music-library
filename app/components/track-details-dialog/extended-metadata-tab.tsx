@@ -11,18 +11,28 @@ interface ExtendedMetadataTabProps {
   disabled?: boolean;
 }
 
+/** Date inputs need YYYY-MM-DD. Single-fetch revives Prisma dates as Date objects. */
+export function toDateInputValue(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return "";
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value !== "string") return "";
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(value);
+  return match?.[1] ?? "";
+}
+
 export function ExtendedMetadataTab({ track, onSave, disabled = false }: ExtendedMetadataTabProps) {
+  const savedReleaseDate = toDateInputValue(track.releaseDate);
+  const savedOriginalDate = toDateInputValue(track.originalDate);
   const [trackNumber, setTrackNumber] = useState(track.trackNumber?.toString() ?? "");
   const [albumArtist, setAlbumArtist] = useState(track.albumArtist ?? "");
   const [bpm, setBpm] = useState(track.bpm?.toString() ?? "");
   const [label, setLabel] = useState(track.label ?? "");
   const [isrc, setIsrc] = useState(track.isrc ?? "");
-  const [releaseDate, setReleaseDate] = useState(
-    track.releaseDate ? track.releaseDate.split("T")[0] : "",
-  );
-  const [originalDate, setOriginalDate] = useState(
-    track.originalDate ? track.originalDate.split("T")[0] : "",
-  );
+  const [releaseDate, setReleaseDate] = useState(savedReleaseDate);
+  const [originalDate, setOriginalDate] = useState(savedOriginalDate);
   const [originalYear, setOriginalYear] = useState(track.originalYear?.toString() ?? "");
   const [totalTracks, setTotalTracks] = useState(track.totalTracks?.toString() ?? "");
   const [totalDiscs, setTotalDiscs] = useState(track.totalDiscs?.toString() ?? "");
@@ -59,8 +69,8 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
     bpm !== (track.bpm?.toString() ?? "") ||
     label !== (track.label ?? "") ||
     isrc !== (track.isrc ?? "") ||
-    releaseDate !== (track.releaseDate ? track.releaseDate.split("T")[0] : "") ||
-    originalDate !== (track.originalDate ? track.originalDate.split("T")[0] : "") ||
+    releaseDate !== savedReleaseDate ||
+    originalDate !== savedOriginalDate ||
     originalYear !== (track.originalYear?.toString() ?? "") ||
     totalTracks !== (track.totalTracks?.toString() ?? "") ||
     totalDiscs !== (track.totalDiscs?.toString() ?? "") ||
@@ -78,6 +88,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
             onChange={(e) => setTrackNumber(e.target.value)}
             placeholder="1"
             min="1"
+            disabled={disabled}
           />
         </div>
 
@@ -90,6 +101,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
             onChange={(e) => setTotalTracks(e.target.value)}
             placeholder="12"
             min="1"
+            disabled={disabled}
           />
         </div>
       </div>
@@ -101,6 +113,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
           value={albumArtist}
           onChange={(e) => setAlbumArtist(e.target.value)}
           placeholder="Album artist name"
+          disabled={disabled}
         />
       </div>
 
@@ -115,6 +128,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
             placeholder="120"
             min="1"
             max="300"
+            disabled={disabled}
           />
         </div>
 
@@ -127,6 +141,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
             onChange={(e) => setTotalDiscs(e.target.value)}
             placeholder="1"
             min="1"
+            disabled={disabled}
           />
         </div>
       </div>
@@ -138,6 +153,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           placeholder="Record label"
+          disabled={disabled}
         />
       </div>
 
@@ -148,6 +164,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
           value={isrc}
           onChange={(e) => setIsrc(e.target.value)}
           placeholder="USRC17607839"
+          disabled={disabled}
         />
       </div>
 
@@ -159,6 +176,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
             type="date"
             value={releaseDate}
             onChange={(e) => setReleaseDate(e.target.value)}
+            disabled={disabled}
           />
         </div>
 
@@ -169,6 +187,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
             type="date"
             value={originalDate}
             onChange={(e) => setOriginalDate(e.target.value)}
+            disabled={disabled}
           />
         </div>
       </div>
@@ -183,6 +202,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
           placeholder="Original release year"
           min="1900"
           max={new Date().getFullYear() + 1}
+          disabled={disabled}
         />
       </div>
 
@@ -195,6 +215,7 @@ export function ExtendedMetadataTab({ track, onSave, disabled = false }: Extende
           placeholder="Song lyrics..."
           rows={8}
           className="font-mono text-xs"
+          disabled={disabled}
         />
       </div>
 
