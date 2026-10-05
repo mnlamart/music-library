@@ -32,11 +32,6 @@ exec:
   - cmd: npx prisma migrate deploy
     if-candidate: true
 
-  # The security-events migration was edited after production applied it.
-  # Align long-lived databases to the current columns before the app starts.
-  - cmd: node ./scripts/align-security-event-schema.mjs
-    if-candidate: true
-
   # Set the journal mode for the database to WAL. This reduces concurrency deadlock issues
   - cmd: sqlite3 $DATABASE_PATH "PRAGMA journal_mode = WAL;"
     if-candidate: true
