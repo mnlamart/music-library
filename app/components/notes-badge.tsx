@@ -17,7 +17,7 @@ export function NotesBadge({ count, onClick }: NotesBadgeProps) {
         e.stopPropagation();
         onClick();
       }}
-      className="h-7 gap-1.5 px-2"
+      className="h-7 shrink-0 gap-1.5 px-2"
       title={`${count} note${count !== 1 ? "s" : ""}`}
     >
       <Icon name="file-text" className="h-3.5 w-3.5 text-muted-foreground" />

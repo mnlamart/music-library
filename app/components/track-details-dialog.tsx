@@ -54,6 +54,7 @@ interface TrackDetailsDialogProps {
   trackId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: "basic" | "extended" | "history" | "notes";
 }
 
 type MetadataWriteResult = {
@@ -68,7 +69,12 @@ function isSuccessfulMetadataWrite(data: unknown): data is { edit: { id: string 
   return !!edit && typeof edit.id === "string" && edit.id.length > 0;
 }
 
-export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetailsDialogProps) {
+export function TrackDetailsDialog({
+  trackId,
+  open,
+  onOpenChange,
+  initialTab = "basic",
+}: TrackDetailsDialogProps) {
   const detailsFetcher = useFetcher<{
     track: TrackDetails;
     isCurator: boolean;
@@ -77,7 +83,7 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
   }>();
   const editFetcher = useFetcher<MetadataWriteResult>();
   const restoreFetcher = useFetcher<MetadataWriteResult>();
-  const [activeTab, setActiveTab] = useState("basic");
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<any>(null);
   const [showUndoToast, setShowUndoToast] = useState(false);
@@ -97,6 +103,12 @@ export function TrackDetailsDialog({ trackId, open, onOpenChange }: TrackDetails
     autoAcquire: open && isCurator,
     autoRelease: true,
   });
+
+  useEffect(() => {
+    if (open) {
+      setActiveTab(initialTab);
+    }
+  }, [open, initialTab, trackId]);
 
   useEffect(() => {
     if (open && detailsFetcher.state === "idle" && !detailsFetcher.data) {

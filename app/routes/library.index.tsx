@@ -67,6 +67,7 @@ type UserTrack = {
       format: string | null;
       objectKey: string;
     }>;
+    curatorNotesCount?: number;
   };
 };
 
@@ -85,6 +86,7 @@ type LibraryTrackListItemProps = {
   showCheckbox?: boolean;
   isSelected?: boolean;
   onToggleSelection?: (trackId: string) => void;
+  isCurator?: boolean;
 };
 
 function libraryHrefWithoutGenre(searchParams: URLSearchParams) {
@@ -104,6 +106,7 @@ function LibraryTrackListItem({
   showCheckbox = false,
   isSelected = false,
   onToggleSelection,
+  isCurator = false,
 }: LibraryTrackListItemProps) {
   return (
     <TrackListItem
@@ -116,6 +119,7 @@ function LibraryTrackListItem({
       showCheckbox={showCheckbox}
       isSelected={isSelected}
       onToggleSelection={onToggleSelection}
+      curatorNotesCount={isCurator ? (track.curatorNotesCount ?? 0) : 0}
     />
   );
 }
@@ -624,6 +628,7 @@ export default function LibraryIndexRoute({
                       showCheckbox={isCurator && selectionMode}
                       isSelected={selectedTrackIds.has(item.track.id)}
                       onToggleSelection={handleToggleSelection}
+                      isCurator={isCurator}
                     />
                   </div>
                 );
