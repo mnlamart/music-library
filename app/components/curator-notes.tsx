@@ -50,18 +50,22 @@ export function CuratorNotes({ entityType, entityId, currentUserId }: CuratorNot
     }
   }, [notesFetcher, entityType, entityId]);
 
-  // Reload notes after successful create/update/delete
+  // notesFetcher is a new object on later renders. Only a new successful
+  // submission should reload notes and reset the composer.
+  const handledCreateData = useRef<unknown>(null);
   useEffect(() => {
-    if (createFetcher.state === "idle" && createFetcher.data) {
-      notesFetcher.load(
-        `/api/curator/notes?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`,
-      );
-      setNewNoteContent("");
-      setReplyContent("");
-      setReplyingTo(null);
-      setEditingNote(null);
-      setEditContent("");
-    }
+    if (createFetcher.state !== "idle" || !createFetcher.data) return;
+    if (handledCreateData.current === createFetcher.data) return;
+    handledCreateData.current = createFetcher.data;
+
+    notesFetcher.load(
+      `/api/curator/notes?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`,
+    );
+    setNewNoteContent("");
+    setReplyContent("");
+    setReplyingTo(null);
+    setEditingNote(null);
+    setEditContent("");
   }, [createFetcher.state, createFetcher.data, notesFetcher, entityType, entityId]);
 
   const notes = notesFetcher.data?.notes || [];
