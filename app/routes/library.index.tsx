@@ -120,6 +120,7 @@ function LibraryTrackListItem({
       isSelected={isSelected}
       onToggleSelection={onToggleSelection}
       curatorNotesCount={isCurator ? (track.curatorNotesCount ?? 0) : 0}
+      isCurator={isCurator}
     />
   );
 }

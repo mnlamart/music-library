@@ -100,9 +100,30 @@ vi.mock("./track-details-dialog", () => ({
     trackId: string;
     open: boolean;
     initialTab?: string;
+    onOpenChange: (open: boolean) => void;
   }) =>
     open ? (
-      <div role="dialog" aria-label={`Notes for ${trackId} on ${initialTab ?? "basic"}`} />
+      initialTab === "notes" ? (
+        <div role="dialog" aria-label={`Notes for ${trackId} on ${initialTab}`} />
+      ) : (
+        <div role="dialog" aria-label="Curator track details">
+          <span>editor for {trackId}</span>
+          <div role="tablist">
+            <button type="button" role="tab">
+              Basic
+            </button>
+            <button type="button" role="tab">
+              Extended
+            </button>
+            <button type="button" role="tab">
+              History
+            </button>
+            <button type="button" role="tab">
+              Notes
+            </button>
+          </div>
+        </div>
+      )
     ) : null,
 }));
 
@@ -174,6 +195,11 @@ function userWithRole(name: string): MockUser {
 
 beforeEach(() => {
   userState.current = signedInListener;
+  // The read-only details dialog stubs focus to avoid a jsdom focus loop, and
+  // Radix can leave <body> with pointer-events: none after that dialog closes.
+  document.body.style.pointerEvents = "auto";
+  document.body.style.overflow = "";
+  document.body.removeAttribute("data-scroll-locked");
   mockIsMobile = false;
   mockSubmit.mockReset();
   mockPlayerState = {
@@ -495,6 +521,90 @@ test("clicking the notes badge opens track notes without starting playback", asy
   await user.click(screen.getByTitle("1 note"));
 
   expect(screen.getByRole("dialog", { name: "Notes for track-1 on notes" })).toBeDefined();
+  expect(mockPlayTrack).not.toHaveBeenCalled();
+});
+
+test("non-curator desktop row menu keeps the read-only track details view", async () => {
+  const user = userEvent.setup();
+
+  renderTrackListItem({ track: playableTrack });
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+
+  // Radix dialog focus scope recurses in jsdom when opened from a dropdown.
+  const originalFocus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = () => {};
+  try {
+    await user.click(screen.getByRole("menuitem", { name: "View track details" }));
+
+    expect(screen.getByText("Track Information")).toBeDefined();
+    expect(screen.getByText("Artist: Test Artist")).toBeDefined();
+    expect(screen.getByText(/Duration:/)).toBeDefined();
+    expect(screen.getByText(/Added:/)).toBeDefined();
+    expect(screen.queryByRole("tab", { name: "Basic" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Curator track details" })).toBeNull();
+    expect(mockPlayTrack).not.toHaveBeenCalled();
+  } finally {
+    HTMLElement.prototype.focus = originalFocus;
+  }
+});
+
+test("non-curator mobile row menu keeps the read-only track details sheet", async () => {
+  mockIsMobile = true;
+  const user = userEvent.setup();
+
+  renderTrackListItem({ track: playableTrack, isCurator: false });
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  await user.click(screen.getByRole("button", { name: "View track details" }));
+
+  expect(screen.getByText("Track Information")).toBeDefined();
+  expect(screen.getByText("Artist: Test Artist")).toBeDefined();
+  expect(screen.queryByRole("tab", { name: "Basic" })).toBeNull();
+  expect(screen.queryByRole("dialog", { name: "Curator track details" })).toBeNull();
+  expect(mockPlayTrack).not.toHaveBeenCalled();
+});
+
+test("curator desktop row menu opens TrackDetailsDialog without playing", async () => {
+  const user = userEvent.setup();
+
+  renderTrackListItem({ track: playableTrack, isCurator: true });
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  await user.click(screen.getByRole("menuitem", { name: "View track details" }));
+
+  expect(screen.getByRole("dialog", { name: "Curator track details" })).toBeDefined();
+  expect(screen.getByText("editor for track-1")).toBeDefined();
+  expect(screen.getByRole("tab", { name: "Basic" })).toBeDefined();
+  expect(screen.getByRole("tab", { name: "Extended" })).toBeDefined();
+  expect(screen.getByRole("tab", { name: "History" })).toBeDefined();
+  expect(screen.getByRole("tab", { name: "Notes" })).toBeDefined();
+  expect(screen.queryByText("Track Information")).toBeNull();
+  expect(mockPlayTrack).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("tab", { name: "Extended" }));
+  expect(mockPlayTrack).not.toHaveBeenCalled();
+});
+
+test("curator mobile row menu opens TrackDetailsDialog without playing", async () => {
+  mockIsMobile = true;
+  const user = userEvent.setup();
+
+  renderTrackListItem({ track: playableTrack, isCurator: true });
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  await user.click(screen.getByRole("button", { name: "View track details" }));
+
+  expect(screen.getByRole("dialog", { name: "Curator track details" })).toBeDefined();
+  expect(screen.getByText("editor for track-1")).toBeDefined();
+  expect(screen.getByRole("tab", { name: "Basic" })).toBeDefined();
+  expect(screen.getByRole("tab", { name: "Extended" })).toBeDefined();
+  expect(screen.getByRole("tab", { name: "History" })).toBeDefined();
+  expect(screen.getByRole("tab", { name: "Notes" })).toBeDefined();
+  expect(screen.queryByText("Track Information")).toBeNull();
+  expect(mockPlayTrack).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("tab", { name: "Notes" }));
   expect(mockPlayTrack).not.toHaveBeenCalled();
 });
 
