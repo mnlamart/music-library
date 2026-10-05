@@ -1,3 +1,5 @@
+import { type CuratorBadgeSummary } from "./badges.ts";
+
 export const DASHBOARD_METRICS_TTL_MS = 5 * 60 * 1000;
 export const DASHBOARD_METRICS_CACHE_KEY = "curator-dashboard-metrics:v1";
 export const METADATA_FIELD_COUNT = 5;
@@ -44,6 +46,7 @@ export type LeaderboardEntry = {
   rank: number;
   editCount: number;
   curator: CuratorRef;
+  badges?: CuratorBadgeSummary[];
 };
 
 export type LeaderboardResult = {
@@ -64,6 +67,7 @@ export type ActivityItem = {
   message: string;
   createdAt: string;
   curator: CuratorRef;
+  badges?: CuratorBadgeSummary[];
 };
 
 export type ActivityResult = {

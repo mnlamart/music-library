@@ -21,6 +21,11 @@ import { CuratorNotes } from "./curator-notes";
 import { LockBanner } from "./lock-banner";
 import { useLock } from "#app/hooks/use-lock";
 import { broadcastCuratorMessage, useCuratorSync } from "#app/features/curator/sync.client";
+import {
+  clearSessionState,
+  saveSessionState,
+  SESSION_SAVE_DEBOUNCE_MS,
+} from "#app/features/curator/session-recovery.client.ts";
 import { UndoToast } from "./undo-toast";
 
 export interface TrackDetails {
@@ -55,6 +60,7 @@ interface TrackDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialTab?: "basic" | "extended" | "history" | "notes";
+  initialDraft?: Record<string, unknown> | null;
 }
 
 type MetadataWriteResult = {
@@ -74,6 +80,7 @@ export function TrackDetailsDialog({
   open,
   onOpenChange,
   initialTab = "basic",
+  initialDraft = null,
 }: TrackDetailsDialogProps) {
   const detailsFetcher = useFetcher<{
     track: TrackDetails;
@@ -86,6 +93,7 @@ export function TrackDetailsDialog({
   const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [showCommentDialog, setShowCommentDialog] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<any>(null);
+  const [fieldDraft, setFieldDraft] = useState<Record<string, unknown> | null>(initialDraft);
   const [showUndoToast, setShowUndoToast] = useState(false);
   const handledEdit = useRef<unknown>(null);
   const handledRestore = useRef<unknown>(null);
@@ -177,6 +185,31 @@ export function TrackDetailsDialog({
     return cleanup;
   }, [open, trackId, refreshLock, detailsFetcher]);
 
+  useEffect(() => {
+    if (typeof saveSessionState !== "function") return;
+    if (!open) {
+      clearSessionState?.("dialogs");
+      return;
+    }
+    const unsavedChanges = pendingChanges ?? fieldDraft ?? undefined;
+    const timer = window.setTimeout(() => {
+      saveSessionState({
+        type: "dialogs",
+        openDialogs: [
+          {
+            dialogType: "track-edit",
+            entityId: trackId,
+            tab: activeTab,
+            unsavedChanges:
+              unsavedChanges && Object.keys(unsavedChanges).length > 0 ? unsavedChanges : undefined,
+          },
+        ],
+        timestamp: Date.now(),
+      });
+    }, SESSION_SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [open, trackId, activeTab, pendingChanges, fieldDraft]);
+
   const serviceDateAdded = track
     ? formatServiceDateAdded({
         releaseDate: track.releaseDate,
@@ -221,7 +254,7 @@ export function TrackDetailsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto">
           {isLoading ? (
             <>
               <div className="flex items-center justify-center py-12">
@@ -298,6 +331,8 @@ export function TrackDetailsDialog({
                       track={track}
                       onSave={handleSaveChanges}
                       disabled={isLockedByOther}
+                      initialDraft={initialDraft}
+                      onDraftChange={setFieldDraft}
                     />
                   </TabsContent>
 

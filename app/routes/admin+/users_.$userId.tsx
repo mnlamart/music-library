@@ -132,7 +132,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       if (userId === actorId) {
         return data({ error: "You cannot disable your own account" }, { status: 400 });
       }
-      const result = await disableUser(userId);
+      const result = await disableUser(userId, actorId);
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {
         type: "success",
@@ -141,7 +141,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       });
     }
     case "enable": {
-      const result = await enableUser(userId);
+      const result = await enableUser(userId, actorId);
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {
         type: "success",
@@ -150,7 +150,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       });
     }
     case "promote": {
-      const result = await promoteToAdmin(userId);
+      const result = await promoteToAdmin(userId, actorId);
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {
         type: "success",
@@ -171,7 +171,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       });
     }
     case "promote-curator": {
-      const result = await promoteToCurator(userId);
+      const result = await promoteToCurator(userId, actorId);
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {
         type: "success",
@@ -180,7 +180,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       });
     }
     case "demote-curator": {
-      const result = await demoteFromCurator(userId);
+      const result = await demoteFromCurator(userId, actorId);
       if (!result.ok) return failed(result);
       return redirectWithToast(`/admin/users/${userId}`, {
         type: "success",

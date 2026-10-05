@@ -22,6 +22,7 @@ import {
 } from "#app/components/ui/select.tsx";
 import { Textarea } from "#app/components/ui/textarea.tsx";
 import { type ReviewQueueListItem } from "#app/features/curator/review-queue.ts";
+import { useCuratorFilterSession } from "#app/features/curator/use-curator-session.ts";
 
 type QueueResponse = {
   items: ReviewQueueListItem[];
@@ -76,6 +77,23 @@ export function QueueTable() {
   const [resolutionComment, setResolutionComment] = useState("");
 
   const url = queueUrl({ status, entityType, source, page });
+  useCuratorFilterSession({
+    page: "/music/curator/queue",
+    filters: { status, entityType, source, page: String(page) },
+    active: status !== "open" || entityType !== "all" || source !== "all" || page !== 1,
+    readScroll: () => window.scrollY,
+    onRestore: (state) => {
+      const nextStatus = state.filters.status;
+      const nextEntity = state.filters.entityType;
+      const nextSource = state.filters.source;
+      const nextPage = state.filters.page;
+      if (typeof nextStatus === "string") setStatus(nextStatus);
+      if (typeof nextEntity === "string") setEntityType(nextEntity);
+      if (typeof nextSource === "string") setSource(nextSource);
+      if (typeof nextPage === "string") setPage(Number(nextPage) || 1);
+      window.setTimeout(() => window.scrollTo(0, state.scrollPosition), 50);
+    },
+  });
 
   useEffect(() => {
     void queueFetcher.load(url);

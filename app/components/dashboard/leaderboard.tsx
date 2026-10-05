@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#app/components/ui/select.tsx";
+import { CuratorBadges } from "#app/components/curator-badge.tsx";
 import {
   curatorLabel,
   LEADERBOARD_PERIODS,
@@ -77,10 +78,13 @@ export function Leaderboard({ initial }: { initial: LeaderboardResult }) {
                 key={entry.curator.id}
                 className="flex items-center justify-between gap-3 text-sm"
               >
-                <span className="min-w-0 truncate">
-                  <span className="mr-2 text-muted-foreground">{entry.rank}.</span>
-                  {curatorLabel(entry.curator)}
-                </span>
+                <div className="min-w-0">
+                  <div className="truncate">
+                    <span className="mr-2 text-muted-foreground">{entry.rank}.</span>
+                    {curatorLabel(entry.curator)}
+                  </div>
+                  <CuratorBadges badges={entry.badges} />
+                </div>
                 <span className="shrink-0 font-medium">{entry.editCount}</span>
               </li>
             ))}

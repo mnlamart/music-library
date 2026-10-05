@@ -1,4 +1,5 @@
 import { type SEOHandle } from "@nasa-gcn/remix-seo";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { ActivityTab } from "#app/components/dashboard/activity-tab.tsx";
 import { OverviewTab } from "#app/components/dashboard/overview-tab.tsx";
@@ -11,6 +12,11 @@ import {
   getDashboardMetrics,
   getLeaderboard,
 } from "#app/features/curator/dashboard.server.ts";
+import {
+  saveSessionState,
+  SESSION_SAVE_DEBOUNCE_MS,
+} from "#app/features/curator/session-recovery.client.ts";
+import { subscribeRestoredSession } from "#app/features/curator/session-restore.ts";
 import { requireCuratorRole } from "#app/utils/permissions.server.ts";
 import { type Route } from "./+types/dashboard.ts";
 
@@ -35,8 +41,31 @@ export default function CuratorDashboard({ loaderData }: Route.ComponentProps) {
   const requested = searchParams.get("tab");
   const tab = TABS.includes(requested as (typeof TABS)[number]) ? requested! : "overview";
 
+  useEffect(() => {
+    if (tab === "overview" || typeof saveSessionState !== "function") return;
+    const timer = window.setTimeout(() => {
+      saveSessionState({
+        type: "activeTab",
+        dashboardTab: tab,
+        timestamp: Date.now(),
+      });
+    }, SESSION_SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [tab]);
+
+  useEffect(() => {
+    return subscribeRestoredSession((states) => {
+      const tabs = states.find((state) => state.type === "activeTab");
+      if (!tabs || tabs.type !== "activeTab" || !tabs.dashboardTab) return;
+      const next = new URLSearchParams(searchParams);
+      if (tabs.dashboardTab === "overview") next.delete("tab");
+      else next.set("tab", tabs.dashboardTab);
+      setSearchParams(next);
+    });
+  }, [searchParams, setSearchParams]);
+
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8">
+    <div className="container mx-auto max-w-6xl overflow-x-hidden px-4 py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Curator dashboard</h1>
         <p className="text-muted-foreground">
@@ -53,10 +82,18 @@ export default function CuratorDashboard({ loaderData }: Route.ComponentProps) {
         }}
       >
         <TabsList className="mb-4 h-auto w-full flex-wrap justify-start">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="queue">Queue</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="overview" className="min-h-11">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="queue" className="min-h-11">
+            Queue
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="min-h-11">
+            Reports
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="min-h-11">
+            Activity
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
           <OverviewTab

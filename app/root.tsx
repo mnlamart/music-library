@@ -17,6 +17,8 @@ import { HoneypotProvider } from "remix-utils/honeypot/react";
 import { useToast } from "#app/components/toaster.tsx";
 import { useServiceWorkerUpdateToast } from "#app/hooks/use-service-worker-update-toast.tsx";
 import { initCuratorSync, cleanupCuratorSync } from "#app/features/curator/sync.client.ts";
+import { SessionRecoveryPrompt } from "#app/components/session-recovery-prompt.tsx";
+import { userIsCuratorOrAdmin } from "#app/utils/user.ts";
 import { type Route } from "./+types/root.ts";
 import appleTouchIconAssetUrl from "./assets/favicons/apple-touch-icon.png";
 import faviconAssetUrl from "./assets/favicons/favicon.svg";
@@ -417,6 +419,7 @@ function App() {
             <RoomSpeakerBridge />
             <DuplicatePlaylistDialogProvider>
               <ShellLayout />
+              {userIsCuratorOrAdmin(loaderData.user) ? <SessionRecoveryPrompt /> : null}
               <Toaster />
               <AutoplayGuideDialog />
               <EpicProgress />

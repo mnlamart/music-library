@@ -1,5 +1,6 @@
 import { cache, cachified } from "#app/utils/cache.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { awardCuratorBadges, badgesForCurators } from "./badges.server.ts";
 import {
   ACTIVITY_EXPORT_LIMIT,
   ACTIVITY_PAGE_SIZE,
@@ -207,6 +208,7 @@ export async function getLeaderboard({
   limit?: number;
   now?: Date;
 }): Promise<LeaderboardResult> {
+  await awardCuratorBadges();
   const since = periodStart(period, now);
   const totals = await countEditsByCurator(since);
   const ids = [...totals.keys()];
@@ -217,11 +219,13 @@ export async function getLeaderboard({
       })
     : [];
   const byId = new Map(users.map((user) => [user.id, user]));
+  const badgeMap = await badgesForCurators(ids);
   const ranked = assignRanks(
     [...totals.entries()]
       .map(([id, editCount]) => ({
         editCount,
         curator: byId.get(id) ?? { id, username: "unknown", name: null },
+        badges: badgeMap.get(id) ?? [],
       }))
       .sort((a, b) => {
         if (b.editCount !== a.editCount) return b.editCount - a.editCount;
@@ -330,7 +334,7 @@ async function loadEditRows(
   return rows;
 }
 
-function toActivityItem(row: EditRow, now: Date): ActivityItem {
+function toActivityItem(row: EditRow, now: Date, badges: ActivityItem["badges"]): ActivityItem {
   const action = activityAction(row.comment);
   const summary = activitySummary(row.curator, action, row.entityName);
   return {
@@ -343,6 +347,7 @@ function toActivityItem(row: EditRow, now: Date): ActivityItem {
     message: formatActivityLine(summary, row.createdAt, now),
     createdAt: row.createdAt.toISOString(),
     curator: row.curator,
+    badges,
   };
 }
 
@@ -379,6 +384,7 @@ export async function getActivity({
   to?: Date;
   now?: Date;
 } = {}): Promise<ActivityResult> {
+  await awardCuratorBadges();
   const safePage = Math.max(1, page);
   const safePageSize = Math.min(Math.max(1, pageSize), ACTIVITY_EXPORT_LIMIT);
   const filters = { curatorId, entityType, from, to };
@@ -400,9 +406,10 @@ export async function getActivity({
     (row) => row.createdAt.getTime(),
     (row) => row.id,
   );
+  const badgeMap = await badgesForCurators(pageRows.map((row) => row.curator.id));
 
   return {
-    items: pageRows.map((row) => toActivityItem(row, now)),
+    items: pageRows.map((row) => toActivityItem(row, now, badgeMap.get(row.curator.id) ?? [])),
     page: safePage,
     pageSize: safePageSize,
     total,

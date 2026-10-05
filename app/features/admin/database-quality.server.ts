@@ -269,3 +269,43 @@ export async function getDuplicateTracksCount(): Promise<number> {
 export async function getOrphanedFilesCount(): Promise<number> {
   return 0;
 }
+
+/** Score and color for the admin overview. Same weights as the quality page. */
+export async function getDatabaseHealthSummary(): Promise<{
+  score: number;
+  color: "green" | "yellow" | "red";
+}> {
+  const [
+    totalTracks,
+    tracksWithAudio,
+    tracksWithCovers,
+    tracksWithDuration,
+    tracksWithAlbum,
+    tracksWithYear,
+    tracksWithGenre,
+    tracksWithLyrics,
+  ] = await Promise.all([
+    prisma.track.count(),
+    prisma.track.count({ where: { audioFiles: { some: {} } } }),
+    prisma.track.count({ where: { coverImageId: { not: null } } }),
+    prisma.track.count({ where: { duration: { not: null } } }),
+    prisma.track.count({ where: { albumId: { not: null } } }),
+    prisma.track.count({ where: { year: { not: null } } }),
+    prisma.track.count({ where: { genre: { not: null } } }),
+    prisma.track.count({ where: { lyrics: { not: null } } }),
+  ]);
+
+  const pct = (count: number) => (totalTracks > 0 ? (count / totalTracks) * 100 : 0);
+  const score = Math.round(
+    calculateHealthScore({
+      audio: pct(tracksWithAudio),
+      covers: pct(tracksWithCovers),
+      duration: pct(tracksWithDuration),
+      album: pct(tracksWithAlbum),
+      year: pct(tracksWithYear),
+      genre: pct(tracksWithGenre),
+      lyrics: pct(tracksWithLyrics),
+    }),
+  );
+  return { score, color: getHealthColor(score) };
+}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { data, useLoaderData } from "react-router";
+import { useCuratorFilterSession } from "#app/features/curator/use-curator-session.ts";
 import { AlbumMergeDialog, type AlbumOption } from "#app/components/album-merge-dialog";
 import { ArtistMergeDialog, type ArtistOption } from "#app/components/artist-merge-dialog";
 import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
@@ -97,6 +98,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function DuplicatesPage() {
   const { artistGroups, albumGroups } = useLoaderData<typeof loader>();
   const [filter, setFilter] = useState<"both" | "artists" | "albums">("both");
+  useCuratorFilterSession({
+    page: "/music/curator/duplicates",
+    filters: { filter },
+    active: filter !== "both",
+    onRestore: (state) => {
+      const next = state.filters.filter;
+      if (next === "both" || next === "artists" || next === "albums") setFilter(next);
+    },
+  });
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [mergeType, setMergeType] = useState<"artist" | "album">("artist");
   const [mergeData, setMergeData] = useState<{
@@ -133,7 +143,7 @@ export default function DuplicatesPage() {
   };
 
   return (
-    <div className="container mx-auto py-8 max-w-5xl">
+    <div className="container mx-auto max-w-5xl overflow-x-hidden px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Duplicate Detection</h1>
         <p className="text-muted-foreground">
@@ -141,25 +151,25 @@ export default function DuplicatesPage() {
         </p>
       </div>
 
-      <div className="mb-6 flex gap-2">
+      <div className="mb-6 flex flex-wrap gap-2">
         <Button
           variant={filter === "both" ? "default" : "outline"}
           onClick={() => setFilter("both")}
-          size="sm"
+          className="min-h-11"
         >
           Both
         </Button>
         <Button
           variant={filter === "artists" ? "default" : "outline"}
           onClick={() => setFilter("artists")}
-          size="sm"
+          className="min-h-11"
         >
           Artists Only
         </Button>
         <Button
           variant={filter === "albums" ? "default" : "outline"}
           onClick={() => setFilter("albums")}
-          size="sm"
+          className="min-h-11"
         >
           Albums Only
         </Button>

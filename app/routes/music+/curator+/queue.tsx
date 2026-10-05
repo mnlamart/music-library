@@ -15,7 +15,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function CuratorQueuePage() {
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8">
+    <div className="container mx-auto max-w-6xl overflow-x-hidden px-4 py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Review queue</h1>
         <p className="text-muted-foreground">Claim and resolve reported metadata issues.</p>
