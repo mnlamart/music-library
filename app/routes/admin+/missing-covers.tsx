@@ -176,10 +176,12 @@ function formatAge(iso: string): string {
   return `${Math.floor(diffDays / 365)}y ago`;
 }
 
-export default function MissingCoversRoute({ loaderData }: Route.ComponentProps) {
+export default function MissingCoversRoute({ loaderData, actionData }: Route.ComponentProps) {
   const [searchParams] = useSearchParams();
   const activeTab = (searchParams.get("tab") ?? "tracks") as Tab;
   const { statistics, tracksCount, albumsCount, tracks, albums, page, totalPages } = loaderData;
+  const actionError =
+    actionData && "error" in actionData && actionData.error ? actionData.error : null;
 
   return (
     <div className="container py-8">
@@ -194,6 +196,11 @@ export default function MissingCoversRoute({ loaderData }: Route.ComponentProps)
           </p>
         </div>
       </div>
+      {actionError ? (
+        <p className="text-destructive mb-4 text-sm" role="alert">
+          {actionError}
+        </p>
+      ) : null}
       <Spacer size="sm" />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

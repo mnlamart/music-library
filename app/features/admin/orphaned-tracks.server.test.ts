@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
 import { deleteFile } from "#app/utils/storage.server.ts";
-import { cleanupOrphanedAudioFiles, deleteTracks } from "./orphaned-tracks.server.ts";
+import {
+  cleanupOrphanedAudioFiles,
+  deleteTracks,
+  getOrphanedTrackStats,
+  getUnusedTracks,
+} from "./orphaned-tracks.server.ts";
 
 vi.mock("#app/utils/storage.server.ts", () => ({
   deleteFile: vi.fn(),
@@ -56,6 +61,70 @@ async function createTrackWithAudio({
   });
   return { track, artist, service };
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysAgo(days: number) {
+  return new Date(Date.now() - days * DAY_MS);
+}
+
+describe("unused tracks age=all", () => {
+  const createdTrackIds: string[] = [];
+  const createdArtistIds: string[] = [];
+
+  beforeEach(() => {
+    createdTrackIds.length = 0;
+    createdArtistIds.length = 0;
+  });
+
+  afterEach(async () => {
+    if (createdTrackIds.length > 0) {
+      await prisma.track.deleteMany({ where: { id: { in: createdTrackIds } } }).catch(() => {});
+    }
+    if (createdArtistIds.length > 0) {
+      await prisma.artist.deleteMany({ where: { id: { in: createdArtistIds } } }).catch(() => {});
+    }
+  });
+
+  test("returns unused tracks of every age when the age cutoff is dropped", async () => {
+    const olderThan90 = await createTrackWithAudio({
+      title: "Unused older than 90 days",
+      objectKey: `audio/tracks/local/unused-old-${Date.now()}.mp3`,
+    });
+    const newerThan7 = await createTrackWithAudio({
+      title: "Unused newer than 7 days",
+      objectKey: `audio/tracks/local/unused-new-${Date.now()}.mp3`,
+    });
+    createdTrackIds.push(olderThan90.track.id, newerThan7.track.id);
+    createdArtistIds.push(olderThan90.artist.id, newerThan7.artist.id);
+
+    await prisma.track.update({
+      where: { id: olderThan90.track.id },
+      data: { createdAt: daysAgo(100) },
+    });
+    await prisma.track.update({
+      where: { id: newerThan7.track.id },
+      data: { createdAt: daysAgo(1) },
+    });
+
+    const within90Days = await getUnusedTracks(90);
+    const within90Ids = within90Days.map((track) => track.id);
+    expect(within90Ids).toContain(olderThan90.track.id);
+    expect(within90Ids).not.toContain(newerThan7.track.id);
+
+    const within7Days = await getUnusedTracks(7);
+    expect(within7Days.map((track) => track.id)).not.toContain(newerThan7.track.id);
+
+    const allTracks = await getUnusedTracks(null);
+    const allIds = allTracks.map((track) => track.id);
+    expect(allIds).toContain(olderThan90.track.id);
+    expect(allIds).toContain(newerThan7.track.id);
+
+    const statsAll = await getOrphanedTrackStats(null);
+    const stats90 = await getOrphanedTrackStats(90);
+    expect(statsAll.unusedTracks).toBeGreaterThan(stats90.unusedTracks);
+  });
+});
 
 describe("orphaned-tracks delete storage safety", () => {
   const createdTrackIds: string[] = [];

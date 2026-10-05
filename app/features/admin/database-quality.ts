@@ -4,11 +4,11 @@
  */
 
 export const METRIC_WEIGHTS = {
-  audio: 0.30,
+  audio: 0.3,
   covers: 0.25,
   duration: 0.15,
-  album: 0.10,
-  year: 0.10,
+  album: 0.1,
+  year: 0.1,
   genre: 0.05,
   lyrics: 0.05,
 } as const;
@@ -34,9 +34,22 @@ export const METRIC_TARGETS: MetricTarget = {
 } as const;
 
 export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+}
+
+/**
+ * Percent of tracks that have at least one track-level metadata issue.
+ * `tracksWithIssues` must be a distinct track count. Issue buckets overlap, and
+ * artists without a genre are not tracks, so those figures are not a numerator.
+ * The result stays within 0–100.
+ */
+export function percentOfTracksAffected(tracksWithIssues: number, totalTracks: number): number {
+  if (totalTracks <= 0) return 0;
+  const percent = (tracksWithIssues / totalTracks) * 100;
+  if (!Number.isFinite(percent)) return 0;
+  return Math.min(100, Math.max(0, percent));
 }

@@ -161,7 +161,7 @@ function FailureRow({ row }: { row: FingerprintFailureRow }) {
     <TableRow>
       <TableCell>
         <div className="space-y-0.5">
-          <Link to={`/tracks/${row.trackId}`} className="font-medium hover:underline">
+          <Link to={`/library/${row.trackId}`} className="font-medium hover:underline">
             {row.title}
           </Link>
           <p className="text-muted-foreground text-xs">by {row.artist}</p>
@@ -192,7 +192,7 @@ function FailureRow({ row }: { row: FingerprintFailureRow }) {
       </TableCell>
       <TableCell>
         <Button variant="ghost" size="sm" asChild>
-          <Link to={`/tracks/${row.trackId}`}>View</Link>
+          <Link to={`/library/${row.trackId}`}>View</Link>
         </Button>
       </TableCell>
     </TableRow>

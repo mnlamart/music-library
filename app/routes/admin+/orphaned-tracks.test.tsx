@@ -1,9 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
 import { expect, test } from "vitest";
+import OrphanedTracksRoute from "./orphaned-tracks.tsx";
 
 test("renders 403 error for non-admin users", async () => {
   const request = new Request("http://localhost:3000/admin/orphaned-tracks");
@@ -230,3 +232,102 @@ test("shows empty state when no data is available", async () => {
     "No tracks without audio files found.",
   );
 });
+
+const emptyStats = {
+  missingAudio: 0,
+  failedDownloads: 0,
+  storageOrphans: 0,
+  storageWasteMB: 0,
+};
+
+test.each([
+  {
+    tab: "unused-tracks" as const,
+    label: "Throwaway unused",
+    emptyCopy: "No unused tracks found.",
+    buttonName: /delete selected/i,
+    hiddenField: "trackId",
+    row: {
+      id: "track-throwaway",
+      title: "Throwaway unused",
+      artistName: "Nobody",
+      serviceDisplayName: "Local",
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
+    },
+  },
+  {
+    tab: "storage-orphans" as const,
+    label: "audio/throwaway-orphan.mp3",
+    emptyCopy: "No orphaned files found.",
+    buttonName: /clean up storage/i,
+    hiddenField: "fileId",
+    row: {
+      id: "file-throwaway",
+      objectKey: "audio/throwaway-orphan.mp3",
+      format: "mp3",
+      fileSize: 1024,
+      uploadedAt: new Date("2020-01-01T00:00:00.000Z"),
+    },
+  },
+  {
+    tab: "missing-audio" as const,
+    label: "Throwaway missing",
+    emptyCopy: "No tracks without audio files found.",
+    buttonName: /delete selected/i,
+    hiddenField: "trackId",
+    row: {
+      id: "track-missing-throwaway",
+      title: "Throwaway missing",
+      artistName: "Nobody",
+      serviceDisplayName: "YouTube",
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
+    },
+  },
+])(
+  "clears $tab selection after the bulk action removes the row",
+  async ({ tab, label, emptyCopy, buttonName, hiddenField, row }) => {
+    let rows = [row];
+
+    const App = createRoutesStub([
+      {
+        path: "/admin/orphaned-tracks",
+        Component: OrphanedTracksRoute,
+        HydrateFallback: () => <div>Loading...</div>,
+        loader: () => ({
+          stats: emptyStats,
+          tab,
+          tabData: rows,
+          page: 1,
+          totalPages: 1,
+          totalItems: rows.length,
+          serviceFilter: "all",
+          errorCategoryFilter: "all",
+          ageFilter: "30d",
+        }),
+        action: async () => {
+          rows = [];
+          return { success: true, deleted: 1 };
+        },
+      },
+    ]);
+
+    const user = userEvent.setup();
+    render(<App initialEntries={[`/admin/orphaned-tracks?tab=${tab}`]} />);
+
+    const trackRow = await screen.findByRole("row", { name: new RegExp(label, "i") });
+    await user.click(within(trackRow).getByRole("checkbox"));
+
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: buttonName })).toBeInTheDocument();
+    expect(document.querySelector(`input[name="${hiddenField}"]`)).toHaveValue(row.id);
+
+    await user.click(screen.getByRole("button", { name: buttonName }));
+
+    await screen.findByText(emptyCopy);
+    expect(screen.queryByText(/\d+ selected/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: buttonName })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /queue for download/i })).not.toBeInTheDocument();
+    expect(document.querySelector(`input[name="${hiddenField}"]`)).toBeNull();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+  },
+);

@@ -3,6 +3,7 @@
  */
 import { parseString } from "set-cookie-parser";
 import { expect, test, beforeEach } from "vitest";
+import { percentOfTracksAffected } from "#app/features/admin/database-quality.ts";
 import { getSessionExpirationDate, sessionKey } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { authSessionStorage } from "#app/utils/session.server.ts";
@@ -121,6 +122,11 @@ test("database-quality loader returns health metrics for admin", async () => {
   expect(data.metrics.covers).toBeGreaterThanOrEqual(0);
   expect(data.metrics.duration).toBeGreaterThanOrEqual(0);
   expect(data.metadataIssues).toBeDefined();
+  expect(data.tracksWithMetadataIssues).toBeGreaterThanOrEqual(0);
+  expect(data.tracksWithMetadataIssues).toBeLessThanOrEqual(data.totalTracks);
+  const affectedPercent = percentOfTracksAffected(data.tracksWithMetadataIssues, data.totalTracks);
+  expect(affectedPercent).toBeGreaterThanOrEqual(0);
+  expect(affectedPercent).toBeLessThanOrEqual(100);
   expect(data.storageStats).toBeDefined();
   expect(data.storageStats.totalBytes).toBeGreaterThanOrEqual(0);
 });
