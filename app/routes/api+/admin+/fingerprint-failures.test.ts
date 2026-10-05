@@ -336,6 +336,44 @@ describe("fingerprint-failures admin API", () => {
     expect(byYoutube.failures.map((f) => f.title).sort()).toEqual(["YT MP3 Fail", "YT WAV Fail"]);
   });
 
+  test("service=local includes failures that belong to the local service", async () => {
+    const cookie = await createAdminCookie();
+    const { local, youtube } = await ensureServices();
+
+    await createTrackWithAudio({
+      title: "Seeded Local Fail",
+      artistName: "Local Artist",
+      serviceId: local.id,
+      audio: {
+        contentHash: "hash-local-service",
+        audioFingerprint: null,
+        format: "flac",
+        serviceId: local.id,
+      },
+    });
+    await createTrackWithAudio({
+      title: "YouTube Fail",
+      artistName: "YouTube Artist",
+      serviceId: youtube.id,
+      audio: {
+        contentHash: "hash-youtube",
+        audioFingerprint: null,
+        format: "mp3",
+        serviceId: youtube.id,
+      },
+    });
+
+    const byLocal = unwrapLoaderData<{
+      failures: Array<{ title: string; serviceId: string | null; serviceName: string | null }>;
+      totalFailures: number;
+    }>(await loadApi(cookie, "?service=local"));
+
+    expect(byLocal.totalFailures).toBe(1);
+    expect(byLocal.failures.map((f) => f.title)).toEqual(["Seeded Local Fail"]);
+    expect(byLocal.failures[0]?.serviceId).toBe(local.id);
+    expect(byLocal.failures[0]?.serviceName).toBe("local");
+  });
+
   test("filters failures by file size bucket", async () => {
     const cookie = await createAdminCookie();
     const { youtube } = await ensureServices();
