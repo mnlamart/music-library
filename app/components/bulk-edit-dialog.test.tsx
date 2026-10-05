@@ -36,6 +36,26 @@ vi.mock("#app/components/artist-autocomplete", () => ({
   ArtistAutocomplete: () => <div>Artist</div>,
 }));
 
+vi.mock("#app/components/album-autocomplete", () => ({
+  AlbumAutocomplete: ({
+    onChange,
+    label = "Album",
+    disabled,
+  }: {
+    onChange: (albumId: string | null, albumName: string) => void;
+    label?: string;
+    disabled?: boolean;
+  }) => (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange("album-blue", "Kind of Blue")}
+    >
+      {label}
+    </button>
+  ),
+}));
+
 vi.mock("#app/components/genre-selector", () => ({
   GenreSelector: ({
     onChange,
@@ -121,12 +141,26 @@ test("submits JSON to the bulk-edit API instead of FormData", async () => {
   });
 });
 
-test("does not send unsupported albumName in the changes payload", async () => {
+test("sends the selected album id and not an album name", async () => {
   const user = userEvent.setup();
   renderDialog();
 
-  const albumInput = screen.getByLabelText("Album");
-  expect(albumInput).toBeDisabled();
+  const album = screen.getByRole("button", { name: "Album" });
+  expect(album).toBeEnabled();
+  expect(screen.queryByText(/coming soon/i)).not.toBeInTheDocument();
+
+  await user.click(album);
+  await user.type(screen.getByLabelText(/Bulk Edit Reason/), "Assign album");
+  await user.click(screen.getByRole("button", { name: /Apply to 2 Tracks/ }));
+
+  const [payload] = mockSubmit.mock.calls[0] ?? [];
+  expect(payload.changes).toEqual({ albumId: "album-blue" });
+  expect(payload.changes).not.toHaveProperty("albumName");
+});
+
+test("leaves album unchanged when no album is selected", async () => {
+  const user = userEvent.setup();
+  renderDialog();
 
   await user.type(screen.getByLabelText("Year"), "1999");
   await user.type(screen.getByLabelText(/Bulk Edit Reason/), "Set year");
@@ -134,6 +168,7 @@ test("does not send unsupported albumName in the changes payload", async () => {
 
   const [payload] = mockSubmit.mock.calls[0] ?? [];
   expect(payload.changes).toEqual({ year: 1999 });
+  expect(payload.changes).not.toHaveProperty("albumId");
   expect(payload.changes).not.toHaveProperty("albumName");
 });
 
