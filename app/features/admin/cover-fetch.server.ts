@@ -9,11 +9,6 @@ export async function getTracksWithoutCovers(params: { limit?: number; offset?: 
   const tracks = await prisma.track.findMany({
     where: {
       coverImageId: null,
-      servicePlaylistTracks: {
-        some: {
-          thumbnailUrl: { not: null },
-        },
-      },
     },
     include: {
       artist: { select: { id: true, name: true } },
@@ -48,11 +43,6 @@ export async function countTracksWithoutCovers(): Promise<number> {
   return prisma.track.count({
     where: {
       coverImageId: null,
-      servicePlaylistTracks: {
-        some: {
-          thumbnailUrl: { not: null },
-        },
-      },
     },
   });
 }
