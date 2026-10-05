@@ -49,6 +49,11 @@ export interface OrphanedTrackStats {
   storageWasteMB: number;
 }
 
+function unusedTrackAgeCutoff(ageDays: number | null): Date | null {
+  if (ageDays === null) return null;
+  return new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000);
+}
+
 function categorizeError(errorHistoryJson: string): string {
   try {
     const errors = JSON.parse(errorHistoryJson);
@@ -90,16 +95,13 @@ export async function getOrphanedTrackStats(
   const storageWasteBytes = Number(orphanedFilesSize[0]?.totalSize ?? 0);
   const storageWasteMB = Math.round(storageWasteBytes / (1024 * 1024));
 
-  const ageFilter =
-    unusedTracksAgeDays !== null
-      ? new Date(Date.now() - unusedTracksAgeDays * 24 * 60 * 60 * 1000)
-      : new Date(0);
+  const ageFilter = unusedTrackAgeCutoff(unusedTracksAgeDays);
 
   const unusedTracks = await prisma.track.count({
     where: {
       userTracks: { none: {} },
       playlists: { none: {} },
-      createdAt: { lt: ageFilter },
+      ...(ageFilter ? { createdAt: { lt: ageFilter } } : {}),
     },
   });
 
@@ -205,14 +207,13 @@ export async function getOrphanedAudioFiles(): Promise<OrphanedAudioFile[]> {
 }
 
 export async function getUnusedTracks(ageDays: number | null = 30): Promise<UnusedTrack[]> {
-  const ageFilter =
-    ageDays !== null ? new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000) : new Date(0);
+  const ageFilter = unusedTrackAgeCutoff(ageDays);
 
   const tracks = await prisma.track.findMany({
     where: {
       userTracks: { none: {} },
       playlists: { none: {} },
-      createdAt: { lt: ageFilter },
+      ...(ageFilter ? { createdAt: { lt: ageFilter } } : {}),
     },
     take: MAX_ROWS,
     orderBy: { createdAt: "desc" },
