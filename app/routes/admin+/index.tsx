@@ -188,7 +188,9 @@ function MiniBarChart({
               className="bg-foreground/80 min-w-0 flex-1 rounded-t-sm"
               style={{
                 height: `${(point.value / max) * 100}%`,
-                minHeight: point.value > 0 ? 2 : 0,
+                // A zero day is still a day in the 30-day range. Keep a sliver
+                // so the chart shows one bar per UTC day, including zeros.
+                minHeight: 2,
               }}
               title={`${point.day}: ${point.value}`}
             />

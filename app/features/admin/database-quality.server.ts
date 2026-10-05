@@ -248,8 +248,11 @@ export async function getStorageStats(): Promise<StorageStats> {
     format: f.format,
     fileSize: f.fileSize || 0,
     trackId: f.trackId,
-    trackTitle: f.track.title,
-    artistName: f.track.artist.name,
+    // Orphaned storage rows keep a trackId after the Track row is gone.
+    // SQLite does not always enforce that foreign key, and this list is part
+    // of the page the admin overview links to for the health score.
+    trackTitle: f.track?.title ?? "Missing track",
+    artistName: f.track?.artist?.name ?? "—",
   }));
 
   return {
