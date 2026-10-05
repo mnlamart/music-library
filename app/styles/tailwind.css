@@ -276,3 +276,11 @@
     border-color: var(--border);
   }
 }
+
+/* Radix sizes the ScrollArea content wrapper with `display: table`, which
+   ignores the viewport width. Vertical lists then grow a horizontal scrollbar
+   and touch scrolling gets stuck. These scroll areas only scroll vertically. */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  min-width: 0 !important;
+}

@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/react-virtual";
+import { useWindowVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useRef } from "react";
 import { data, useFetcher, useSearchParams } from "react-router";
 import { SortDirectionToggle } from "#app/components/sort-direction-toggle.tsx";
@@ -7,7 +7,6 @@ import { TrackListItem } from "#app/components/track-list-item";
 import { Badge } from "#app/components/ui/badge.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
-import { ScrollArea } from "#app/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -28,6 +27,12 @@ import {
 } from "#app/utils/discover.ts";
 import { listDiscoverTracks } from "#app/utils/discover-tracks.server.ts";
 import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
+import {
+  estimateTrackListItemSize,
+  measureTrackListElement,
+  useListScrollMargin,
+  virtualRowOffset,
+} from "#app/utils/track-list-virtualizer.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { type Route } from "./+types/discover.index.ts";
 
@@ -223,13 +228,10 @@ export default function DiscoverIndexRoute({ loaderData }: Route.ComponentProps)
     searchParams.get("dir") ?? loaderDirection,
     defaultDiscoverSortDirection(sort),
   );
-  const parentRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const scrollDiscoverToTop = useCallback(() => {
-    const viewport = parentRef.current?.querySelector("[data-radix-scroll-area-viewport]");
-    if (viewport instanceof HTMLElement) {
-      viewport.scrollTop = 0;
-    }
+    window.scrollTo({ top: 0 });
   }, []);
 
   const handleSortChange = useCallback(
@@ -313,12 +315,14 @@ export default function DiscoverIndexRoute({ loaderData }: Route.ComponentProps)
 
   const allItems = queryData?.pages.flatMap((page) => page.tracks) || [];
 
-  const virtualizer = useVirtualizer({
+  const listReady = status === "success" && allItems.length > 0;
+  const scrollMargin = useListScrollMargin(listRef, listReady);
+  const virtualizer = useWindowVirtualizer({
     count: 1 + allItems.length + (hasNextPage ? 1 : 0),
-    getScrollElement: () =>
-      parentRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
-    estimateSize: () => 64,
+    estimateSize: (index) => estimateTrackListItemSize(index, true),
+    measureElement: measureTrackListElement,
     overscan: 5,
+    scrollMargin,
     rangeExtractor: useCallback((range: Range) => {
       const next = new Set([0, ...defaultRangeExtractor(range)]);
       return [...next].sort((a, b) => a - b);
@@ -401,92 +405,83 @@ export default function DiscoverIndexRoute({ loaderData }: Route.ComponentProps)
           </p>
         </div>
       ) : (
-        <div className="h-[600px] w-full">
-          <ScrollArea className="h-full w-full" ref={parentRef}>
-            <div
-              style={{
-                height: `${virtualizer.getTotalSize()}px`,
+        <div ref={listRef} data-testid="discover-track-list" className="relative min-w-0">
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const isHeader = virtualItem.index === 0;
+              const rowStyle = {
+                position: "absolute" as const,
+                top: 0,
+                left: 0,
                 width: "100%",
-                position: "relative",
-              }}
-            >
-              {virtualizer.getVirtualItems().map((virtualItem) => {
-                const isHeader = virtualItem.index === 0;
+                transform: virtualRowOffset(virtualItem.start, scrollMargin),
+              };
 
-                if (isHeader) {
-                  return (
-                    <div
-                      key="header"
-                      style={{
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 10,
-                        height: `${virtualItem.size}px`,
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                      className="bg-background border-b"
-                    >
-                      <div className="flex items-center gap-4 px-1 py-3 text-sm font-medium text-muted-foreground sm:px-4">
-                        <div className="w-8 flex items-center justify-center min-w-8">#</div>
-                        <div className="flex-1 min-w-0">Title</div>
-                        <div className="hidden md:flex text-xs text-muted-foreground w-12 text-center">
-                          Duration
-                        </div>
-                        <div className="flex items-center gap-1 w-8">Actions</div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                const itemIndex = virtualItem.index - 1;
-
-                if (itemIndex >= allItems.length) {
-                  return (
-                    <div
-                      key="loading"
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: `${virtualItem.size}px`,
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                    >
-                      <div className="flex w-full justify-center py-4">
-                        {isFetchingNextPage ? (
-                          <Icon name="update" className="h-6 w-6 animate-spin" />
-                        ) : hasNextPage ? (
-                          "Loading more..."
-                        ) : (
-                          "Nothing more to load"
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-
-                const item = allItems[itemIndex];
-                if (!item) return null;
-
+              if (isHeader) {
                 return (
                   <div
-                    key={item.id}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: `${virtualItem.size}px`,
-                      transform: `translateY(${virtualItem.start}px)`,
-                    }}
+                    key="header"
+                    data-index={virtualItem.index}
+                    ref={virtualizer.measureElement}
+                    style={{ ...rowStyle, position: "sticky", top: 0, zIndex: 10 }}
+                    className="bg-background border-b h-16"
                   >
-                    <DiscoverTrackListItem track={item} index={itemIndex} playlists={playlists} />
+                    <div className="flex items-center gap-4 px-1 py-3 text-sm font-medium text-muted-foreground sm:px-4">
+                      <div className="w-8 flex items-center justify-center min-w-8">#</div>
+                      <div className="flex-1 min-w-0">Title</div>
+                      <div className="hidden md:flex text-xs text-muted-foreground w-12 text-center">
+                        Duration
+                      </div>
+                      <div className="flex items-center gap-1 w-8">Actions</div>
+                    </div>
                   </div>
                 );
-              })}
-            </div>
-          </ScrollArea>
+              }
+
+              const itemIndex = virtualItem.index - 1;
+
+              if (itemIndex >= allItems.length) {
+                return (
+                  <div
+                    key="loading"
+                    data-index={virtualItem.index}
+                    ref={virtualizer.measureElement}
+                    style={rowStyle}
+                  >
+                    <div className="flex w-full justify-center py-4">
+                      {isFetchingNextPage ? (
+                        <Icon name="update" className="h-6 w-6 animate-spin" />
+                      ) : hasNextPage ? (
+                        "Loading more..."
+                      ) : (
+                        "Nothing more to load"
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              const item = allItems[itemIndex];
+              if (!item) return null;
+
+              return (
+                <div
+                  key={item.id}
+                  data-index={virtualItem.index}
+                  ref={virtualizer.measureElement}
+                  style={rowStyle}
+                >
+                  <DiscoverTrackListItem track={item} index={itemIndex} playlists={playlists} />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

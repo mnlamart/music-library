@@ -77,7 +77,10 @@ export function RoomSpeakerBridge() {
     return (
       <div
         className="fixed inset-x-0 z-50 border-t border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80 md:bottom-0"
-        style={{ bottom: "calc(var(--bottom-bar-height, 64px) + env(safe-area-inset-bottom))" }}
+        style={{
+          bottom:
+            "calc(var(--bottom-bar-height, 64px) + var(--player-error-height, 0px) + env(safe-area-inset-bottom))",
+        }}
         data-testid="room-now-playing-bar"
       >
         <Link

@@ -1018,6 +1018,28 @@ export function AudioPlayer(props: AudioPlayerProps) {
   const audioFile = track?.audioFiles?.length ? selectBestAudioFile(track.audioFiles) : null;
   const [audioSrc, setAudioSrc] = useState<string | undefined>(undefined);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const playbackErrorRef = useRef<HTMLDivElement>(null);
+
+  // The fixed player grows when autoplay is blocked. Publish that extra height
+  // so page padding can scroll the last rows clear of the bar.
+  useLayoutEffect(() => {
+    const node = playbackErrorRef.current;
+    if (!node) {
+      document.body.style.removeProperty("--player-error-height");
+      return;
+    }
+
+    const apply = () => {
+      document.body.style.setProperty("--player-error-height", `${node.offsetHeight}px`);
+    };
+    apply();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(apply);
+    observer?.observe(node);
+    return () => {
+      observer?.disconnect();
+      document.body.style.removeProperty("--player-error-height");
+    };
+  }, [playbackError]);
 
   const trackId = track?.id;
 
@@ -1683,7 +1705,11 @@ export function AudioPlayer(props: AudioPlayerProps) {
   return (
     <div className="fixed bottom-16 left-0 right-0 z-50 border-t border-border bg-background/95 shadow-lg backdrop-blur-sm pb-[env(safe-area-inset-bottom)] md:bottom-0">
       {playbackError ? (
-        <div data-testid="player-playback-error" className="px-4 py-3 text-sm text-destructive">
+        <div
+          ref={playbackErrorRef}
+          data-testid="player-playback-error"
+          className="px-4 py-3 text-sm text-destructive"
+        >
           <p className="container">{playbackError}</p>
         </div>
       ) : null}
