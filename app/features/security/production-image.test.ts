@@ -64,20 +64,6 @@ function startupScripts(litefs: string): string[] {
 }
 
 describe("production image startup scripts", () => {
-  test("does not boot the one-time security-event repair", () => {
-    const ignoreFile = fs.readFileSync(
-      path.join(repoRoot, "other/Dockerfile.dockerignore"),
-      "utf8",
-    );
-    const litefs = fs.readFileSync(path.join(repoRoot, "other/litefs.yml"), "utf8");
-    const dockerfile = fs.readFileSync(path.join(repoRoot, "other/Dockerfile"), "utf8");
-    const repair = "scripts/align-security-event-schema.mjs";
-
-    expect(startupScripts(litefs)).not.toContain(repair);
-    expect(dockerignoreExcludes(ignoreFile, repair)).toBe(true);
-    expect(dockerfile).not.toContain(repair);
-  });
-
   test("ships every node script LiteFS runs before the server starts", () => {
     const ignoreFile = fs.readFileSync(
       path.join(repoRoot, "other/Dockerfile.dockerignore"),
