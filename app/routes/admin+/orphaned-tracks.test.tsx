@@ -331,3 +331,129 @@ test.each([
     expect(screen.getByRole("checkbox")).not.toBeChecked();
   },
 );
+
+const filterStats = {
+  missingAudio: 2,
+  failedDownloads: 0,
+  storageOrphans: 0,
+  storageWasteMB: 0,
+  unusedTracks: 0,
+};
+
+function rowsFor(service: string | null) {
+  const rows = [
+    {
+      id: "yt-1",
+      title: "QA436 Missing YouTube One",
+      artistName: "Meryl",
+      serviceDisplayName: "YouTube",
+      createdAt: new Date("2026-10-01T00:00:00.000Z"),
+    },
+    {
+      id: "local-1",
+      title: "QA436 Missing Local One",
+      artistName: "Meryl",
+      serviceDisplayName: "Local Upload",
+      createdAt: new Date("2026-10-01T00:00:00.000Z"),
+    },
+  ];
+  if (service === "youtube") return rows.filter((row) => row.serviceDisplayName === "YouTube");
+  if (service === "local") return rows.filter((row) => row.serviceDisplayName === "Local Upload");
+  return rows;
+}
+
+test("service filter submits YouTube and Local", async () => {
+  const user = userEvent.setup();
+  const App = createRoutesStub([
+    {
+      path: "/admin/orphaned-tracks",
+      Component: OrphanedTracksRoute,
+      HydrateFallback: () => null,
+      loader: ({ request }) => {
+        const url = new URL(request.url);
+        const service = url.searchParams.get("service");
+        return {
+          stats: filterStats,
+          tab: "missing-audio",
+          tabData: rowsFor(service),
+          page: 1,
+          totalPages: 1,
+          totalItems: rowsFor(service).length,
+          serviceFilter: service && service.length > 0 ? service : "all",
+          errorCategoryFilter: "all",
+          ageFilter: "30d",
+        };
+      },
+    },
+  ]);
+
+  render(<App initialEntries={["/admin/orphaned-tracks?tab=missing-audio"]} />);
+  expect(await screen.findByText("QA436 Missing YouTube One")).toBeTruthy();
+  expect(screen.getByText("QA436 Missing Local One")).toBeTruthy();
+
+  await user.selectOptions(screen.getByLabelText("Service"), "youtube");
+  await user.click(screen.getByRole("button", { name: "Filter" }));
+
+  expect(await screen.findByText("QA436 Missing YouTube One")).toBeTruthy();
+  expect(screen.queryByText("QA436 Missing Local One")).toBeNull();
+
+  await user.selectOptions(screen.getByLabelText("Service"), "local");
+  await user.click(screen.getByRole("button", { name: "Filter" }));
+
+  expect(await screen.findByText("QA436 Missing Local One")).toBeTruthy();
+  expect(screen.queryByText("QA436 Missing YouTube One")).toBeNull();
+});
+
+test("unused age filter submits the chosen window", async () => {
+  const user = userEvent.setup();
+  const titles = {
+    "7d": ["QA436 Unused 10d", "QA436 Unused 40d", "QA436 Unused 100d"],
+    "30d": ["QA436 Unused 40d", "QA436 Unused 100d"],
+    "90d": ["QA436 Unused 100d"],
+  } as const;
+  const App = createRoutesStub([
+    {
+      path: "/admin/orphaned-tracks",
+      Component: OrphanedTracksRoute,
+      HydrateFallback: () => null,
+      loader: ({ request }) => {
+        const age = new URL(request.url).searchParams.get("age") ?? "30d";
+        const window = age === "7d" || age === "90d" ? age : "30d";
+        const tabData = titles[window].map((title) => ({
+          id: title,
+          title,
+          artistName: "Meryl",
+          serviceDisplayName: "Local Upload",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        }));
+        return {
+          stats: filterStats,
+          tab: "unused-tracks",
+          tabData,
+          page: 1,
+          totalPages: 1,
+          totalItems: tabData.length,
+          serviceFilter: "all",
+          errorCategoryFilter: "all",
+          ageFilter: age,
+        };
+      },
+    },
+  ]);
+
+  render(<App initialEntries={["/admin/orphaned-tracks?tab=unused-tracks&age=30d"]} />);
+  expect(await screen.findByText("QA436 Unused 40d")).toBeTruthy();
+  expect(screen.queryByText("QA436 Unused 10d")).toBeNull();
+
+  await user.selectOptions(screen.getByLabelText("Age"), "90d");
+  await user.click(screen.getByRole("button", { name: "Filter" }));
+
+  expect(await screen.findByText("QA436 Unused 100d")).toBeTruthy();
+  expect(screen.queryByText("QA436 Unused 40d")).toBeNull();
+
+  await user.selectOptions(screen.getByLabelText("Age"), "7d");
+  await user.click(screen.getByRole("button", { name: "Filter" }));
+
+  expect(await screen.findByText("QA436 Unused 10d")).toBeTruthy();
+  expect(screen.getByText("QA436 Unused 100d")).toBeTruthy();
+});
