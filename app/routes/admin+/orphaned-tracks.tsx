@@ -7,8 +7,21 @@ import { Badge } from "#app/components/ui/badge.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#app/components/ui/select.tsx";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#app/components/ui/table.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#app/components/ui/select.tsx";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "#app/components/ui/table.tsx";
 import {
   getOrphanedTrackStats,
   getTracksWithoutAudio,
@@ -37,16 +50,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const tabParam = url.searchParams.get("tab") ?? "missing-audio";
-  const tab: TabType = TABS.includes(tabParam as TabType)
-    ? (tabParam as TabType)
-    : "missing-audio";
+  const tab: TabType = TABS.includes(tabParam as TabType) ? (tabParam as TabType) : "missing-audio";
 
   const page = Math.max(1, Number(url.searchParams.get("page") ?? "1"));
   const serviceFilter = url.searchParams.get("service") ?? "all";
   const errorCategoryFilter = url.searchParams.get("errorCategory") ?? "all";
   const ageFilter = url.searchParams.get("age") ?? "30d";
-  
-  const ageDays = ageFilter === "7d" ? 7 : ageFilter === "90d" ? 90 : ageFilter === "all" ? null : 30;
+
+  const ageDays =
+    ageFilter === "7d" ? 7 : ageFilter === "90d" ? 90 : ageFilter === "all" ? null : 30;
 
   const stats = await getOrphanedTrackStats(ageDays);
 
@@ -55,9 +67,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   switch (tab) {
     case "missing-audio": {
-      const tracks = await getTracksWithoutAudio(
-        serviceFilter !== "all" ? serviceFilter : null,
-      );
+      const tracks = await getTracksWithoutAudio(serviceFilter !== "all" ? serviceFilter : null);
       tabData = tracks;
       totalItems = tracks.length;
       break;
@@ -108,7 +118,9 @@ export async function action({ request }: Route.ActionArgs) {
 
   switch (intent) {
     case "queue-for-download": {
-      const trackIds = formData.getAll("trackId").filter((id): id is string => typeof id === "string");
+      const trackIds = formData
+        .getAll("trackId")
+        .filter((id): id is string => typeof id === "string");
       if (trackIds.length === 0) {
         return data({ success: false, error: "No tracks selected" }, { status: 400 });
       }
@@ -117,7 +129,9 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     case "delete-tracks": {
-      const trackIds = formData.getAll("trackId").filter((id): id is string => typeof id === "string");
+      const trackIds = formData
+        .getAll("trackId")
+        .filter((id): id is string => typeof id === "string");
       if (trackIds.length === 0) {
         return data({ success: false, error: "No tracks selected" }, { status: 400 });
       }
@@ -126,7 +140,9 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     case "cleanup-orphaned-files": {
-      const fileIds = formData.getAll("fileId").filter((id): id is string => typeof id === "string");
+      const fileIds = formData
+        .getAll("fileId")
+        .filter((id): id is string => typeof id === "string");
       if (fileIds.length === 0) {
         return data({ success: false, error: "No files selected" }, { status: 400 });
       }
@@ -174,8 +190,7 @@ function ErrorBadge({ category }: { category: string }) {
 }
 
 export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps) {
-  const { stats, tab, tabData, serviceFilter, ageFilter } =
-    loaderData;
+  const { stats, tab, tabData, serviceFilter, ageFilter } = loaderData;
 
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
 
@@ -194,14 +209,18 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
     });
   }, [tabData]);
 
+  // The effect above updates state after paint. Filter here so the toolbar and
+  // hidden inputs drop removed rows in the same render as the reloaded list.
+  const visibleSelectedIds = selectedIds.filter((id) =>
+    tabData.some((item: any) => item.id === id),
+  );
+
   const toggleSelection = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
-    );
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === tabData.length) {
+    if (visibleSelectedIds.length === tabData.length) {
       setSelectedIds([]);
     } else {
       setSelectedIds(tabData.map((item: any) => item.id));
@@ -268,9 +287,9 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
       <div className="rounded-lg border p-4">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2">
-            {selectedIds.length > 0 && (
+            {visibleSelectedIds.length > 0 && (
               <span className="text-sm text-muted-foreground">
-                {selectedIds.length} selected
+                {visibleSelectedIds.length} selected
               </span>
             )}
           </div>
@@ -315,10 +334,10 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
               </Form>
             )}
 
-            {tab === "missing-audio" && selectedIds.length > 0 && (
+            {tab === "missing-audio" && visibleSelectedIds.length > 0 && (
               <Form method="post">
                 <input type="hidden" name="intent" value="queue-for-download" />
-                {selectedIds.map((id) => (
+                {visibleSelectedIds.map((id) => (
                   <input key={id} type="hidden" name="trackId" value={id} />
                 ))}
                 <Button type="submit" variant="default" size="sm">
@@ -328,23 +347,24 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
               </Form>
             )}
 
-            {(tab === "missing-audio" || tab === "unused-tracks") && selectedIds.length > 0 && (
-              <Form method="post">
-                <input type="hidden" name="intent" value="delete-tracks" />
-                {selectedIds.map((id) => (
-                  <input key={id} type="hidden" name="trackId" value={id} />
-                ))}
-                <Button type="submit" variant="destructive" size="sm">
-                  <Icon name="trash" className="mr-1" />
-                  Delete Selected
-                </Button>
-              </Form>
-            )}
+            {(tab === "missing-audio" || tab === "unused-tracks") &&
+              visibleSelectedIds.length > 0 && (
+                <Form method="post">
+                  <input type="hidden" name="intent" value="delete-tracks" />
+                  {visibleSelectedIds.map((id) => (
+                    <input key={id} type="hidden" name="trackId" value={id} />
+                  ))}
+                  <Button type="submit" variant="destructive" size="sm">
+                    <Icon name="trash" className="mr-1" />
+                    Delete Selected
+                  </Button>
+                </Form>
+              )}
 
-            {tab === "storage-orphans" && selectedIds.length > 0 && (
+            {tab === "storage-orphans" && visibleSelectedIds.length > 0 && (
               <Form method="post">
                 <input type="hidden" name="intent" value="cleanup-orphaned-files" />
-                {selectedIds.map((id) => (
+                {visibleSelectedIds.map((id) => (
                   <input key={id} type="hidden" name="fileId" value={id} />
                 ))}
                 <Button type="submit" variant="destructive" size="sm">
@@ -363,7 +383,7 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
                 <TableHead className="w-12">
                   <input
                     type="checkbox"
-                    checked={selectedIds.length === tabData.length && tabData.length > 0}
+                    checked={visibleSelectedIds.length === tabData.length && tabData.length > 0}
                     onChange={toggleSelectAll}
                   />
                 </TableHead>
@@ -386,7 +406,7 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
                     <TableCell>
                       <input
                         type="checkbox"
-                        checked={selectedIds.includes(track.id)}
+                        checked={visibleSelectedIds.includes(track.id)}
                         onChange={() => toggleSelection(track.id)}
                       />
                     </TableCell>
@@ -447,7 +467,7 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
                 <TableHead className="w-12">
                   <input
                     type="checkbox"
-                    checked={selectedIds.length === tabData.length && tabData.length > 0}
+                    checked={visibleSelectedIds.length === tabData.length && tabData.length > 0}
                     onChange={toggleSelectAll}
                   />
                 </TableHead>
@@ -470,7 +490,7 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
                     <TableCell>
                       <input
                         type="checkbox"
-                        checked={selectedIds.includes(file.id)}
+                        checked={visibleSelectedIds.includes(file.id)}
                         onChange={() => toggleSelection(file.id)}
                       />
                     </TableCell>
@@ -494,7 +514,7 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
                 <TableHead className="w-12">
                   <input
                     type="checkbox"
-                    checked={selectedIds.length === tabData.length && tabData.length > 0}
+                    checked={visibleSelectedIds.length === tabData.length && tabData.length > 0}
                     onChange={toggleSelectAll}
                   />
                 </TableHead>
@@ -517,7 +537,7 @@ export default function OrphanedTracksRoute({ loaderData }: Route.ComponentProps
                     <TableCell>
                       <input
                         type="checkbox"
-                        checked={selectedIds.includes(track.id)}
+                        checked={visibleSelectedIds.includes(track.id)}
                         onChange={() => toggleSelection(track.id)}
                       />
                     </TableCell>
