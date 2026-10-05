@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { data, useFetcher } from "react-router";
 import { AlbumCard } from "#app/components/album-card.tsx";
 import { ArtistEditDialog } from "#app/components/artist-edit-dialog.tsx";
+import { ArtistSplitDialog } from "#app/components/artist-split-dialog.tsx";
 import { FlagForReviewDialog } from "#app/components/flag-for-review-dialog.tsx";
 import { Breadcrumbs, type BreadcrumbHandle } from "#app/components/breadcrumbs.tsx";
 import { InfiniteScrollSentinel } from "#app/components/infinite-scroll-sentinel.tsx";
@@ -95,6 +96,7 @@ export default function ArtistRoute({ loaderData }: Route.ComponentProps) {
   const [pagination, setPagination] = useState(initialPagination);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
+  const [splitDialogOpen, setSplitDialogOpen] = useState(false);
   const requestedArtistRef = useRef<string | null>(null);
 
   // Reset the accumulated list whenever navigation re-runs the loader with a
@@ -146,7 +148,13 @@ export default function ArtistRoute({ loaderData }: Route.ComponentProps) {
               {artist.genre ? <span aria-hidden="true">·</span> : null}
               <span>{formatArtistSummary(artist.albums.length, artist.trackCount)}</span>
               {(canEdit || canFlagForReview) && (
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {canEdit && (
+                    <Button variant="outline" size="sm" onClick={() => setSplitDialogOpen(true)}>
+                      <Icon name="arrows-right-left" className="mr-2 h-4 w-4" />
+                      Split Artist
+                    </Button>
+                  )}
                   {canEdit && (
                     <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
                       <Icon name="pencil-1" className="mr-2 h-4 w-4" />
@@ -237,14 +245,28 @@ export default function ArtistRoute({ loaderData }: Route.ComponentProps) {
           </div>
         ) : null}
 
-        {canEdit && (
-          <ArtistEditDialog
-            artist={artist}
-            open={editDialogOpen}
-            onOpenChange={setEditDialogOpen}
-            onSaved={() => window.location.reload()}
-          />
-        )}
+        {canEdit ? (
+          <>
+            <ArtistEditDialog
+              artist={artist}
+              open={editDialogOpen}
+              onOpenChange={setEditDialogOpen}
+              onSaved={() => window.location.reload()}
+            />
+            <ArtistSplitDialog
+              artistId={artist.id}
+              artistName={artist.name}
+              tracks={tracks.map((track) => ({
+                id: track.id,
+                title: track.title,
+                album: track.albumRecord?.name,
+              }))}
+              open={splitDialogOpen}
+              onOpenChange={setSplitDialogOpen}
+              onSplit={() => window.location.reload()}
+            />
+          </>
+        ) : null}
         {canFlagForReview && (
           <FlagForReviewDialog
             entityType="artist"
