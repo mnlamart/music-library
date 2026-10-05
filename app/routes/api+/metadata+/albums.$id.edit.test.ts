@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { action } from "./albums.$id.edit.tsx";
+import { action as restoreAction } from "./albums+/$id.restore.$editId.tsx";
 
 vi.mock("#app/utils/auth.server.ts", () => ({
   requireUserId: vi.fn(),
@@ -273,9 +274,88 @@ describe("POST /api/metadata/albums/:id/edit", () => {
     });
 
     expect(edits).toHaveLength(1);
-    expect(edits[0]?.name).toBe("Updated Album");
-    expect(edits[0]?.year).toBe(2024);
+    expect(edits[0]?.name).toBe("Original Album");
+    expect(edits[0]?.year).toBe(2020);
     expect(edits[0]?.comment).toBe("Test edit");
+  });
+
+  test("restore can recover the pre-edit album snapshot", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
+        roles: { connect: { name: "curator" } },
+      },
+    });
+
+    const artist = await prisma.artist.create({
+      data: {
+        name: "Artist",
+        normalizedName: "artist",
+      },
+    });
+
+    const otherArtist = await prisma.artist.create({
+      data: {
+        name: "Other Artist",
+        normalizedName: "otherartist",
+      },
+    });
+
+    const album = await prisma.album.create({
+      data: {
+        name: "Abbey Road",
+        artistId: artist.id,
+        year: 1969,
+      },
+    });
+
+    const editResult = await action({
+      request: new Request(`http://localhost/api/metadata/albums/${album.id}/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Wrong Title",
+          artistId: otherArtist.id,
+          year: 1970,
+          comment: "Bad reassign",
+        }),
+      }),
+      params: { id: album.id },
+    } as any);
+
+    expect(editResult.data.album.name).toBe("Wrong Title");
+    expect(editResult.data.edit.name).toBe("Abbey Road");
+    expect(editResult.data.edit.artistId).toBe(artist.id);
+    expect(editResult.data.edit.year).toBe(1969);
+
+    const restoreResult = await restoreAction({
+      request: new Request(
+        `http://localhost/api/metadata/albums/${album.id}/restore/${editResult.data.edit.id}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comment: "Undo the bad reassign" }),
+        },
+      ),
+      params: { id: album.id, editId: editResult.data.edit.id },
+    } as any);
+
+    expect(restoreResult.data.album.name).toBe("Abbey Road");
+    expect(restoreResult.data.album.artistId).toBe(artist.id);
+    expect(restoreResult.data.album.year).toBe(1969);
+
+    const albumInDb = await prisma.album.findUnique({ where: { id: album.id } });
+    expect(albumInDb?.name).toBe("Abbey Road");
+    expect(albumInDb?.artistId).toBe(artist.id);
+    expect(albumInDb?.year).toBe(1969);
   });
 
   test("returns 404 for non-existent album", async () => {
