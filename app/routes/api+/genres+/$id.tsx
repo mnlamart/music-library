@@ -9,8 +9,18 @@ const UpdateGenreSchema = z.object({
   name: z.string().min(1, "Genre name is required").max(100),
 });
 
+async function readActionData(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return { error: response.statusText || "Request failed" };
+  }
+}
+
 export async function clientAction(args: Route.ClientActionArgs) {
-  // Proxy PUT/DELETE requests to server for curator/admin authentication
+  // Proxy PUT/DELETE requests to server for curator/admin authentication.
+  // 4xx bodies are action data so the genres page can show them inline.
+  // Throwing the Response replaces Genre Management with the error boundary.
   const { request, params } = args;
   const method = request.method;
   const genreId = params.id;
@@ -29,15 +39,8 @@ export async function clientAction(args: Route.ClientActionArgs) {
 
   const response = await fetch(`/api/genres/${genreId}`, fetchOptions);
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Response(JSON.stringify(error), {
-      status: response.status,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  return response.json();
+  // Includes 409/4xx bodies. Returning them keeps the genres page mounted.
+  return readActionData(response);
 }
 
 /**

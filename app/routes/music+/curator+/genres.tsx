@@ -1,6 +1,6 @@
 import { Link, useLoaderData, useFetcher } from "react-router";
 import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "#app/components/ui/button";
 import { Card, CardContent } from "#app/components/ui/card";
 import { Icon } from "#app/components/ui/icon";
@@ -40,6 +40,18 @@ type Genre = {
   createdAt: string;
 };
 
+function actionError(data: unknown): string | null {
+  if (!data || typeof data !== "object" || !("error" in data)) return null;
+  const error = (data as { error: unknown }).error;
+  return typeof error === "string" && error.length > 0 ? error : null;
+}
+
+function isGenreSaved(data: unknown): boolean {
+  if (actionError(data)) return false;
+  if (!data || typeof data !== "object" || !("genre" in data)) return false;
+  return (data as { genre: unknown }).genre != null;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   await requireCuratorOrAdmin(request);
 
@@ -70,6 +82,47 @@ export default function GenresPage() {
   const [mergeTargetId, setMergeTargetId] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const seenCreateData = useRef<unknown>(undefined);
+  const seenEditData = useRef<unknown>(undefined);
+
+  useEffect(() => {
+    if (createFetcher.state !== "idle" || createFetcher.data == null) return;
+    if (seenCreateData.current === createFetcher.data) return;
+    seenCreateData.current = createFetcher.data;
+
+    const message = actionError(createFetcher.data);
+    if (message) {
+      setCreateError(message);
+      return;
+    }
+
+    if (isGenreSaved(createFetcher.data)) {
+      setCreateError(null);
+      setNewGenreName("");
+      setCreateDialogOpen(false);
+    }
+  }, [createFetcher.state, createFetcher.data]);
+
+  useEffect(() => {
+    if (editFetcher.state !== "idle" || editFetcher.data == null) return;
+    if (seenEditData.current === editFetcher.data) return;
+    seenEditData.current = editFetcher.data;
+
+    const message = actionError(editFetcher.data);
+    if (message) {
+      setEditError(message);
+      return;
+    }
+
+    if (isGenreSaved(editFetcher.data)) {
+      setEditError(null);
+      setEditingGenre(null);
+      setEditedName("");
+      setEditDialogOpen(false);
+    }
+  }, [editFetcher.state, editFetcher.data]);
 
   // Filter genres by search query
   const filteredGenres = genres.filter((genre) =>
@@ -77,8 +130,9 @@ export default function GenresPage() {
   );
 
   const handleCreate = () => {
-    if (!newGenreName.trim()) return;
+    if (!newGenreName.trim() || createFetcher.state !== "idle") return;
 
+    setCreateError(null);
     createFetcher.submit(
       { name: newGenreName },
       {
@@ -87,14 +141,12 @@ export default function GenresPage() {
         encType: "application/json",
       },
     );
-
-    setNewGenreName("");
-    setCreateDialogOpen(false);
   };
 
   const handleEdit = () => {
-    if (!editingGenre || !editedName.trim()) return;
+    if (!editingGenre || !editedName.trim() || editFetcher.state !== "idle") return;
 
+    setEditError(null);
     editFetcher.submit(
       { name: editedName },
       {
@@ -103,10 +155,6 @@ export default function GenresPage() {
         encType: "application/json",
       },
     );
-
-    setEditingGenre(null);
-    setEditedName("");
-    setEditDialogOpen(false);
   };
 
   const handleDelete = () => {
@@ -300,7 +348,13 @@ export default function GenresPage() {
       </Card>
 
       {/* Create Genre Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+      <Dialog
+        open={createDialogOpen}
+        onOpenChange={(open) => {
+          setCreateDialogOpen(open);
+          if (!open) setCreateError(null);
+        }}
+      >
         <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New Genre</DialogTitle>
@@ -312,21 +366,34 @@ export default function GenresPage() {
               <Input
                 id="genre-name"
                 value={newGenreName}
-                onChange={(e) => setNewGenreName(e.target.value)}
+                onChange={(e) => {
+                  setNewGenreName(e.target.value);
+                  setCreateError(null);
+                }}
                 placeholder="e.g., Progressive Rock"
+                aria-invalid={createError ? true : undefined}
+                aria-describedby={createError ? "genre-name-error" : undefined}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleCreate();
                   }
                 }}
               />
+              {createError ? (
+                <p id="genre-name-error" className="text-sm text-destructive" role="alert">
+                  {createError}
+                </p>
+              ) : null}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreate} disabled={!newGenreName.trim()}>
+            <Button
+              onClick={handleCreate}
+              disabled={!newGenreName.trim() || createFetcher.state !== "idle"}
+            >
               Create
             </Button>
           </DialogFooter>
@@ -334,7 +401,13 @@ export default function GenresPage() {
       </Dialog>
 
       {/* Edit Genre Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      <Dialog
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) setEditError(null);
+        }}
+      >
         <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Genre</DialogTitle>
@@ -346,21 +419,34 @@ export default function GenresPage() {
               <Input
                 id="edit-genre-name"
                 value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
+                onChange={(e) => {
+                  setEditedName(e.target.value);
+                  setEditError(null);
+                }}
                 placeholder="e.g., Progressive Rock"
+                aria-invalid={editError ? true : undefined}
+                aria-describedby={editError ? "edit-genre-name-error" : undefined}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     handleEdit();
                   }
                 }}
               />
+              {editError ? (
+                <p id="edit-genre-name-error" className="text-sm text-destructive" role="alert">
+                  {editError}
+                </p>
+              ) : null}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEdit} disabled={!editedName.trim()}>
+            <Button
+              onClick={handleEdit}
+              disabled={!editedName.trim() || editFetcher.state !== "idle"}
+            >
               Save Changes
             </Button>
           </DialogFooter>
@@ -421,7 +507,8 @@ export default function GenresPage() {
                 <SelectTrigger id="merge-target">
                   <SelectValue placeholder="Select target genre..." />
                 </SelectTrigger>
-                <SelectContent>
+                {/* DialogContent is z-53. The shared select menu is z-50 and renders under it. */}
+                <SelectContent className="z-[70]">
                   {Array.from(selectedGenres)
                     .map((id) => genres.find((g) => g.id === id))
                     .filter((genre): genre is Genre => genre !== undefined)
