@@ -5,7 +5,12 @@
 import { afterEach, expect, test } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
 import { percentOfTracksAffected } from "./database-quality.ts";
-import { countTracksWithMetadataIssues, getMetadataIssues } from "./database-quality.server.ts";
+import {
+  countTracksWithMetadataIssues,
+  getMetadataIssues,
+  getStorageStats,
+} from "./database-quality.server.ts";
+import { getAdminOverviewHealth } from "./overview-health.server.ts";
 
 const createdTrackIds: string[] = [];
 const createdArtistIds: string[] = [];
@@ -162,4 +167,63 @@ test("affected track count is a distinct union and excludes artists without genr
   expect(percent).toBeGreaterThanOrEqual(0);
   expect(percent).toBeLessThanOrEqual(100);
   expect(percent).toBeCloseTo((affectedAfterOverlap / totalTracks) * 100);
+});
+
+test("storage stats keep going when an audio file's track row is gone", async () => {
+  const suffix = `orphan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Orphan Artist ${suffix}`,
+      normalizedName: `orphan-artist-${suffix}`,
+    },
+  });
+  const service = await prisma.service.create({
+    data: {
+      name: `orphan-service-${suffix}`,
+      displayName: `Orphan Service ${suffix}`,
+      baseUrl: "https://example.com",
+    },
+  });
+  const track = await prisma.track.create({
+    data: {
+      title: `Orphaned file ${suffix}`,
+      artistId: artist.id,
+      serviceId: service.id,
+      externalId: `orphan-track-${suffix}`,
+    },
+  });
+  const file = await prisma.trackAudioFile.create({
+    data: {
+      trackId: track.id,
+      serviceId: service.id,
+      objectKey: `orphan/${suffix}.mp3`,
+      format: "mp3",
+      fileSize: 2_000_000_000,
+    },
+  });
+
+  try {
+    await prisma.$executeRawUnsafe("PRAGMA foreign_keys = OFF");
+    await prisma.$executeRaw`DELETE FROM Track WHERE id = ${track.id}`;
+    const remaining = await prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(*) as count FROM TrackAudioFile WHERE id = ${file.id}
+    `;
+    expect(Number(remaining[0]?.count ?? 0)).toBe(1);
+
+    const stats = await getStorageStats();
+    const listed = stats.largestFiles.find((row) => row.id === file.id);
+    expect(listed?.trackTitle).toBe("Missing track");
+    expect(listed?.artistName).toBe("—");
+    expect(stats.totalBytes).toBeGreaterThanOrEqual(2_000_000_000);
+
+    const health = await getAdminOverviewHealth();
+    expect(health.storageBytes).toBe(stats.totalBytes);
+  } finally {
+    await prisma.$executeRawUnsafe("PRAGMA foreign_keys = OFF");
+    await prisma.trackAudioFile.deleteMany({ where: { id: file.id } });
+    await prisma.track.deleteMany({ where: { id: track.id } });
+    await prisma.service.deleteMany({ where: { id: service.id } });
+    await prisma.artist.deleteMany({ where: { id: artist.id } });
+    await prisma.$executeRawUnsafe("PRAGMA foreign_keys = ON");
+  }
 });

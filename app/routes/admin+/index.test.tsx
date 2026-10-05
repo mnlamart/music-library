@@ -59,6 +59,17 @@ test("admin overview loader returns totals and 30-day series", async () => {
   expect(data.series.signups).toHaveLength(30);
   expect(data.series.dau).toHaveLength(30);
   expect(data.series.playsStarted).toHaveLength(30);
+  expect(data.series.playsCompleted).toHaveLength(30);
+  expect(data.series.libraryAdds).toHaveLength(30);
+  expect(data.series.logins).toHaveLength(30);
+
+  const sum = (series: Array<{ value: number }>) =>
+    series.reduce((total, point) => total + point.value, 0);
+  expect(data.totals.signups30d).toBe(sum(data.series.signups));
+  expect(data.totals.playsStarted30d).toBe(sum(data.series.playsStarted));
+  expect(data.totals.playsCompleted30d).toBe(sum(data.series.playsCompleted));
+  expect(data.totals.libraryAdds30d).toBe(sum(data.series.libraryAdds));
+  expect(data.totals.logins30d).toBe(sum(data.series.logins));
   expect(data.health.score).toBeGreaterThanOrEqual(0);
   expect(data.health.score).toBeLessThanOrEqual(100);
   expect(data.health.color).toBe(getHealthColor(data.health.score));
@@ -93,6 +104,15 @@ test("admin overview links health, content, users, security, and settings", asyn
 
   expect(await screen.findByRole("heading", { name: "Admin overview" })).toBeInTheDocument();
   expect(screen.getByRole("img", { name: /signups/i })).toBeInTheDocument();
+
+  for (const name of [/signups/i, /dau/i, /plays started/i, /library adds/i]) {
+    const chart = screen.getByRole("img", { name });
+    const bars = chart.querySelectorAll<HTMLElement>("[title]");
+    expect(bars).toHaveLength(30);
+    for (const bar of bars) {
+      expect(bar.getAttribute("style") ?? "").toMatch(/min-height:\s*2px/);
+    }
+  }
 
   const score = screen.getByTestId("health-score");
   const scoreValue = Number(score.textContent?.replace("%", ""));
