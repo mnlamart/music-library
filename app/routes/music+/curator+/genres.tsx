@@ -1,4 +1,5 @@
 import { Link, useLoaderData, useFetcher } from "react-router";
+import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
 import { useState } from "react";
 import { Button } from "#app/components/ui/button";
 import { Card, CardContent } from "#app/components/ui/card";
@@ -172,7 +173,7 @@ export default function GenresPage() {
   };
 
   return (
-    <div className="container mx-auto py-8 max-w-6xl">
+    <div className="container mx-auto max-w-6xl overflow-x-hidden px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Genre Management</h1>
         <p className="text-muted-foreground">
@@ -180,7 +181,7 @@ export default function GenresPage() {
         </p>
       </div>
 
-      <div className="mb-6 flex gap-4 items-center">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex-1">
           <div className="relative">
             <Icon
@@ -196,11 +197,16 @@ export default function GenresPage() {
             />
           </div>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
+        <Button className="min-h-11" onClick={() => setCreateDialogOpen(true)}>
           <Icon name="plus" className="mr-2 h-4 w-4" />
           Add Genre
         </Button>
-        <Button onClick={openMergeDialog} disabled={selectedGenres.size < 2} variant="outline">
+        <Button
+          className="min-h-11"
+          onClick={openMergeDialog}
+          disabled={selectedGenres.size < 2}
+          variant="outline"
+        >
           <Icon name="arrow-path" className="mr-2 h-4 w-4" />
           Merge Selected ({selectedGenres.size})
         </Button>
@@ -208,82 +214,94 @@ export default function GenresPage() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">
-                  <div className="flex items-center justify-center">
-                    <Checkbox
-                      checked={
-                        selectedGenres.size === filteredGenres.length && filteredGenres.length > 0
-                      }
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedGenres(new Set(filteredGenres.map((g) => g.id)));
-                        } else {
-                          setSelectedGenres(new Set());
-                        }
-                      }}
-                    />
-                  </div>
-                </TableHead>
-                <TableHead>Genre Name</TableHead>
-                <TableHead className="text-right">Track Count</TableHead>
-                <TableHead className="text-right w-[200px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredGenres.length === 0 ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                    {searchQuery
-                      ? "No genres match your search"
-                      : "No genres yet. Create one to get started."}
-                  </TableCell>
+                  <TableHead className="w-12">
+                    <div className="flex items-center justify-center">
+                      <Checkbox
+                        checked={
+                          selectedGenres.size === filteredGenres.length && filteredGenres.length > 0
+                        }
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedGenres(new Set(filteredGenres.map((g) => g.id)));
+                          } else {
+                            setSelectedGenres(new Set());
+                          }
+                        }}
+                      />
+                    </div>
+                  </TableHead>
+                  <TableHead>Genre Name</TableHead>
+                  <TableHead className="text-right">Track Count</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                filteredGenres.map((genre) => (
-                  <TableRow key={genre.id}>
-                    <TableCell>
-                      <div className="flex items-center justify-center">
-                        <Checkbox
-                          checked={selectedGenres.has(genre.id)}
-                          onCheckedChange={() => toggleGenreSelection(genre.id)}
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        to={`/library?genre=${encodeURIComponent(genre.id)}`}
-                        className="font-medium hover:underline text-left"
-                      >
-                        {genre.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {genre.trackCount}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex gap-2 justify-end">
-                        <Button size="sm" variant="ghost" onClick={() => openEditDialog(genre)}>
-                          <Icon name="pencil-1" className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => openDeleteDialog(genre)}>
-                          <Icon name="trash" className="h-4 w-4" />
-                        </Button>
-                      </div>
+              </TableHeader>
+              <TableBody>
+                {filteredGenres.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                      {searchQuery
+                        ? "No genres match your search"
+                        : "No genres yet. Create one to get started."}
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  filteredGenres.map((genre) => (
+                    <TableRow key={genre.id}>
+                      <TableCell>
+                        <div className="flex items-center justify-center">
+                          <Checkbox
+                            checked={selectedGenres.has(genre.id)}
+                            onCheckedChange={() => toggleGenreSelection(genre.id)}
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          to={`/library?genre=${encodeURIComponent(genre.id)}`}
+                          className="font-medium hover:underline text-left"
+                        >
+                          {genre.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {genre.trackCount}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            className="min-h-11 min-w-11"
+                            aria-label={`Edit ${genre.name}`}
+                            onClick={() => openEditDialog(genre)}
+                          >
+                            <Icon name="pencil-1" className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="min-h-11 min-w-11"
+                            aria-label={`Delete ${genre.name}`}
+                            onClick={() => openDeleteDialog(genre)}
+                          >
+                            <Icon name="trash" className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
       {/* Create Genre Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New Genre</DialogTitle>
             <DialogDescription>Add a new genre to your music library</DialogDescription>
@@ -317,7 +335,7 @@ export default function GenresPage() {
 
       {/* Edit Genre Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Genre</DialogTitle>
             <DialogDescription>Rename this genre (affects all linked tracks)</DialogDescription>
@@ -351,7 +369,7 @@ export default function GenresPage() {
 
       {/* Delete Genre Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Delete Genre</DialogTitle>
             <DialogDescription>Are you sure you want to delete this genre?</DialogDescription>
@@ -380,7 +398,7 @@ export default function GenresPage() {
 
       {/* Merge Genres Dialog */}
       <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Merge Genres</DialogTitle>
             <DialogDescription>
@@ -431,4 +449,8 @@ export default function GenresPage() {
       </Dialog>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  return <GeneralErrorBoundary />;
 }

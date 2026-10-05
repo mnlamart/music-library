@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArtistAutocomplete } from "#app/components/artist-autocomplete";
 import { GenreSelector, type Genre } from "#app/components/genre-selector";
 import { Button } from "#app/components/ui/button";
@@ -10,15 +10,34 @@ interface BasicMetadataTabProps {
   track: TrackDetails;
   onSave: (changes: any) => void;
   disabled?: boolean;
+  initialDraft?: Record<string, unknown> | null;
+  onDraftChange?: (draft: Record<string, unknown> | null) => void;
 }
 
-export function BasicMetadataTab({ track, onSave, disabled = false }: BasicMetadataTabProps) {
-  const [title, setTitle] = useState(track.title);
-  const [artistId, setArtistId] = useState(track.artist.id);
-  const [artistName, setArtistName] = useState(track.artist.name);
+function draftString(draft: Record<string, unknown> | null | undefined, key: string) {
+  const value = draft?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+export function BasicMetadataTab({
+  track,
+  onSave,
+  disabled = false,
+  initialDraft = null,
+  onDraftChange,
+}: BasicMetadataTabProps) {
+  const [title, setTitle] = useState(draftString(initialDraft, "title") ?? track.title);
+  const [artistId, setArtistId] = useState(
+    draftString(initialDraft, "artistId") ?? track.artist.id,
+  );
+  const [artistName, setArtistName] = useState(
+    draftString(initialDraft, "artistName") ?? track.artist.name,
+  );
   const [albumName, setAlbumName] = useState(track.albumRecord?.name ?? "");
   const [genres, setGenres] = useState<Genre[]>(track.genres.map((g) => ({ ...g, trackCount: 0 })));
-  const [year, setYear] = useState(track.year?.toString() ?? "");
+  const [year, setYear] = useState(
+    draftString(initialDraft, "year") ?? track.year?.toString() ?? "",
+  );
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -114,6 +133,15 @@ export function BasicMetadataTab({ track, onSave, disabled = false }: BasicMetad
       JSON.stringify(track.genres.map((g) => g.id).sort()) ||
     year !== (track.year?.toString() ?? "");
 
+  useEffect(() => {
+    if (!onDraftChange) return;
+    if (!hasChanges) {
+      onDraftChange(null);
+      return;
+    }
+    onDraftChange({ title, artistId, artistName, year });
+  }, [artistId, artistName, hasChanges, onDraftChange, title, year]);
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
@@ -182,7 +210,7 @@ export function BasicMetadataTab({ track, onSave, disabled = false }: BasicMetad
       </div>
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="submit" disabled={!hasChanges || disabled}>
+        <Button type="submit" className="min-h-11" disabled={!hasChanges || disabled}>
           Save Changes
         </Button>
       </div>

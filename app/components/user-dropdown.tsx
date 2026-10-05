@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
 } from "./ui/dropdown-menu";
 import { Icon } from "./ui/icon";
+import { discardSession } from "#app/features/curator/session-recovery.client.ts";
 
 export function UserDropdown() {
   const user = useUser();
@@ -125,6 +126,21 @@ export function UserDropdown() {
                   Genres
                 </Icon>
               </Link>
+            </DropdownMenuItem>
+          )}
+          {isCurator && (
+            <DropdownMenuItem
+              className="min-h-11"
+              onSelect={() => {
+                if (typeof discardSession !== "function") return;
+                if (window.confirm("This will discard your saved session state. Continue?")) {
+                  discardSession();
+                }
+              }}
+            >
+              <Icon className="text-body-md" name="trash">
+                Clear saved session
+              </Icon>
             </DropdownMenuItem>
           )}
           {isAdmin && (

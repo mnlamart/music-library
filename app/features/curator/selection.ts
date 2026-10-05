@@ -12,6 +12,11 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
+  clearSessionState,
+  saveSessionState,
+  SESSION_SAVE_DEBOUNCE_MS,
+} from "./session-recovery.client.ts";
+import {
   broadcastCuratorMessage,
   subscribeToCuratorSync,
   type CuratorSyncMessage,
@@ -25,6 +30,38 @@ const SELECTED_TRACKS_KEY = "curator:selected-tracks";
 // same tab, so they subscribe here and are notified directly on write.
 const selectionModeListeners = new Set<(enabled: boolean) => void>();
 const selectedTrackListeners = new Set<(trackIds: string[]) => void>();
+
+let selectionSessionTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSelectionIds: string[] | null = null;
+
+function flushSelectionSession() {
+  if (selectionSessionTimer) clearTimeout(selectionSessionTimer);
+  selectionSessionTimer = null;
+  const trackIds = pendingSelectionIds;
+  pendingSelectionIds = null;
+  if (!trackIds || typeof saveSessionState !== "function") return;
+  if (trackIds.length === 0) {
+    if (typeof clearSessionState === "function") clearSessionState("selection");
+    return;
+  }
+  saveSessionState({
+    type: "selection",
+    trackIds,
+    context: "library",
+    timestamp: Date.now(),
+  });
+}
+
+function persistSelectionSession(trackIds: string[]) {
+  if (typeof saveSessionState !== "function") return;
+  pendingSelectionIds = trackIds;
+  if (selectionSessionTimer) clearTimeout(selectionSessionTimer);
+  selectionSessionTimer = setTimeout(flushSelectionSession, SESSION_SAVE_DEBOUNCE_MS);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushSelectionSession);
+}
 
 function notifyListeners<T>(listeners: Set<(value: T) => void>, value: T) {
   for (const listener of listeners) {
@@ -175,6 +212,7 @@ export function useSelection() {
     selectedTrackIdsRef.current = next;
     setSelectedTrackIds(next);
     saveSelectedTrackIds(next);
+    persistSelectionSession(Array.from(next));
   }, []);
 
   useEffect(() => {
@@ -209,6 +247,7 @@ export function useSelection() {
     selectedTrackIdsRef.current = new Set();
     setSelectedTrackIds(new Set());
     clearSelectedTrackIds();
+    persistSelectionSession([]);
   }, []);
 
   const toggleSelection = useCallback(

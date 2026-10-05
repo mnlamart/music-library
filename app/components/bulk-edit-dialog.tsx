@@ -209,7 +209,7 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Bulk Edit - {trackIds.length} tracks selected</DialogTitle>
           <DialogDescription>⚠️ Changes will apply to all selected tracks</DialogDescription>

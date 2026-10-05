@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
+import { CuratorBadges } from "#app/components/curator-badge.tsx";
 import { formatActivityLine, type ActivityResult } from "#app/features/curator/dashboard.ts";
 
 const POLL_MS = 30_000;
@@ -91,8 +92,9 @@ export function ActivityFeed({
   return (
     <ul className="space-y-3" data-testid="activity-feed">
       {items.map((item) => (
-        <li key={item.id} className="text-sm">
-          <p>{formatActivityLine(item.summary, item.createdAt, now)}</p>
+        <li key={item.id} className="min-w-0 text-sm">
+          <p className="break-words">{formatActivityLine(item.summary, item.createdAt, now)}</p>
+          <CuratorBadges badges={item.badges} />
           <p className="text-xs text-muted-foreground capitalize">{item.entityType}</p>
         </li>
       ))}
