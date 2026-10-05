@@ -37,12 +37,10 @@ prisma/seed-data/**
 *.md
 !README.md
 
-# Dev-only scripts (build-sw.ts is required during npm run build).
-# align-security-event-schema.mjs runs from LiteFS before the server starts.
+# Dev-only scripts (build-sw.ts is required during npm run build)
 /scripts/*
 !/scripts/build-sw.ts
 !/scripts/migrate-audio-object-keys.ts
-!/scripts/align-security-event-schema.mjs
 
 # Other development files
 prompt.txt

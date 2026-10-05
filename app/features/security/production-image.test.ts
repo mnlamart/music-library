@@ -1,7 +1,14 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
+
+const SECURITY_EVENTS_MIGRATION =
+  "prisma/migrations/20260926120000_add_security_events/migration.sql";
+/** SHA-256 of the migration after production's one-time repair. Do not edit that file. */
+const SECURITY_EVENTS_MIGRATION_SHA256 =
+  "c31b9dfa2518e7acc69eea0bb1e275b96adfe2aa1aee710ce1ce7a0116bc2238";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -57,6 +64,20 @@ function startupScripts(litefs: string): string[] {
 }
 
 describe("production image startup scripts", () => {
+  test("does not boot the one-time security-event repair", () => {
+    const ignoreFile = fs.readFileSync(
+      path.join(repoRoot, "other/Dockerfile.dockerignore"),
+      "utf8",
+    );
+    const litefs = fs.readFileSync(path.join(repoRoot, "other/litefs.yml"), "utf8");
+    const dockerfile = fs.readFileSync(path.join(repoRoot, "other/Dockerfile"), "utf8");
+    const repair = "scripts/align-security-event-schema.mjs";
+
+    expect(startupScripts(litefs)).not.toContain(repair);
+    expect(dockerignoreExcludes(ignoreFile, repair)).toBe(true);
+    expect(dockerfile).not.toContain(repair);
+  });
+
   test("ships every node script LiteFS runs before the server starts", () => {
     const ignoreFile = fs.readFileSync(
       path.join(repoRoot, "other/Dockerfile.dockerignore"),
@@ -64,13 +85,16 @@ describe("production image startup scripts", () => {
     );
     const litefs = fs.readFileSync(path.join(repoRoot, "other/litefs.yml"), "utf8");
     const dockerfile = fs.readFileSync(path.join(repoRoot, "other/Dockerfile"), "utf8");
-    const scripts = startupScripts(litefs);
 
-    expect(scripts).toContain("scripts/align-security-event-schema.mjs");
-    for (const script of scripts) {
+    for (const script of startupScripts(litefs)) {
       expect(dockerignoreExcludes(ignoreFile, script), script).toBe(false);
       expect(fs.existsSync(path.join(repoRoot, script)), script).toBe(true);
       expect(dockerfile, script).toContain(script);
     }
+  });
+
+  test("keeps the applied security-events migration bytes pinned", () => {
+    const sql = fs.readFileSync(path.join(repoRoot, SECURITY_EVENTS_MIGRATION));
+    expect(createHash("sha256").update(sql).digest("hex")).toBe(SECURITY_EVENTS_MIGRATION_SHA256);
   });
 });

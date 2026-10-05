@@ -1,10 +1,15 @@
 /**
- * Production applied `20260926120000_add_security_events` before that file was
- * rewritten in place. Prisma's deploy does not rewrite an already-applied
- * migration, so long-lived databases still have `type` / `userAgent` and no
- * `eventType` or `perpetual`. Fresh databases already match the current file.
+ * Manual repair for a database that applied `20260926120000_add_security_events`
+ * before that file was rewritten. Prisma does not rewrite an applied migration,
+ * so those databases still have `type` / `userAgent` and no `eventType` or
+ * `perpetual`. Production was repaired in place. Fresh databases already match
+ * the current file.
  *
- * This runs after `prisma migrate deploy` and only rebuilds the old shape.
+ * Do not call this from LiteFS or any other boot path. `/scripts` is excluded
+ * from the production image, and a failing boot command stops the machine.
+ * Run it by hand against a restored pre-repair database:
+ *
+ *   DATABASE_PATH=/path/to/sqlite.db node ./scripts/align-security-event-schema.mjs
  */
 import { createHash } from "node:crypto";
 import fs from "node:fs";
