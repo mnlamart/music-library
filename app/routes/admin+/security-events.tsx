@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "#app/components/ui/table.tsx";
+import { SECURITY_EVENT_TYPES } from "#app/features/security/event-types.ts";
 import {
   forceLogoutSession,
   forceLogoutUserSessions,
@@ -31,7 +32,6 @@ import {
   getSecurityTimeline,
   getSuccessfulLogins,
 } from "#app/features/security/suspicious-activity.server.ts";
-import { SECURITY_EVENT_TYPES } from "#app/features/security/track-event.server.ts";
 import { requireUserWithRole } from "#app/utils/permissions.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { redirectWithToast } from "#app/utils/toast.server.ts";
@@ -128,7 +128,7 @@ export async function clientAction(args: Route.ClientActionArgs) {
   return proxyClientActionToServer(args);
 }
 
-function Alerts({ alerts }: { alerts: Awaited<ReturnType<typeof getSecurityAlerts>> }) {
+function Alerts({ alerts }: { alerts: Awaited<ReturnType<typeof loader>>["alerts"] }) {
   if (alerts.length === 0) {
     return <p className="text-muted-foreground text-sm">No active security alerts.</p>;
   }
