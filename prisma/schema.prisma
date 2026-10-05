@@ -71,6 +71,8 @@ model UsageEvent {
   @@index([type, createdAt])
   @@index([userId, createdAt])
   @@index([userId, type, createdAt])
+  @@index([type, trackId])
+  @@index([userId, type, trackId])
 }
 
 model DailyUsageStat {
@@ -427,6 +429,7 @@ model UserTrack {
   @@index([trackId])
   @@index([userId, isActive])
   @@index([userId, createdAt])
+  @@index([trackId, isActive])
 }
 
 model ServicePlaylist {
