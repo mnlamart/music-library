@@ -230,7 +230,7 @@ test("rejected album cover upload shows the action error", async () => {
     });
   });
 
-  expect(screen.getByRole("alert")).toHaveTextContent(
+  expect(await screen.findByRole("alert")).toHaveTextContent(
     "Invalid file type. Use JPG, PNG, WebP, or GIF",
   );
   expect(screen.getByText("Coverless Album")).toBeTruthy();
