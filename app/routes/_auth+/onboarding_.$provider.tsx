@@ -95,6 +95,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         email,
         providerId: String(providerId),
         providerName,
+        request,
       });
       return { ...formValues, session };
     }),

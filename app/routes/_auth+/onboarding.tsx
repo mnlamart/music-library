@@ -86,7 +86,7 @@ export async function action({ request }: Route.ActionArgs) {
       }).transform(async (formValues) => {
         if (intent !== null) return { ...formValues, session: null };
 
-        const session = await signup({ ...formValues, email });
+        const session = await signup({ ...formValues, email, request });
         return { ...formValues, session };
       }),
     async: true,

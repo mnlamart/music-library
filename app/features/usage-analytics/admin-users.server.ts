@@ -1,3 +1,7 @@
+import {
+  recordSecurityEvent,
+  SECURITY_EVENT_TYPES,
+} from "#app/features/security/track-event.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { getUtcDayStart } from "./record-usage.server.ts";
 
@@ -23,7 +27,21 @@ function forbidden(error: string): ModerationResult {
 async function findUserRoles(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, roles: { select: { name: true } } },
+    select: { id: true, username: true, roles: { select: { name: true } } },
+  });
+}
+
+async function recordModeration(
+  eventType: string,
+  target: { id: string; username: string },
+  actorUserId: string | null | undefined,
+  metadata: Record<string, string | number | boolean | null> = {},
+) {
+  await recordSecurityEvent({
+    eventType,
+    userId: actorUserId ?? null,
+    targetUserId: target.id,
+    metadata: { username: target.username, ...metadata },
   });
 }
 
@@ -31,8 +49,14 @@ function countAdmins() {
   return prisma.user.count({ where: { roles: { some: { name: "admin" } } } });
 }
 
-export async function disableUser(userId: string): Promise<ModerationResult> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+export async function disableUser(
+  userId: string,
+  actorUserId?: string | null,
+): Promise<ModerationResult> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, username: true },
+  });
   if (!user) return notFound;
 
   await prisma.$transaction([
@@ -42,22 +66,40 @@ export async function disableUser(userId: string): Promise<ModerationResult> {
     }),
     prisma.session.deleteMany({ where: { userId } }),
   ]);
+  await recordModeration(SECURITY_EVENT_TYPES.accountDisabled, user, actorUserId, {
+    action: "disable",
+  });
   return { ok: true };
 }
 
-export async function enableUser(userId: string): Promise<ModerationResult> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+export async function enableUser(
+  userId: string,
+  actorUserId?: string | null,
+): Promise<ModerationResult> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, username: true },
+  });
   if (!user) return notFound;
 
   await prisma.user.update({
     where: { id: userId },
     data: { disabledAt: null },
   });
+  await recordModeration(SECURITY_EVENT_TYPES.accountEnabled, user, actorUserId, {
+    action: "enable",
+  });
   return { ok: true };
 }
 
-export async function promoteToAdmin(userId: string): Promise<ModerationResult> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+export async function promoteToAdmin(
+  userId: string,
+  actorUserId?: string | null,
+): Promise<ModerationResult> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, username: true },
+  });
   if (!user) return notFound;
 
   await prisma.user.update({
@@ -67,6 +109,10 @@ export async function promoteToAdmin(userId: string): Promise<ModerationResult> 
         connect: { name: "admin" },
       },
     },
+  });
+  await recordModeration(SECURITY_EVENT_TYPES.roleChanged, user, actorUserId, {
+    role: "admin",
+    action: "promote",
   });
   return { ok: true };
 }
@@ -102,6 +148,10 @@ export async function demoteFromAdmin({
         disconnect: { name: "admin" },
       },
     },
+  });
+  await recordModeration(SECURITY_EVENT_TYPES.roleChanged, target, actorUserId, {
+    role: "admin",
+    action: "demote",
   });
   return { ok: true };
 }
@@ -186,8 +236,14 @@ async function ensureCuratorRole() {
   });
 }
 
-export async function promoteToCurator(userId: string): Promise<ModerationResult> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+export async function promoteToCurator(
+  userId: string,
+  actorUserId?: string | null,
+): Promise<ModerationResult> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, username: true },
+  });
   if (!user) return notFound;
 
   await ensureCuratorRole();
@@ -200,10 +256,17 @@ export async function promoteToCurator(userId: string): Promise<ModerationResult
       },
     },
   });
+  await recordModeration(SECURITY_EVENT_TYPES.roleChanged, user, actorUserId, {
+    role: "curator",
+    action: "promote",
+  });
   return { ok: true };
 }
 
-export async function demoteFromCurator(userId: string): Promise<ModerationResult> {
+export async function demoteFromCurator(
+  userId: string,
+  actorUserId?: string | null,
+): Promise<ModerationResult> {
   const user = await findUserRoles(userId);
   if (!user) return notFound;
 
@@ -218,6 +281,10 @@ export async function demoteFromCurator(userId: string): Promise<ModerationResul
         disconnect: { name: "curator" },
       },
     },
+  });
+  await recordModeration(SECURITY_EVENT_TYPES.roleChanged, user, actorUserId, {
+    role: "curator",
+    action: "demote",
   });
   return { ok: true };
 }
@@ -241,6 +308,9 @@ export async function deleteUserAsAdmin({
     return forbidden("Cannot delete the last admin");
   }
 
+  await recordModeration(SECURITY_EVENT_TYPES.accountDeleted, target, actorUserId, {
+    action: "delete",
+  });
   await prisma.user.delete({ where: { id: targetUserId } });
   return { ok: true };
 }

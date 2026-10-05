@@ -1,5 +1,9 @@
 import { redirect, type LoaderFunctionArgs } from "react-router";
 import { YOUTUBE_SERVICE } from "#app/constants/services";
+import {
+  recordSecurityEvent,
+  SECURITY_EVENT_TYPES,
+} from "#app/features/security/track-event.server.ts";
 import { requireUserId } from "#app/utils/auth.server";
 import { prisma } from "#app/utils/db.server";
 import { createYouTubeOAuthService } from "#app/utils/youtube-oauth.server";
@@ -64,6 +68,17 @@ export async function loader({ request, url }: LoaderFunctionArgs) {
         providerName: YOUTUBE_SERVICE.NAME,
         providerId: userInfo.id,
         tokens: JSON.stringify(tokens),
+      },
+    });
+
+    await recordSecurityEvent({
+      request,
+      eventType: SECURITY_EVENT_TYPES.serviceConnected,
+      userId,
+      perpetual: false,
+      metadata: {
+        provider: YOUTUBE_SERVICE.NAME,
+        reconnected: Boolean(existing),
       },
     });
 

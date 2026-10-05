@@ -12,6 +12,9 @@ const createConditionalSchema = (): z.ZodObject<any> => {
     DATABASE_URL: z.string(),
     // SESSION_SECRET is required in production, optional in dev/test (getSessionSecret() provides a random fallback)
     SESSION_SECRET: isProduction ? z.string() : z.string().optional(),
+    // Salt for hashing client IPs on security events. Required in production.
+    // Dev/test fall back to DEV_IP_HASH_SALT when unset. See .env.example.
+    IP_HASH_SALT: isProduction ? z.string().min(8) : z.string().optional(),
     INTERNAL_COMMAND_TOKEN: z.string(),
     HONEYPOT_SECRET: z.string(),
     CACHE_DATABASE_PATH: z.string(),

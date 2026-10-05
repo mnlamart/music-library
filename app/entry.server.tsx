@@ -58,6 +58,15 @@ if (process.env.NODE_ENV !== "test") {
   });
 }
 
+// Security-event retention: drop non-perpetual rows older than 90 days.
+if (process.env.NODE_ENV !== "test") {
+  void import("./features/security/retention-sweeper.server.ts").then(
+    ({ startSecurityEventSweeper }) => {
+      startSecurityEventSweeper();
+    },
+  );
+}
+
 const MODE = process.env.NODE_ENV ?? "development";
 
 type DocRequestArgs = Parameters<HandleDocumentRequestFunction>;

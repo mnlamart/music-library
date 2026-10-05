@@ -3,6 +3,10 @@ import {
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import {
+  recordLoginFailure,
+  recordLoginSuccess,
+} from "#app/features/security/track-event.server.ts";
+import {
   recordUsageEvent,
   USAGE_EVENT_TYPES,
 } from "#app/features/usage-analytics/record-usage.server.ts";
@@ -30,6 +34,8 @@ export async function action({ request }: Route.ActionArgs) {
   const cookieHeader = request.headers.get("Cookie");
   const cookie = await passkeyCookie.parse(cookieHeader);
   const deletePasskeyCookie = await passkeyCookie.serialize("", { maxAge: 0 });
+  let failureRecorded = false;
+  let attemptUserId: string | null = null;
   try {
     if (!cookie?.challenge) {
       throw new Error("Authentication challenge not found");
@@ -47,9 +53,19 @@ export async function action({ request }: Route.ActionArgs) {
       include: { user: true },
     });
     if (!passkey) {
+      await recordLoginFailure({ request, reason: "passkey_not_found", username: null });
+      failureRecorded = true;
       throw new Error("Passkey not found");
     }
+    attemptUserId = passkey.userId;
     if (passkey.user.disabledAt) {
+      await recordLoginFailure({
+        request,
+        userId: passkey.userId,
+        username: passkey.user.username,
+        reason: "disabled",
+      });
+      failureRecorded = true;
       throw new Error("This account has been disabled");
     }
 
@@ -68,6 +84,13 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     if (!verification.verified) {
+      await recordLoginFailure({
+        request,
+        userId: passkey.userId,
+        username: passkey.user.username,
+        reason: "passkey_verification_failed",
+      });
+      failureRecorded = true;
       throw new Error("Authentication verification failed");
     }
 
@@ -90,6 +113,15 @@ export async function action({ request }: Route.ActionArgs) {
       userId: passkey.userId,
     }).catch(() => {});
 
+    await recordLoginSuccess({
+      request,
+      userId: passkey.userId,
+      username: passkey.user.username,
+      sessionId: session.id,
+      method: "passkey",
+    });
+    failureRecorded = true;
+
     const response = await handleNewSession(
       {
         request,
@@ -109,6 +141,13 @@ export async function action({ request }: Route.ActionArgs) {
     );
   } catch (error) {
     if (error instanceof Response) throw error;
+    if (!failureRecorded) {
+      await recordLoginFailure({
+        request,
+        userId: attemptUserId,
+        reason: "passkey_error",
+      });
+    }
 
     return Response.json(
       {
