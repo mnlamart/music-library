@@ -852,6 +852,35 @@ interface AudioPlayerProps {
   audioSrcOverride?: string;
 }
 
+function usePublishToastBottomOffset(
+  chromeRef: React.RefObject<HTMLElement | null>,
+  active: boolean,
+  layoutKey: string,
+) {
+  useLayoutEffect(() => {
+    const node = chromeRef.current;
+    if (!active || !node) {
+      document.body.style.removeProperty("--toast-bottom-offset");
+      return;
+    }
+
+    const apply = () => {
+      const offset = Math.max(0, Math.round(window.innerHeight - node.getBoundingClientRect().top));
+      document.body.style.setProperty("--toast-bottom-offset", `${offset}px`);
+    };
+
+    apply();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(apply);
+    observer?.observe(node);
+    window.addEventListener("resize", apply);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", apply);
+      document.body.style.removeProperty("--toast-bottom-offset");
+    };
+  }, [active, chromeRef, layoutKey]);
+}
+
 export function AudioPlayer(props: AudioPlayerProps) {
   const {
     track,
@@ -875,6 +904,8 @@ export function AudioPlayer(props: AudioPlayerProps) {
     audioSrcOverride,
   } = props;
   const audioRef = useRef<HTMLAudioElement>(null);
+  const chromeRef = useRef<HTMLDivElement>(null);
+  usePublishToastBottomOffset(chromeRef, isVisible, track?.id ?? "queue");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -1663,6 +1694,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
       <>
         {audioElement}
         <QueueOnlyPlayerBar
+          chromeRef={chromeRef}
           onClose={onClose}
           onStartPlayback={onStartQueuePlayback}
           hasQueuedPlayback={hasQueuedPlayback}
@@ -1703,7 +1735,11 @@ export function AudioPlayer(props: AudioPlayerProps) {
   };
 
   return (
-    <div className="fixed bottom-16 left-0 right-0 z-50 border-t border-border bg-background/95 shadow-lg backdrop-blur-sm pb-[env(safe-area-inset-bottom)] md:bottom-0">
+    <div
+      ref={chromeRef}
+      data-testid="player-chrome"
+      className="fixed bottom-16 left-0 right-0 z-50 border-t border-border bg-background/95 shadow-lg backdrop-blur-sm pb-[env(safe-area-inset-bottom)] md:bottom-0"
+    >
       {playbackError ? (
         <div
           ref={playbackErrorRef}
@@ -1746,16 +1782,19 @@ export function AudioPlayer(props: AudioPlayerProps) {
  * Minimal player chrome when the queue has items but nothing is playing yet (cold queue actions).
  */
 function QueueOnlyPlayerBar({
+  chromeRef,
   onClose,
   onStartPlayback,
   hasQueuedPlayback,
 }: {
+  chromeRef: React.RefObject<HTMLDivElement | null>;
   onClose: () => void;
   onStartPlayback?: () => void;
   hasQueuedPlayback: boolean;
 }) {
   return (
     <div
+      ref={chromeRef}
       className="fixed bottom-16 left-0 right-0 z-50 border-t border-border bg-background/95 shadow-lg backdrop-blur-sm pb-[env(safe-area-inset-bottom)] md:bottom-0"
       data-testid="player-queue-only-bar"
     >

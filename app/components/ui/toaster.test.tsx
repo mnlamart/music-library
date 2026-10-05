@@ -19,7 +19,10 @@ describe("ToastViewport", () => {
       </ToastProvider>,
     );
 
-    expect(screen.getByTestId("toast-viewport")).toHaveClass("pointer-events-none");
+    const viewport = screen.getByTestId("toast-viewport");
+    expect(viewport).toHaveClass("pointer-events-none");
+    expect(viewport).toHaveClass("sm:bottom-[var(--toast-bottom-offset,0px)]");
+    expect(viewport).not.toHaveClass("overflow-hidden");
   });
 });
 

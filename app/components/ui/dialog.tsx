@@ -26,10 +26,22 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+function isToastInteraction(event: {
+  target: EventTarget | null;
+  detail?: { originalEvent?: { target: EventTarget | null } };
+}) {
+  const candidates = [event.target, event.detail?.originalEvent?.target];
+  return candidates.some(
+    (target) =>
+      target instanceof Element &&
+      Boolean(target.closest("[data-toast-viewport], [data-testid='toast']")),
+  );
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onPointerDownOutside, onInteractOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -39,6 +51,15 @@ const DialogContent = React.forwardRef<
         className,
       )}
       {...props}
+      onPointerDownOutside={(event) => {
+        // The editor unmounts when it dismisses, which drops the toast's Undo click.
+        if (isToastInteraction(event)) event.preventDefault();
+        onPointerDownOutside?.(event);
+      }}
+      onInteractOutside={(event) => {
+        if (isToastInteraction(event)) event.preventDefault();
+        onInteractOutside?.(event);
+      }}
     >
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
