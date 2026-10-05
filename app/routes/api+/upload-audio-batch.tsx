@@ -496,6 +496,7 @@ async function processFilesAsync(
               fileName: file.fileName,
               title: track.title,
               artist: artistRecord.name,
+              storageSavedBytes: persistResult.isDuplicate ? file.buffer.length : undefined,
               exactDuplicate: persistResult.isDuplicate
                 ? {
                     trackId: persistResult.duplicateTrack!.id,
