@@ -66,6 +66,36 @@ test("shows the real storage saved size for an exact duplicate", async () => {
   expect(screen.queryByText(/~\d+MB/)).not.toBeInTheDocument();
 });
 
+test("retry passes the failed files back to the caller", async () => {
+  const user = userEvent.setup();
+  const onRetryFailed = vi.fn();
+  const failedFiles = [
+    { fileId: "file-1", fileName: "empty.mp3", error: "File empty.mp3 is empty" },
+  ];
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/",
+        element: (
+          <UploadCompletion
+            successfulTracks={[]}
+            failedFiles={failedFiles}
+            onRetryFailed={onRetryFailed}
+            onUploadMore={() => {}}
+            onViewLibrary={() => {}}
+          />
+        ),
+      },
+    ],
+    { initialEntries: ["/"] },
+  );
+  render(<RouterProvider router={router} />);
+
+  await user.click(screen.getByRole("button", { name: /retry failed uploads/i }));
+
+  expect(onRetryFailed).toHaveBeenCalledWith(failedFiles);
+});
+
 test("omits the storage saved row when the size is unknown", async () => {
   const user = userEvent.setup();
   renderCompletion([exactTrack]);
