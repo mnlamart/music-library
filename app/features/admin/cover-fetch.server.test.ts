@@ -1,8 +1,15 @@
+import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { afterEach, expect, test } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
-import { countTracksWithoutCovers, getTracksWithoutCovers } from "./cover-fetch.server.ts";
+import {
+  countTracksWithoutCovers,
+  getTracksWithoutCovers,
+  uploadTrackCover,
+} from "./cover-fetch.server.ts";
 
 const createdTrackIds: string[] = [];
+const createdAlbumIds: string[] = [];
 const createdArtistIds: string[] = [];
 const createdPlaylistIds: string[] = [];
 const createdUserIds: string[] = [];
@@ -16,6 +23,10 @@ afterEach(async () => {
   if (createdTrackIds.length > 0) {
     await prisma.track.deleteMany({ where: { id: { in: createdTrackIds } } });
     createdTrackIds.length = 0;
+  }
+  if (createdAlbumIds.length > 0) {
+    await prisma.album.deleteMany({ where: { id: { in: createdAlbumIds } } });
+    createdAlbumIds.length = 0;
   }
   if (createdCoverIds.length > 0) {
     await prisma.coverImage.deleteMany({ where: { id: { in: createdCoverIds } } });
@@ -129,4 +140,78 @@ test("lists and counts coverless tracks that have no playlist thumbnail", async 
   expect(listedById.get(noPlaylistTrack.id)?.thumbnailUrl).toBeNull();
   expect(listedById.get(nullThumbnailTrack.id)?.thumbnailUrl).toBeNull();
   expect(listedById.get(thumbnailTrack.id)?.thumbnailUrl).toBe(thumbnailUrl);
+});
+
+test("track cover upload stores the chosen file when the album already has a cover", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const service = await prisma.service.upsert({
+    where: { name: "local" },
+    update: {},
+    create: { name: "local", displayName: "Local Upload", baseUrl: "", isActive: true },
+  });
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Upload Artist ${suffix}`,
+      normalizedName: `upload artist ${suffix}`,
+    },
+  });
+  createdArtistIds.push(artist.id);
+  const albumCover = await prisma.coverImage.create({
+    data: {
+      contentHash: `album-cover-${suffix}`,
+      objectKey: `covers/album-${suffix}.jpg`,
+    },
+  });
+  createdCoverIds.push(albumCover.id);
+  const album = await prisma.album.create({
+    data: {
+      name: `Already Covered ${suffix}`,
+      artistId: artist.id,
+      coverImageId: albumCover.id,
+    },
+  });
+  createdAlbumIds.push(album.id);
+  const track = await prisma.track.create({
+    data: {
+      title: `Upload target ${suffix}`,
+      externalId: `upload-${suffix}`,
+      artistId: artist.id,
+      serviceId: service.id,
+      albumId: album.id,
+    },
+  });
+  createdTrackIds.push(track.id);
+
+  const image = await sharp({
+    create: {
+      width: 12,
+      height: 10,
+      channels: 3,
+      background: { r: 19, g: 83, b: 141 },
+    },
+  })
+    .jpeg()
+    .toBuffer();
+  const uploadedHash = createHash("sha256").update(image).digest("hex");
+
+  const result = await uploadTrackCover(track.id, image);
+  expect(result).toEqual({ success: true });
+
+  const updated = await prisma.track.findUniqueOrThrow({
+    where: { id: track.id },
+    select: {
+      coverImageId: true,
+      coverImage: { select: { id: true, contentHash: true } },
+    },
+  });
+  expect(updated.coverImage?.contentHash).toBe(uploadedHash);
+  expect(updated.coverImageId).not.toBe(albumCover.id);
+  if (updated.coverImageId) createdCoverIds.push(updated.coverImageId);
+
+  const albumAfter = await prisma.album.findUniqueOrThrow({
+    where: { id: album.id },
+    select: { coverImageId: true },
+  });
+  expect(albumAfter.coverImageId).toBe(albumCover.id);
+  expect(await prisma.track.count({ where: { id: track.id, coverImageId: null } })).toBe(0);
 });
