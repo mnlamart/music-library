@@ -522,7 +522,6 @@ async function processFilesAsync(
 
         return result;
       } catch (error) {
-        console.error(`Error uploading file ${file.fileName}:`, error);
         const errorMessage = error instanceof Error ? error.message : "Failed to upload file";
         updateFileProgress(uploadId, fileId, 0, "failed", errorMessage);
 
@@ -552,6 +551,7 @@ async function processFilesAsync(
           userMetadata: file.userMetadata,
         };
         addFailedFile(uploadId, fileId, errorMessage, storedFileData);
+        console.error(`Error uploading file ${file.fileName}:`, error);
 
         return { success: false, error: errorMessage };
       }

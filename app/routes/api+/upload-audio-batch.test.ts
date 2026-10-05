@@ -6,6 +6,7 @@ import { getSessionExpirationDate, sessionKey } from "#app/utils/auth.server.ts"
 import { prisma } from "#app/utils/db.server.ts";
 import { authSessionStorage } from "#app/utils/session.server.ts";
 import { createUser } from "#tests/db-utils.ts";
+import { consoleError } from "#tests/setup/setup-test-env.ts";
 import { action } from "./upload-audio-batch.tsx";
 import { getUploadProgress } from "./upload-progress.$uploadId.tsx";
 
@@ -52,6 +53,16 @@ async function waitForUpload(uploadId: string) {
 }
 
 test("a valid file still uploads when another file in the batch is empty", async () => {
+  // CI images do not ship fpcalc. A missing fingerprint is logged and ignored;
+  // the test spy turns that log into a throw, which used to abort the upload.
+  consoleError.mockImplementation((...args: unknown[]) => {
+    const message = args.map((arg) => (arg instanceof Error ? arg.message : String(arg))).join(" ");
+    if (message.includes("Failed to generate audio fingerprint")) return;
+    throw new Error(
+      `Console error was called: ${message}. Call consoleError.mockImplementation(() => {}) if this is expected.`,
+    );
+  });
+
   await prisma.service.upsert({
     where: { name: LOCAL_SERVICE.NAME },
     update: {},
