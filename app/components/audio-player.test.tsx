@@ -139,6 +139,29 @@ async function renderPlayer(props: Partial<AudioPlayerTestProps> = {}) {
   return { ...view, audioEl };
 }
 
+test("sleep timer menu stacks above toasts and cancel clears the countdown", async () => {
+  const user = userEvent.setup();
+  await renderPlayer();
+
+  const playerBar = screen.getByTestId("player-desktop-bar");
+  await user.click(within(playerBar).getByRole("button", { name: "Sleep timer" }));
+
+  const preset = await screen.findByRole("button", { name: "15 min" });
+  const popover = preset.closest("[data-side]");
+  expect(popover).toHaveClass("z-[110]");
+  expect(popover).not.toHaveClass("z-54");
+
+  await user.click(preset);
+  expect(within(playerBar).getByRole("button", { name: "Sleep timer" })).toHaveTextContent(
+    /\d+:\d+/,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Cancel timer" }));
+  expect(within(playerBar).getByRole("button", { name: "Sleep timer" })).not.toHaveTextContent(
+    /\d+:\d+/,
+  );
+});
+
 test("publishes player clearance so toasts can sit above the bar", async () => {
   const rectSpy = vi
     .spyOn(HTMLElement.prototype, "getBoundingClientRect")

@@ -2270,7 +2270,9 @@ function SleepTimerControl({
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 space-y-3">
+      {/* Toast viewport is z-100 so Undo stays above dialogs. This menu has to
+          paint above that toast; otherwise "Sleep timer set" covers Cancel. */}
+      <PopoverContent align="end" className="z-[110] w-56 space-y-3">
         <div>
           <p className="text-sm font-medium">Sleep timer</p>
           <p className="text-xs text-muted-foreground">Stop playback after the selected time.</p>
