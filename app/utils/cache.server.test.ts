@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { cache, lruCache, searchCacheKeys } from "./cache.server.ts";
+import { cache, getAllCacheKeys, lruCache, searchCacheKeys } from "./cache.server.ts";
 
 const keys = {
   plain: "cache-search-plain",
@@ -60,5 +60,57 @@ describe("searchCacheKeys", () => {
     expect(literal.sqlite).not.toContain(keys.underscore);
     expect(literal.lru).toContain(keys.plain);
     expect(literal.lru).not.toContain(keys.underscore);
+  });
+});
+
+const PREFIX = "cache-admin-limit-389";
+
+function cacheEntry() {
+  return {
+    metadata: { createdTime: Date.now(), ttl: null as number | null },
+    value: "limit-probe",
+  };
+}
+
+const seeded: Array<string> = [];
+
+function seedLru(key: string) {
+  lruCache.set(key, cacheEntry());
+  seeded.push(key);
+}
+
+afterEach(() => {
+  for (const key of seeded) lruCache.delete(key);
+  seeded.length = 0;
+});
+
+describe("cache admin key limit", () => {
+  test("getAllCacheKeys caps the LRU list at the limit without deleting keys", async () => {
+    const limitKeys = [`${PREFIX}-a`, `${PREFIX}-b`, `${PREFIX}-c`];
+    for (const key of limitKeys) seedLru(key);
+
+    const limited = await getAllCacheKeys(1);
+
+    expect(limited.lru).toHaveLength(1);
+    expect(limited.sqlite.length).toBeLessThanOrEqual(1);
+    for (const key of limitKeys) {
+      expect(lruCache.get(key)?.value).toBe("limit-probe");
+    }
+  });
+
+  test("searchCacheKeys caps matching LRU keys at the limit", async () => {
+    seedLru(`${PREFIX}-a`);
+    seedLru(`${PREFIX}-b`);
+    // Most recently used, and it must not consume the limit ahead of matches.
+    seedLru("unrelated-lru-key-389");
+
+    const limited = await searchCacheKeys(PREFIX, 1);
+
+    expect(limited.lru).toHaveLength(1);
+    expect(limited.lru.every((key) => key.includes(PREFIX))).toBe(true);
+    expect(limited.sqlite.length).toBeLessThanOrEqual(1);
+    expect(lruCache.get(`${PREFIX}-a`)?.value).toBe("limit-probe");
+    expect(lruCache.get(`${PREFIX}-b`)?.value).toBe("limit-probe");
+    expect(lruCache.get("unrelated-lru-key-389")?.value).toBe("limit-probe");
   });
 });
