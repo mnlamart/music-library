@@ -74,6 +74,7 @@ export interface AlbumDuplicateGroup {
 export async function findExactArtistDuplicates(): Promise<ArtistDuplicateGroup[]> {
   // Get all artists with their normalized names
   const artists = await prisma.artist.findMany({
+    where: { mergedIntoId: null },
     select: {
       id: true,
       name: true,
@@ -137,6 +138,7 @@ export async function findExactArtistDuplicates(): Promise<ArtistDuplicateGroup[
 export async function findFuzzyArtistDuplicates(): Promise<ArtistDuplicateGroup[]> {
   // Get all artists with their normalized names
   const artists = await prisma.artist.findMany({
+    where: { mergedIntoId: null },
     select: {
       id: true,
       name: true,
@@ -237,6 +239,7 @@ export async function findFuzzyArtistDuplicates(): Promise<ArtistDuplicateGroup[
 export async function findExactAlbumDuplicates(): Promise<AlbumDuplicateGroup[]> {
   // Get all albums with their artists
   const albums = await prisma.album.findMany({
+    where: { mergedIntoId: null },
     select: {
       id: true,
       name: true,
@@ -313,6 +316,7 @@ export async function findExactAlbumDuplicates(): Promise<AlbumDuplicateGroup[]>
 export async function findFuzzyAlbumDuplicates(): Promise<AlbumDuplicateGroup[]> {
   // Get all albums with their artists
   const albums = await prisma.album.findMany({
+    where: { mergedIntoId: null },
     select: {
       id: true,
       name: true,
