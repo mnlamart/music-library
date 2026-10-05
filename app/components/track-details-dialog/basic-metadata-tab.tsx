@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AlbumAutocomplete } from "#app/components/album-autocomplete";
 import { ArtistAutocomplete } from "#app/components/artist-autocomplete";
 import { GenreSelector, type Genre } from "#app/components/genre-selector";
 import { Button } from "#app/components/ui/button";
@@ -19,6 +20,14 @@ function draftString(draft: Record<string, unknown> | null | undefined, key: str
   return typeof value === "string" ? value : undefined;
 }
 
+/** Missing key stays undefined so the track's current album is kept. */
+function draftAlbumId(draft: Record<string, unknown> | null | undefined) {
+  if (!draft || !("albumId" in draft)) return undefined;
+  const value = draft.albumId;
+  if (value === null || value === "") return null;
+  return typeof value === "string" ? value : undefined;
+}
+
 export function BasicMetadataTab({
   track,
   onSave,
@@ -33,7 +42,15 @@ export function BasicMetadataTab({
   const [artistName, setArtistName] = useState(
     draftString(initialDraft, "artistName") ?? track.artist.name,
   );
-  const [albumName, setAlbumName] = useState(track.albumRecord?.name ?? "");
+  const draftedAlbumId = draftAlbumId(initialDraft);
+  const [albumId, setAlbumId] = useState<string | null>(
+    draftedAlbumId === undefined ? (track.albumRecord?.id ?? null) : draftedAlbumId,
+  );
+  const [albumName, setAlbumName] = useState(
+    draftedAlbumId === undefined
+      ? (track.albumRecord?.name ?? "")
+      : (draftString(initialDraft, "albumName") ?? ""),
+  );
   const [genres, setGenres] = useState<Genre[]>(track.genres.map((g) => ({ ...g, trackCount: 0 })));
   const [year, setYear] = useState(
     draftString(initialDraft, "year") ?? track.year?.toString() ?? "",
@@ -47,6 +64,11 @@ export function BasicMetadataTab({
     if (errors.artist) {
       setErrors((prev) => ({ ...prev, artist: "" }));
     }
+  };
+
+  const handleAlbumChange = (id: string | null, name: string) => {
+    setAlbumId(id);
+    setAlbumName(name);
   };
 
   const handleCreateArtist = async (name: string) => {
@@ -118,7 +140,7 @@ export function BasicMetadataTab({
     const changes = {
       title: title.trim(),
       artistId,
-      albumId: track.albumRecord?.id ?? null,
+      albumId,
       genreIds: genres.map((g) => g.id),
       year: year ? parseInt(year, 10) : null,
     };
@@ -129,6 +151,7 @@ export function BasicMetadataTab({
   const hasChanges =
     title !== track.title ||
     artistId !== track.artist.id ||
+    albumId !== (track.albumRecord?.id ?? null) ||
     JSON.stringify(genres.map((g) => g.id).sort()) !==
       JSON.stringify(track.genres.map((g) => g.id).sort()) ||
     year !== (track.year?.toString() ?? "");
@@ -139,8 +162,8 @@ export function BasicMetadataTab({
       onDraftChange(null);
       return;
     }
-    onDraftChange({ title, artistId, artistName, year });
-  }, [artistId, artistName, hasChanges, onDraftChange, title, year]);
+    onDraftChange({ title, artistId, artistName, albumId, albumName, year });
+  }, [albumId, albumName, artistId, artistName, hasChanges, onDraftChange, title, year]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -178,15 +201,16 @@ export function BasicMetadataTab({
       />
 
       <div>
-        <Label htmlFor="album">Album</Label>
-        <Input
-          id="album"
-          value={albumName}
-          onChange={(e) => setAlbumName(e.target.value)}
-          placeholder="Album name"
-          disabled
+        <AlbumAutocomplete
+          value={albumId}
+          albumName={albumId ? albumName : null}
+          onChange={handleAlbumChange}
+          label="Album"
+          disabled={disabled}
         />
-        <p className="px-4 pt-1 text-[10px] text-muted-foreground">Album editing coming soon</p>
+        <p className="px-4 pt-1 text-[10px] text-muted-foreground">
+          Choose an existing album. Clear the field to remove it.
+        </p>
       </div>
 
       <GenreSelector

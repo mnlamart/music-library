@@ -139,6 +139,77 @@ async function renderPlayer(props: Partial<AudioPlayerTestProps> = {}) {
   return { ...view, audioEl };
 }
 
+test("sleep timer menu stacks above toasts and cancel clears the countdown", async () => {
+  const user = userEvent.setup();
+  await renderPlayer();
+
+  const playerBar = screen.getByTestId("player-desktop-bar");
+  await user.click(within(playerBar).getByRole("button", { name: "Sleep timer" }));
+
+  const preset = await screen.findByRole("button", { name: "15 min" });
+  const popover = preset.closest("[data-side]");
+  expect(popover).toHaveClass("z-[110]");
+  expect(popover).not.toHaveClass("z-54");
+
+  await user.click(preset);
+  expect(within(playerBar).getByRole("button", { name: "Sleep timer" })).toHaveTextContent(
+    /\d+:\d+/,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Cancel timer" }));
+  expect(within(playerBar).getByRole("button", { name: "Sleep timer" })).not.toHaveTextContent(
+    /\d+:\d+/,
+  );
+});
+
+test("publishes player clearance so toasts can sit above the bar", async () => {
+  const rectSpy = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.testid === "player-chrome") {
+        return {
+          x: 0,
+          y: 700,
+          top: 700,
+          bottom: 800,
+          left: 0,
+          right: 400,
+          width: 400,
+          height: 100,
+          toJSON() {
+            return {};
+          },
+        } as DOMRect;
+      }
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        width: 0,
+        height: 0,
+        toJSON() {
+          return {};
+        },
+      } as DOMRect;
+    });
+  const heightSpy = vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+
+  const view = await renderPlayer();
+
+  await waitFor(() => {
+    expect(document.body.style.getPropertyValue("--toast-bottom-offset")).toBe("100px");
+  });
+
+  view.unmount();
+  expect(document.body.style.getPropertyValue("--toast-bottom-offset")).toBe("");
+
+  rectSpy.mockRestore();
+  heightSpy.mockRestore();
+});
+
 test("reserves page space for the playback error so the list can scroll past the player", async () => {
   const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   const heightSpy = vi

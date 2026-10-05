@@ -272,6 +272,75 @@ describe("POST /api/metadata/tracks/:trackId/edit", () => {
     expect(response.data.track.genre).toBeNull();
   });
 
+  test("writes the selected album id onto the track", async () => {
+    const existingTrack = {
+      id: "track-1",
+      title: "Title",
+      artistId: "artist-1",
+      albumId: null,
+      genre: "Rock",
+      genres: [],
+      year: 2020,
+      trackNumber: null,
+      albumArtist: null,
+      bpm: null,
+      label: null,
+      isrc: null,
+      releaseDate: null,
+      originalDate: null,
+      originalYear: null,
+      totalTracks: null,
+      totalDiscs: null,
+      lyrics: null,
+    };
+
+    vi.mocked(prisma.track.findUnique).mockResolvedValue(existingTrack as never);
+    vi.mocked(prisma.artist.findUnique).mockResolvedValue({ id: "artist-1" } as never);
+    vi.mocked(prisma.album.findUnique).mockResolvedValue({ id: "album-2" } as never);
+
+    const mockTrackUpdate = vi.fn().mockResolvedValue({
+      ...existingTrack,
+      albumId: "album-2",
+      artist: { id: "artist-1", name: "Artist Name" },
+      albumRecord: { id: "album-2", name: "Kind of Blue" },
+      genres: [],
+    });
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
+      return callback({
+        trackEdit: {
+          create: vi.fn().mockResolvedValue({ id: "edit-1" }),
+        },
+        track: {
+          update: mockTrackUpdate,
+        },
+      });
+    });
+
+    const response: any = await action(
+      makeRequest(
+        {
+          title: "Title",
+          artistId: "artist-1",
+          albumId: "album-2",
+        },
+        { trackId: "track-1" },
+      ) as never,
+    );
+
+    expect(prisma.album.findUnique).toHaveBeenCalledWith({
+      where: { id: "album-2" },
+      select: { id: true },
+    });
+    expect(mockTrackUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "track-1" },
+        data: expect.objectContaining({ albumId: "album-2" }),
+      }),
+    );
+    expect(response.data.track.albumId).toBe("album-2");
+  });
+
   test("snapshots current genre ids and syncs the legacy genre string from genreIds", async () => {
     const existingTrack = {
       id: "track-1",

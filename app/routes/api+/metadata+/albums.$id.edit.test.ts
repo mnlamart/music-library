@@ -358,6 +358,81 @@ describe("POST /api/metadata/albums/:id/edit", () => {
     expect(albumInDb?.year).toBe(1969);
   });
 
+  test("saves the CoverImage id as the album cover", async () => {
+    await prisma.role.upsert({
+      where: { name: "curator" },
+      update: {},
+      create: { name: "curator", description: "Curator" },
+    });
+
+    await prisma.user.create({
+      data: {
+        id: mockUserId,
+        email: "curator@test.com",
+        username: "curator",
+        roles: { connect: { name: "curator" } },
+      },
+    });
+
+    const artist = await prisma.artist.create({
+      data: {
+        name: "Artist",
+        normalizedName: "artist",
+      },
+    });
+
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const originalCover = await prisma.coverImage.create({
+      data: {
+        contentHash: `original-${suffix}`,
+        objectKey: `images/albums/original-${suffix}.jpg`,
+        format: "jpeg",
+      },
+    });
+    const uploadedCover = await prisma.coverImage.create({
+      data: {
+        contentHash: `uploaded-${suffix}`,
+        objectKey: `images/albums/uploaded-${suffix}.jpg`,
+        format: "jpeg",
+      },
+    });
+
+    const album = await prisma.album.create({
+      data: {
+        name: "Original Album",
+        artistId: artist.id,
+        year: 1969,
+        coverImageId: originalCover.id,
+      },
+    });
+
+    const request = new Request(`http://localhost/api/metadata/albums/${album.id}/edit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "Original Album",
+        artistId: artist.id,
+        year: 1969,
+        coverImageId: uploadedCover.id,
+        comment: "New cover",
+      }),
+    });
+
+    const result = await action({ request, params: { id: album.id } } as any);
+    expect(result.data.album.coverImageId).toBe(uploadedCover.id);
+    expect(result.data.edit.coverImageId).toBe(originalCover.id);
+
+    const albumInDb = await prisma.album.findUnique({
+      where: { id: album.id },
+      include: { coverImage: true },
+    });
+    expect(albumInDb?.coverImageId).toBe(uploadedCover.id);
+    expect(albumInDb?.coverImage?.id).toBe(uploadedCover.id);
+    expect(albumInDb?.coverImage?.objectKey).toBe(uploadedCover.objectKey);
+  });
+
   test("returns 404 for non-existent album", async () => {
     await prisma.role.upsert({
       where: { name: "curator" },

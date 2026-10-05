@@ -10,7 +10,7 @@ interface ImageUploaderProps {
   entityType: "artist" | "album";
   entityId: string;
   currentImageUrl?: string | null;
-  onImageUploaded?: (objectKey: string) => void;
+  onImageUploaded?: (objectKey: string, imageId: string) => void;
 }
 
 export function ImageUploader({
@@ -62,8 +62,9 @@ export function ImageUploader({
   // Handle successful uploads
   if (uploadFetcher.data?.success && onImageUploaded) {
     const objectKey = uploadFetcher.data.image.objectKey;
+    const imageId = uploadFetcher.data.image.id;
     setTimeout(() => {
-      onImageUploaded(objectKey);
+      onImageUploaded(objectKey, imageId);
       // Reset fetcher to prevent infinite loop
       uploadFetcher.data = null;
     }, 0);
@@ -71,8 +72,9 @@ export function ImageUploader({
 
   if (urlFetcher.data?.success && onImageUploaded) {
     const objectKey = urlFetcher.data.image.objectKey;
+    const imageId = urlFetcher.data.image.id;
     setTimeout(() => {
-      onImageUploaded(objectKey);
+      onImageUploaded(objectKey, imageId);
       setImageUrl("");
       // Reset fetcher to prevent infinite loop
       urlFetcher.data = null;
