@@ -93,6 +93,9 @@ COPY --from=build /myapp/package.json /myapp/package.json
 COPY --from=build /myapp/prisma /myapp/prisma
 COPY --from=build /myapp/app/components/ui/icons /myapp/app/components/ui/icons
 
+# LiteFS runs this after migrate deploy. /scripts/* is ignored, so copy it explicitly.
+COPY scripts/align-security-event-schema.mjs ./scripts/align-security-event-schema.mjs
+
 # prepare for litefs
 COPY --from=flyio/litefs:0.5.11 /usr/local/bin/litefs /usr/local/bin/litefs
 ADD other/litefs.yml /etc/litefs.yml
