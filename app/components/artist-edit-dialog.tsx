@@ -16,6 +16,7 @@ import { Textarea } from "#app/components/ui/textarea";
 import { Icon } from "#app/components/ui/icon";
 import { ImageUploader } from "#app/components/image-uploader";
 import { ArtistHistoryTab } from "#app/components/artist-edit-dialog/artist-history-tab";
+import { CuratorNotes } from "#app/components/curator-notes";
 
 export interface Artist {
   id: string;
@@ -32,9 +33,16 @@ interface ArtistEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
+  currentUserId?: string;
 }
 
-export function ArtistEditDialog({ artist, open, onOpenChange, onSaved }: ArtistEditDialogProps) {
+export function ArtistEditDialog({
+  artist,
+  open,
+  onOpenChange,
+  onSaved,
+  currentUserId,
+}: ArtistEditDialogProps) {
   const editFetcher = useFetcher();
   const restoreFetcher = useFetcher();
   const [activeTab, setActiveTab] = useState("metadata");
@@ -119,10 +127,11 @@ export function ArtistEditDialog({ artist, open, onOpenChange, onSaved }: Artist
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className={`grid w-full ${currentUserId ? "grid-cols-4" : "grid-cols-3"}`}>
             <TabsTrigger value="metadata">Metadata</TabsTrigger>
             <TabsTrigger value="image">Image</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
+            {currentUserId ? <TabsTrigger value="notes">Notes</TabsTrigger> : null}
           </TabsList>
 
           <TabsContent value="metadata" className="space-y-4 mt-4">
@@ -223,6 +232,16 @@ export function ArtistEditDialog({ artist, open, onOpenChange, onSaved }: Artist
           <TabsContent value="history" className="mt-4">
             <ArtistHistoryTab artistId={artist.id} onRestore={handleRestore} />
           </TabsContent>
+
+          {currentUserId ? (
+            <TabsContent value="notes" className="mt-4">
+              <CuratorNotes
+                entityType="artist"
+                entityId={artist.id}
+                currentUserId={currentUserId}
+              />
+            </TabsContent>
+          ) : null}
         </Tabs>
       </DialogContent>
     </Dialog>

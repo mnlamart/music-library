@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { data, useFetcher } from "react-router";
 import { AlbumCard } from "#app/components/album-card.tsx";
 import { ArtistEditDialog } from "#app/components/artist-edit-dialog.tsx";
+import { CuratorNotes } from "#app/components/curator-notes.tsx";
 import { ArtistSplitDialog } from "#app/components/artist-split-dialog.tsx";
 import { FlagForReviewDialog } from "#app/components/flag-for-review-dialog.tsx";
 import { Breadcrumbs, type BreadcrumbHandle } from "#app/components/breadcrumbs.tsx";
@@ -245,6 +246,13 @@ export default function ArtistRoute({ loaderData }: Route.ComponentProps) {
           </div>
         ) : null}
 
+        {canFlagForReview && user ? (
+          <section className="mt-10">
+            <h2 className="mb-4 text-xl font-semibold">Curator notes</h2>
+            <CuratorNotes entityType="artist" entityId={artist.id} currentUserId={user.id} />
+          </section>
+        ) : null}
+
         {canEdit ? (
           <>
             <ArtistEditDialog
@@ -252,6 +260,7 @@ export default function ArtistRoute({ loaderData }: Route.ComponentProps) {
               open={editDialogOpen}
               onOpenChange={setEditDialogOpen}
               onSaved={() => window.location.reload()}
+              currentUserId={user?.id}
             />
             <ArtistSplitDialog
               artistId={artist.id}

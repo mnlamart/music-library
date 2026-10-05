@@ -49,9 +49,8 @@ export function MentionAutocomplete({ value, onChange, textareaRef }: MentionAut
         if (loadedQueryRef.current !== textAfterAt) {
           loadedQueryRef.current = textAfterAt;
           setSelectedIndex(0);
-          if (textAfterAt.length >= 1) {
-            fetcher.load(`/api/curator/curators?q=${encodeURIComponent(textAfterAt)}`);
-          }
+          // A bare "@" should list curators. Waiting for a letter leaves the menu empty.
+          fetcher.load(`/api/curator/curators?q=${encodeURIComponent(textAfterAt)}`);
         }
         return;
       }
