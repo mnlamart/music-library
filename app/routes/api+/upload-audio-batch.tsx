@@ -18,6 +18,7 @@ import {
   updateFileProgress,
   addSuccessfulTrack,
   addFailedFile,
+  getUploadProgress,
   type StoredFileData,
 } from "./upload-progress.$uploadId";
 
@@ -49,6 +50,27 @@ const ALLOWED_ZIP_MIME_TYPES = [
 // Maximum concurrency for parallel processing
 const MAX_CONCURRENCY = 5;
 
+function audioFileRejection(file: File): string | null {
+  if (file.size === 0) {
+    return `File ${file.name} is empty`;
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return `File ${file.name} exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB`;
+  }
+
+  if (!ALLOWED_AUDIO_MIME_TYPES.includes(file.type)) {
+    return `File ${file.name} has invalid MIME type: ${file.type}`;
+  }
+
+  return null;
+}
+
+function recordFileFailure(uploadId: string, fileId: string, error: string) {
+  updateFileProgress(uploadId, fileId, 0, "failed", error);
+  addFailedFile(uploadId, fileId, error);
+}
+
 /**
  * Process items in parallel with a concurrency limit
  * @param items - Array of items to process
@@ -76,6 +98,8 @@ async function processWithConcurrency<T, R>(
 
 interface FileWithMetadata {
   fileName: string;
+  /** Index in the original upload so progress ids stay aligned when some files are rejected. */
+  sourceIndex: number;
   buffer: Buffer;
   mimeType?: string;
   metadata: ExtractedAudioMetadata;
@@ -166,19 +190,15 @@ export async function action({ request }: ActionFunctionArgs) {
 
             filesToProcess.push({
               fileName: extractedFile.fileName,
+              sourceIndex: i,
               buffer: extractedFile.buffer,
               mimeType: metadata.mimeType,
               metadata,
               userMetadata: parsedMetadata,
             });
           } catch (error) {
-            updateFileProgress(
-              uploadId,
-              fileId,
-              0,
-              "failed",
-              error instanceof Error ? error.message : "Failed to extract metadata",
-            );
+            const message = error instanceof Error ? error.message : "Failed to extract metadata";
+            recordFileFailure(uploadId, fileId, message);
             console.error(`Error extracting metadata from ${extractedFile.fileName}:`, error);
           }
         },
@@ -211,50 +231,22 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Validate files
-    for (const file of audioFiles) {
-      if (file.size === 0) {
-        return data(
-          {
-            success: false,
-            error: `File ${file.name} is empty`,
-          },
-          { status: 400 },
-        );
-      }
-
-      if (file.size > MAX_FILE_SIZE) {
-        return data(
-          {
-            success: false,
-            error: `File ${file.name} exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB`,
-          },
-          { status: 400 },
-        );
-      }
-
-      if (!ALLOWED_AUDIO_MIME_TYPES.includes(file.type)) {
-        return data(
-          {
-            success: false,
-            error: `File ${file.name} has invalid MIME type: ${file.type}`,
-          },
-          { status: 400 },
-        );
-      }
-    }
-
-    // Initialize progress tracking
+    // Initialize progress for every file, then reject invalid ones individually
+    // so one empty or unsupported file does not fail the rest of the batch.
     initUploadProgress(
       uploadId,
       audioFiles.map((f) => f.name),
     );
 
-    // Extract metadata from each file in parallel (max 5 concurrent)
     await processWithConcurrency(
       audioFiles,
       async (file, i) => {
         const fileId = `file-${i}`;
+        const rejection = audioFileRejection(file);
+        if (rejection) {
+          recordFileFailure(uploadId, fileId, rejection);
+          return;
+        }
 
         try {
           updateFileProgress(uploadId, fileId, 0, "processing");
@@ -270,19 +262,15 @@ export async function action({ request }: ActionFunctionArgs) {
 
           filesToProcess.push({
             fileName: file.name,
+            sourceIndex: i,
             buffer,
             mimeType: file.type,
             metadata,
             userMetadata: parsedMetadata,
           });
         } catch (error) {
-          updateFileProgress(
-            uploadId,
-            fileId,
-            0,
-            "failed",
-            error instanceof Error ? error.message : "Failed to extract metadata",
-          );
+          const message = error instanceof Error ? error.message : "Failed to extract metadata";
+          recordFileFailure(uploadId, fileId, message);
           console.error(`Error extracting metadata from ${file.name}:`, error);
         }
       },
@@ -291,6 +279,20 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (filesToProcess.length === 0) {
+    const progress = getUploadProgress(uploadId);
+    // Every file was rejected after progress was initialized. Return the
+    // session so the client can show those failures and offer a retry.
+    if (progress && progress.files.length > 0) {
+      return data(
+        {
+          success: true,
+          uploadId,
+          message: "Upload started",
+        },
+        { status: 202 },
+      );
+    }
+
     return data(
       {
         success: false,
@@ -334,8 +336,8 @@ async function processFilesAsync(
   // Process files in parallel (max 5 concurrent)
   await processWithConcurrency(
     files,
-    async (file, i): Promise<{ success: boolean; trackId?: string; error?: string }> => {
-      const fileId = `file-${i}`;
+    async (file): Promise<{ success: boolean; trackId?: string; error?: string }> => {
+      const fileId = `file-${file.sourceIndex}`;
 
       try {
         // Use user metadata if provided, otherwise use extracted metadata
@@ -345,7 +347,7 @@ async function processFilesAsync(
 
         // Validate required fields
         if (!title || !artist) {
-          updateFileProgress(uploadId, fileId, 0, "failed", "Title and artist are required");
+          recordFileFailure(uploadId, fileId, "Title and artist are required");
           return { success: false, error: "Title and artist are required" };
         }
 

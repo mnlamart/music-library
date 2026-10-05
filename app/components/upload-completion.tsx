@@ -49,7 +49,7 @@ interface FailedFile {
 interface UploadCompletionProps {
   successfulTracks: SuccessfulTrack[];
   failedFiles: FailedFile[];
-  onRetryFailed: () => void;
+  onRetryFailed: (failedFiles: FailedFile[]) => void;
   onUploadMore: () => void;
   onViewLibrary: () => void;
 }
@@ -159,7 +159,11 @@ export function UploadCompletion({
               ))}
             </div>
             <div className="mt-4">
-              <Button onClick={onRetryFailed} variant="outline" className="w-full sm:w-auto">
+              <Button
+                onClick={() => onRetryFailed(failedFiles)}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
                 <Icon name="arrow-path" className="mr-2" />
                 Retry Failed Uploads
               </Button>

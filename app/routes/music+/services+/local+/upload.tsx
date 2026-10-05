@@ -86,6 +86,7 @@ export default function LocalUploadPage() {
   const [uploadPhase, setUploadPhase] = useState<
     "uploading-to-server" | "server-processing" | null
   >(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
@@ -262,6 +263,7 @@ export default function LocalUploadPage() {
     setStep("uploading");
     setUploadPhase("uploading-to-server");
     setBrowserUploadProgress(0);
+    setUploadError(null);
 
     try {
       const formData = new FormData();
@@ -351,18 +353,31 @@ export default function LocalUploadPage() {
       console.error("Error starting upload:", error);
       setUploadPhase(null);
       setBrowserUploadProgress(0);
-      // Show error - you may want to add error state handling here
+      setUploadId(null);
+      setUploadError(error instanceof Error ? error.message : "Upload failed");
+      setStep(filesWithMetadata.length > 0 ? "edit" : "select");
     }
   };
 
-  // Handle retry failed uploads
-  const handleRetryFailed = () => {
-    // Reset to upload step - the retry will need to be implemented with stored file data
-    // For now, just reset to allow manual retry
-    setStep("select");
-    setSelectedFiles([]);
-    setFilesWithMetadata([]);
+  // Return to the edit step with only the files that failed, so they can be sent again.
+  const handleRetryFailed = (failedFiles: Array<{ fileName: string }>) => {
+    const failedNames = new Set(failedFiles.map((file) => file.fileName));
+    const retryFiles = selectedFiles.filter((file) => failedNames.has(file.name));
+    const retryMetadata = filesWithMetadata.filter((file) => failedNames.has(file.fileName));
+
     setUploadId(null);
+    setUploadPhase(null);
+    setBrowserUploadProgress(0);
+    setUploadError(null);
+
+    if (retryFiles.length > 0 && retryMetadata.length > 0) {
+      setSelectedFiles(retryFiles);
+      setFilesWithMetadata(retryMetadata);
+      setStep("edit");
+      return;
+    }
+
+    setStep(filesWithMetadata.length > 0 ? "edit" : "select");
   };
 
   // Handle upload more
@@ -395,13 +410,13 @@ export default function LocalUploadPage() {
         </p>
       </div>
 
-      {actionData?.error && (
+      {(actionData?.error || uploadError) && (
         <div className="mb-6 rounded-md bg-destructive/15 p-4">
           <div className="flex items-center gap-2">
             <Icon name="question-mark-circled" className="h-4 w-4 text-destructive" />
             <p className="text-sm text-destructive font-medium">Error</p>
           </div>
-          <p className="text-sm text-destructive mt-1">{actionData.error}</p>
+          <p className="text-sm text-destructive mt-1">{uploadError || actionData?.error}</p>
         </div>
       )}
 
@@ -841,7 +856,7 @@ function CompletionStep({
   onViewLibrary,
 }: {
   uploadId: string;
-  onRetryFailed: () => void;
+  onRetryFailed: (failedFiles: Array<{ fileId: string; fileName: string; error: string }>) => void;
   onUploadMore: () => void;
   onViewLibrary: () => void;
 }) {
