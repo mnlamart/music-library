@@ -186,6 +186,7 @@ describe("getCuratorsForAutocomplete", () => {
           },
         },
       },
+      orderBy: { username: "asc" },
       select: {
         id: true,
         username: true,
