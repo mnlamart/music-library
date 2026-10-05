@@ -2,6 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { data, Link, useSearchParams } from "react-router";
+import { useCuratorFilterSession } from "#app/features/curator/use-curator-session.ts";
 import { BulkEditDialog } from "#app/components/bulk-edit-dialog";
 import { OfflineLibraryView } from "#app/components/offline/offline-library-view.tsx";
 import { SelectionModeToggle } from "#app/components/selection-mode-toggle";
@@ -235,6 +236,34 @@ export default function LibraryIndexRoute({
   const { selectedTrackIds, selectAll, deselectAll, toggleSelection, selectedCount } =
     useSelection();
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const libraryFilters = {
+    sort: searchParams.get("sort") ?? "",
+    dir: searchParams.get("dir") ?? "",
+    hasAudio: searchParams.get("hasAudio") ?? "",
+    genre: searchParams.get("genre") ?? "",
+  };
+  useCuratorFilterSession({
+    enabled: isCurator,
+    page: "/library",
+    filters: libraryFilters,
+    active: searchParams.toString().length > 0,
+    readScroll: () => {
+      const viewport = parentRef.current?.querySelector("[data-radix-scroll-area-viewport]");
+      return viewport instanceof HTMLElement ? viewport.scrollTop : window.scrollY;
+    },
+    onRestore: (state) => {
+      const next = new URLSearchParams();
+      for (const [key, value] of Object.entries(state.filters)) {
+        if (value == null || value === false || value === "") continue;
+        next.set(key, String(value));
+      }
+      setSearchParams(next, { preventScrollReset: true });
+      window.setTimeout(() => {
+        const viewport = parentRef.current?.querySelector("[data-radix-scroll-area-viewport]");
+        if (viewport instanceof HTMLElement) viewport.scrollTop = state.scrollPosition;
+      }, 50);
+    },
+  });
 
   const scrollLibraryToTop = useCallback(() => {
     const viewport = parentRef.current?.querySelector("[data-radix-scroll-area-viewport]");

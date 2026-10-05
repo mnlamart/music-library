@@ -1,4 +1,12 @@
-import { useState, useCallback, memo, type PointerEvent, type ReactNode } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useSyncExternalStore,
+  memo,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { useAudioPlayer } from "#app/components/audio-player-provider";
 import { FlagForReviewDialog } from "#app/components/flag-for-review-dialog.tsx";
 import { TrackThumbnail } from "#app/components/track-thumbnail";
@@ -40,7 +48,14 @@ import { AddToPlaylistMenu } from "./add-to-playlist-menu";
 import { NotesBadge } from "./notes-badge";
 import { AddToRoomQueueAction } from "./party-room/add-to-room-queue-action";
 import { ReportIssueDialog } from "./report-issue-dialog";
+import { useMetadataClipboard } from "./metadata-clipboard.tsx";
 import { TrackDetailsDialog } from "./track-details-dialog";
+import {
+  clearRestoredTrackDialog,
+  getRestoredDialogs,
+  getServerRestoredDialogs,
+  subscribeRestoredDialogs,
+} from "#app/features/curator/session-restore.ts";
 
 interface TrackListItemData {
   id: string;
@@ -186,7 +201,20 @@ export const TrackListItem = memo(function TrackListItem({
   const [isFlagDialogOpen, setIsFlagDialogOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editorRestore, setEditorRestore] = useState<{
+    tab?: string;
+    unsavedChanges?: Record<string, unknown>;
+  } | null>(null);
   const isMobile = useIsMobile();
+  const clipboard = useMetadataClipboard(track.id);
+  const restoredDialogs = useSyncExternalStore(
+    subscribeRestoredDialogs,
+    getRestoredDialogs,
+    getServerRestoredDialogs,
+  );
+  const restoredTrackDialog = restoredDialogs.find(
+    (dialog) => dialog.dialogType === "track-edit" && dialog.entityId === track.id,
+  );
   const user = useOptionalUser();
   const canFlagForReview = userIsCuratorOrAdmin(user);
   const { currentTrack, currentIndex, playTrack, playNextTrack, addToUpNext, addToQueue } =
@@ -235,6 +263,21 @@ export const TrackListItem = memo(function TrackListItem({
     setIsActionsSheetOpen(false);
     setIsEditorOpen(true);
   }, []);
+
+  const openPasteMetadata = useCallback(() => {
+    setIsActionsSheetOpen(false);
+    clipboard.openPaste(isMobile ? 300 : 0);
+  }, [clipboard, isMobile]);
+
+  useEffect(() => {
+    if (!isCurator || !restoredTrackDialog) return;
+    setEditorRestore({
+      tab: restoredTrackDialog.tab,
+      unsavedChanges: restoredTrackDialog.unsavedChanges,
+    });
+    setIsEditorOpen(true);
+    clearRestoredTrackDialog(track.id);
+  }, [isCurator, restoredTrackDialog, track.id]);
 
   const hasAudioFiles = isPlayableTrack({ audioFiles: track.audioFiles, isDeleted });
 
@@ -601,6 +644,23 @@ export const TrackListItem = memo(function TrackListItem({
                     </DialogContent>
                   </Dialog>
                 )}
+                {canFlagForReview ? (
+                  <>
+                    <DropdownMenuItem
+                      className="min-h-11"
+                      onSelect={() => {
+                        void clipboard.copy();
+                      }}
+                    >
+                      <Icon name="file-text" className="mr-2 h-4 w-4" />
+                      Copy Metadata
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="min-h-11" onSelect={openPasteMetadata}>
+                      <Icon name="pencil-1" className="mr-2 h-4 w-4" />
+                      Paste Metadata
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
                 {user ? (
                   <DropdownMenuItem onSelect={handleOpenReportDialog}>
                     <Icon name="question-mark-circled" className="h-4 w-4 mr-2" />
@@ -752,6 +812,29 @@ export const TrackListItem = memo(function TrackListItem({
                   <Icon name="eye-open" className="h-5 w-5 mr-3" />
                   View track details
                 </Button>
+                {canFlagForReview ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      className="h-12 w-full justify-start text-base"
+                      onClick={() => {
+                        setIsActionsSheetOpen(false);
+                        void clipboard.copy();
+                      }}
+                    >
+                      <Icon name="file-text" className="mr-3 h-5 w-5" />
+                      Copy Metadata
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-12 w-full justify-start text-base"
+                      onClick={openPasteMetadata}
+                    >
+                      <Icon name="pencil-1" className="mr-3 h-5 w-5" />
+                      Paste Metadata
+                    </Button>
+                  </>
+                ) : null}
                 {user ? (
                   <Button
                     variant="ghost"
@@ -966,8 +1049,21 @@ export const TrackListItem = memo(function TrackListItem({
         start playback.
       */}
       {isCurator && isEditorOpen ? (
-        <TrackDetailsDialog trackId={track.id} open={isEditorOpen} onOpenChange={setIsEditorOpen} />
+        <TrackDetailsDialog
+          trackId={track.id}
+          open={isEditorOpen}
+          onOpenChange={setIsEditorOpen}
+          initialTab={
+            editorRestore?.tab === "extended" ||
+            editorRestore?.tab === "history" ||
+            editorRestore?.tab === "notes"
+              ? editorRestore.tab
+              : "basic"
+          }
+          initialDraft={editorRestore?.unsavedChanges ?? null}
+        />
       ) : null}
+      {clipboard.dialog}
     </>
   );
 });
