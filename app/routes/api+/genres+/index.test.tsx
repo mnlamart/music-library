@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
-import { loader, action } from "./index.tsx";
+import { loader, action, clientAction } from "./index.tsx";
 
 describe("GET /api/genres", () => {
   const createdIds: string[] = [];
@@ -207,5 +207,64 @@ describe("POST /api/genres", () => {
     }).rejects.toThrow();
 
     vi.mocked((await import("#app/utils/curator.server.ts")).requireCuratorOrAdmin).mockRestore();
+  });
+});
+
+describe("clientAction for POST /api/genres", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("returns a 409 body as action data instead of throwing", async () => {
+    const payload = {
+      error: "Genre already exists",
+      genre: { id: "genre-jazz", name: "Jazz" },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(payload), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const result = await clientAction({
+      request: new Request("http://localhost/api/genres", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Jazz" }),
+      }),
+      params: {},
+    } as never);
+
+    expect(result).toEqual(payload);
+  });
+
+  test("returns the created genre when the server accepts the name", async () => {
+    const payload = {
+      genre: { id: "genre-house", name: "House", trackCount: 0 },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const result = await clientAction({
+      request: new Request("http://localhost/api/genres", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "House" }),
+      }),
+      params: {},
+    } as never);
+
+    expect(result).toEqual(payload);
   });
 });

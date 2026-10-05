@@ -333,7 +333,8 @@ export function QueueTable() {
                 <SelectTrigger id="resolution">
                   <SelectValue placeholder="Select resolution" />
                 </SelectTrigger>
-                <SelectContent>
+                {/* DialogContent is z-53. The shared select menu is z-50 and renders under it. */}
+                <SelectContent className="z-[70]">
                   {RESOLUTION_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}

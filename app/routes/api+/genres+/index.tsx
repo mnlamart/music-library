@@ -16,8 +16,18 @@ export async function clientLoader(args: Route.ClientLoaderArgs) {
   return data;
 }
 
+async function readActionData(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return { error: response.statusText || "Request failed" };
+  }
+}
+
 export async function clientAction(args: Route.ClientActionArgs) {
-  // Proxy POST requests to server for curator/admin authentication
+  // Proxy POST requests to server for curator/admin authentication.
+  // 4xx bodies are action data so the genres page can show them inline.
+  // Throwing the Response replaces Genre Management with the error boundary.
   const { request } = args;
   const body = await request.json();
 
@@ -29,15 +39,8 @@ export async function clientAction(args: Route.ClientActionArgs) {
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Response(JSON.stringify(error), {
-      status: response.status,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  return response.json();
+  // Includes 409/4xx bodies. Returning them keeps the genres page mounted.
+  return readActionData(response);
 }
 
 /**
