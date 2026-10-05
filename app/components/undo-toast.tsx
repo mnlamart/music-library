@@ -123,13 +123,15 @@ export function UndoToast({ open, onOpenChange, trackId, onUndo }: UndoToastProp
         const mostRecentEditId = data.history[0].id;
 
         // Call restore endpoint with automatic comment
-        const formData = new FormData();
-        formData.append("comment", "Quick undo within 5 minutes of edit");
-
-        submit(formData, {
-          method: "POST",
-          action: `/api/metadata/tracks/${trackId}/restore/${mostRecentEditId}`,
-        });
+        submit(
+          { comment: "Quick undo within 5 minutes of edit" },
+          {
+            method: "POST",
+            action: `/api/metadata/tracks/${trackId}/restore/${mostRecentEditId}`,
+            encType: "application/json",
+            navigate: false,
+          },
+        );
 
         // Dismiss the current toast and show success message
         if (currentToast) {
