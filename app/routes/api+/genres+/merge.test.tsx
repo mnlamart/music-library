@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
-import { action } from "./merge.tsx";
+import { action, clientAction } from "./merge.tsx";
 
 describe("POST /api/genres/merge", () => {
   const createdIds: { genres: string[]; tracks: string[]; artists: string[] } = {
@@ -329,5 +329,35 @@ describe("POST /api/genres/merge", () => {
     expect(Number(targetLinks[0]?.count)).toBe(1);
 
     vi.mocked((await import("#app/utils/curator.server.ts")).requireCuratorOrAdmin).mockRestore();
+  });
+});
+
+describe("clientAction for POST /api/genres/merge", () => {
+  test("proxies to the server action instead of throwing", async () => {
+    const serverAction = vi.fn().mockResolvedValue({
+      success: true,
+      tracksRelinked: 1,
+      sourceGenresDeleted: 1,
+    });
+
+    const result = await clientAction({
+      request: new Request("http://localhost/api/genres/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceIds: ["source-genre"],
+          targetId: "target-genre",
+        }),
+      }),
+      serverAction,
+      params: {},
+    } as never);
+
+    expect(serverAction).toHaveBeenCalledOnce();
+    expect(result).toEqual({
+      success: true,
+      tracksRelinked: 1,
+      sourceGenresDeleted: 1,
+    });
   });
 });
