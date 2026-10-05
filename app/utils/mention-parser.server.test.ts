@@ -179,10 +179,7 @@ describe("getCuratorsForAutocomplete", () => {
 
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where: {
-        OR: [
-          { username: { contains: query, mode: "insensitive" } },
-          { name: { contains: query, mode: "insensitive" } },
-        ],
+        OR: [{ username: { contains: query } }, { name: { contains: query } }],
         roles: {
           some: {
             name: { in: ["curator", "admin"] },

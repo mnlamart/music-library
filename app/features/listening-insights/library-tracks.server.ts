@@ -62,6 +62,39 @@ const LIBRARY_TRACK_SELECT = {
   ...FULL_TRACK_INCLUDE,
 } as const;
 
+async function curatorNoteCountsByTrackId(trackIds: string[]) {
+  const counts = new Map<string, number>();
+  if (trackIds.length === 0) return counts;
+
+  const groups = await prisma.curatorNote.groupBy({
+    by: ["entityId"],
+    where: {
+      entityType: "track",
+      entityId: { in: trackIds },
+    },
+    _count: { _all: true },
+  });
+
+  for (const group of groups) {
+    counts.set(group.entityId, group._count._all);
+  }
+
+  return counts;
+}
+
+function withCuratorNoteCounts<T extends { track: { id: string } }>(
+  rows: T[],
+  counts: Map<string, number>,
+) {
+  return rows.map((row) => ({
+    ...row,
+    track: {
+      ...row.track,
+      curatorNotesCount: counts.get(row.track.id) ?? 0,
+    },
+  }));
+}
+
 export type ListLibraryUserTracksResult = {
   userTracks: Array<{
     id: string;
@@ -79,6 +112,7 @@ export type ListLibraryUserTracksResult = {
       originalDate: Date | null;
       service: { name: string; displayName: string; logoUrl: string | null } | null;
       audioFiles: Array<{ id: string; format: string | null; objectKey: string }>;
+      curatorNotesCount: number;
     };
   }>;
   pagination: {
@@ -142,6 +176,7 @@ export async function listLibraryUserTracks({
   sort,
   direction = defaultLibrarySortDirection(sort),
   hasAudioOnly = false,
+  genreId = null,
   cursor,
   limit = LIBRARY_TRACKS_PAGE_SIZE,
   now = new Date(),
@@ -150,11 +185,12 @@ export async function listLibraryUserTracks({
   sort: LibrarySortOption;
   direction?: SortDirection;
   hasAudioOnly?: boolean;
+  genreId?: string | null;
   cursor?: string | null;
   limit?: number;
   now?: Date;
 }): Promise<ListLibraryUserTracksResult> {
-  const where = buildLibraryUserTracksWhere({ userId, hasAudioOnly });
+  const where = buildLibraryUserTracksWhere({ userId, hasAudioOnly, genreId });
   const window = librarySortToWindow(sort);
 
   if (!window) {
@@ -173,9 +209,10 @@ export async function listLibraryUserTracks({
 
     const nextCursor =
       userTracksRaw.length === limit ? (userTracksRaw[userTracksRaw.length - 1]?.id ?? null) : null;
+    const noteCounts = await curatorNoteCountsByTrackId(userTracksRaw.map((row) => row.track.id));
 
     return {
-      userTracks: userTracksRaw,
+      userTracks: withCuratorNoteCounts(userTracksRaw, noteCounts),
       pagination: {
         limit,
         hasNext: !!nextCursor,
@@ -223,9 +260,10 @@ export async function listLibraryUserTracks({
   const userTracks = pageIds
     .map((id) => byId.get(id))
     .filter((row): row is NonNullable<typeof row> => Boolean(row));
+  const noteCounts = await curatorNoteCountsByTrackId(userTracks.map((row) => row.track.id));
 
   return {
-    userTracks,
+    userTracks: withCuratorNoteCounts(userTracks, noteCounts),
     pagination: {
       limit,
       hasNext,

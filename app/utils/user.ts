@@ -61,3 +61,9 @@ export function userHasRole(user: Pick<ReturnType<typeof useUser>, "roles"> | nu
   if (!user) return false;
   return user.roles.some((r) => r.name === role);
 }
+
+export function userIsCuratorOrAdmin(
+  user: Pick<ReturnType<typeof useUser>, "roles"> | null | undefined,
+) {
+  return userHasRole(user ?? null, "curator") || userHasRole(user ?? null, "admin");
+}

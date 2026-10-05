@@ -36,6 +36,26 @@ vi.mock("#app/components/artist-autocomplete", () => ({
   ArtistAutocomplete: () => <div>Artist</div>,
 }));
 
+vi.mock("#app/components/genre-selector", () => ({
+  GenreSelector: ({
+    onChange,
+    label = "Genres",
+    disabled,
+  }: {
+    onChange: (genres: Array<{ id: string; name: string; trackCount: number }>) => void;
+    label?: string;
+    disabled?: boolean;
+  }) => (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange([{ id: "genre-jazz", name: "Jazz", trackCount: 3 }])}
+    >
+      {label}
+    </button>
+  ),
+}));
+
 vi.mock("#app/components/ui/use-toast.ts", () => ({
   toast: vi.fn(),
 }));
@@ -81,7 +101,7 @@ test("submits JSON to the bulk-edit API instead of FormData", async () => {
   const user = userEvent.setup();
   renderDialog();
 
-  await user.type(screen.getByLabelText("Genre"), "Jazz");
+  await user.click(screen.getByRole("button", { name: "Genres" }));
   await user.type(screen.getByLabelText(/Bulk Edit Reason/), "Fix genre tags");
   await user.click(screen.getByRole("button", { name: /Apply to 2 Tracks/ }));
 
@@ -91,7 +111,7 @@ test("submits JSON to the bulk-edit API instead of FormData", async () => {
   expect(payload).not.toBeInstanceOf(FormData);
   expect(payload).toEqual({
     trackIds: ["track-1", "track-2"],
-    changes: { genre: "Jazz" },
+    changes: { genreIds: ["genre-jazz"] },
     comment: "Fix genre tags",
   });
   expect(options).toMatchObject({

@@ -1,5 +1,6 @@
 import { useState, useCallback, memo, type PointerEvent, type ReactNode } from "react";
 import { useAudioPlayer } from "#app/components/audio-player-provider";
+import { FlagForReviewDialog } from "#app/components/flag-for-review-dialog.tsx";
 import { TrackThumbnail } from "#app/components/track-thumbnail";
 import { Button } from "#app/components/ui/button";
 import { Checkbox } from "#app/components/ui/checkbox";
@@ -34,8 +35,12 @@ import { formatServiceDateAdded } from "#app/utils/service-date.ts";
 import { type TrackPopularityStats } from "#app/utils/discover.ts";
 import { formatPopularityStats } from "#app/utils/popularity-format.ts";
 import { useIsMobile } from "#app/utils/use-mobile.ts";
+import { useOptionalUser, userIsCuratorOrAdmin } from "#app/utils/user.ts";
 import { AddToPlaylistMenu } from "./add-to-playlist-menu";
+import { NotesBadge } from "./notes-badge";
 import { AddToRoomQueueAction } from "./party-room/add-to-room-queue-action";
+import { ReportIssueDialog } from "./report-issue-dialog";
+import { TrackDetailsDialog } from "./track-details-dialog";
 
 interface TrackListItemData {
   id: string;
@@ -104,6 +109,14 @@ interface TrackListItemProps {
   isSelected?: boolean;
   /** Callback when checkbox is toggled */
   onToggleSelection?: (trackId: string) => void;
+  /** Curator notes on this track. The badge stays hidden when this is 0. */
+  curatorNotesCount?: number;
+  /**
+   * When true, "View track details" opens the curator metadata editor
+   * (`TrackDetailsDialog`) instead of the read-only details view.
+   * Library passes this for curators and admins.
+   */
+  isCurator?: boolean;
 }
 
 /**
@@ -118,6 +131,7 @@ interface TrackListItemProps {
  * - Responsive action menu (sheet on mobile, dropdown on desktop)
  * - Add to playlist functionality with duplicate detection
  * - External link actions
+ * - Report Issue for any signed-in user
  *
  * @param track - Track data including title, artist, duration, etc.
  * @param userTrack - User-specific track data (creation date, etc.)
@@ -161,12 +175,20 @@ export const TrackListItem = memo(function TrackListItem({
   showCheckbox = false,
   isSelected = false,
   onToggleSelection,
+  curatorNotesCount = 0,
+  isCurator = false,
 }: TrackListItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionsSheetOpen, setIsActionsSheetOpen] = useState(false);
   const [isPlaylistSheetOpen, setIsPlaylistSheetOpen] = useState(false);
   const [isDetailsSheetOpen, setIsDetailsSheetOpen] = useState(false);
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [isFlagDialogOpen, setIsFlagDialogOpen] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const isMobile = useIsMobile();
+  const user = useOptionalUser();
+  const canFlagForReview = userIsCuratorOrAdmin(user);
   const { currentTrack, currentIndex, playTrack, playNextTrack, addToUpNext, addToQueue } =
     useAudioPlayer();
 
@@ -188,6 +210,30 @@ export const TrackListItem = memo(function TrackListItem({
   const handleOpenDetailsSheet = useCallback(() => {
     setIsActionsSheetOpen(false);
     setIsDetailsSheetOpen(true);
+  }, []);
+
+  const handleOpenReportDialog = useCallback(() => {
+    setIsActionsSheetOpen(false);
+    // Opening a dialog in the same turn as a menu or sheet close loops Radix
+    // focus restoration. On mobile, also wait for the sheet close animation so
+    // its overlay does not cover the dialog.
+    window.setTimeout(
+      () => {
+        setIsReportDialogOpen(true);
+      },
+      isMobile ? 300 : 0,
+    );
+  }, [isMobile]);
+
+  // Open after the menu or sheet finishes closing. Opening a dialog in the same
+  // turn as a Radix menu close traps focus in a loop.
+  const openFlagDialog = useCallback(() => {
+    window.setTimeout(() => setIsFlagDialogOpen(true), 0);
+  }, []);
+
+  const handleOpenTrackEditor = useCallback(() => {
+    setIsActionsSheetOpen(false);
+    setIsEditorOpen(true);
   }, []);
 
   const hasAudioFiles = isPlayableTrack({ audioFiles: track.audioFiles, isDeleted });
@@ -360,9 +406,10 @@ export const TrackListItem = memo(function TrackListItem({
             {/* Title and Artist */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <div className="font-medium text-sm truncate group-hover:text-foreground transition-colors">
+                <div className="min-w-0 truncate font-medium text-sm group-hover:text-foreground transition-colors">
                   {track.title}
                 </div>
+                <NotesBadge count={curatorNotesCount} onClick={() => setIsNotesOpen(true)} />
                 {isDeleted && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -480,68 +527,92 @@ export const TrackListItem = memo(function TrackListItem({
                 onPointerDown={handleMenuPointerDown}
                 onClick={handleMenuClick}
               >
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                      <Icon name="eye-open" className="h-4 w-4 mr-2" />
-                      View track details
-                    </DropdownMenuItem>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle className="text-left">
-                        <div className="flex items-center gap-3">
-                          <TrackThumbnail
-                            coverImage={track.coverImage}
-                            thumbnailUrl={track.thumbnailUrl}
-                            alt={track.title}
-                            size="md"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium text-sm truncate" title={track.title}>
-                              {track.title}
-                            </div>
-                            <div
-                              className="text-xs text-muted-foreground truncate"
-                              title={track.artist.name}
-                            >
-                              {track.artist.name}
+                {isCurator ? (
+                  <DropdownMenuItem
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleOpenTrackEditor();
+                    }}
+                  >
+                    <Icon name="eye-open" className="h-4 w-4 mr-2" />
+                    View track details
+                  </DropdownMenuItem>
+                ) : (
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        <Icon name="eye-open" className="h-4 w-4 mr-2" />
+                        View track details
+                      </DropdownMenuItem>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle className="text-left">
+                          <div className="flex items-center gap-3">
+                            <TrackThumbnail
+                              coverImage={track.coverImage}
+                              thumbnailUrl={track.thumbnailUrl}
+                              alt={track.title}
+                              size="md"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-sm truncate" title={track.title}>
+                                {track.title}
+                              </div>
+                              <div
+                                className="text-xs text-muted-foreground truncate"
+                                title={track.artist.name}
+                              >
+                                {track.artist.name}
+                              </div>
                             </div>
                           </div>
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="mt-6 space-y-4">
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium">Track Information</div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <div>Artist: {track.artist.name}</div>
+                            <div>Duration: {formatDuration(track.duration)}</div>
+                            <div>Added: {new Date(userTrack.createdAt).toLocaleDateString()}</div>
+                            {track.service?.displayName && (
+                              <div>Source: {track.service.displayName}</div>
+                            )}
+                            {serviceDateAdded && <div>Date added: {serviceDateAdded}</div>}
+                          </div>
                         </div>
-                      </DialogTitle>
-                    </DialogHeader>
-                    <div className="mt-6 space-y-4">
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium">Track Information</div>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <div>Artist: {track.artist.name}</div>
-                          <div>Duration: {formatDuration(track.duration)}</div>
-                          <div>Added: {new Date(userTrack.createdAt).toLocaleDateString()}</div>
-                          {track.service?.displayName && (
-                            <div>Source: {track.service.displayName}</div>
-                          )}
-                          {serviceDateAdded && <div>Date added: {serviceDateAdded}</div>}
-                        </div>
+                        {track.serviceUrl && (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                track.serviceUrl && window.open(track.serviceUrl, "_blank")
+                              }
+                              className="flex-1"
+                            >
+                              <Icon name="link-2" className="h-4 w-4 mr-2" />
+                              Open on YouTube
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      {track.serviceUrl && (
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              track.serviceUrl && window.open(track.serviceUrl, "_blank")
-                            }
-                            className="flex-1"
-                          >
-                            <Icon name="link-2" className="h-4 w-4 mr-2" />
-                            Open on YouTube
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                    </DialogContent>
+                  </Dialog>
+                )}
+                {user ? (
+                  <DropdownMenuItem onSelect={handleOpenReportDialog}>
+                    <Icon name="question-mark-circled" className="h-4 w-4 mr-2" />
+                    Report Issue
+                  </DropdownMenuItem>
+                ) : null}
+                {canFlagForReview && (
+                  <DropdownMenuItem onSelect={openFlagDialog}>
+                    <Icon name="file-text" className="h-4 w-4 mr-2" />
+                    Flag for review
+                  </DropdownMenuItem>
+                )}
                 {track.serviceUrl && (
                   <DropdownMenuItem asChild>
                     <a
@@ -635,6 +706,15 @@ export const TrackListItem = memo(function TrackListItem({
         If the Sheet is under the row div, tapping the dimmed overlay to dismiss fires the
         row's play handler. stopPropagation on SheetContent does not cover the Overlay sibling.
       */}
+      {curatorNotesCount > 0 ? (
+        <TrackDetailsDialog
+          trackId={track.id}
+          open={isNotesOpen}
+          onOpenChange={setIsNotesOpen}
+          initialTab="notes"
+        />
+      ) : null}
+
       {isMobile && (
         <>
           {/* Actions Sheet */}
@@ -667,11 +747,34 @@ export const TrackListItem = memo(function TrackListItem({
                 <Button
                   variant="ghost"
                   className="w-full justify-start h-12 text-base"
-                  onClick={handleOpenDetailsSheet}
+                  onClick={isCurator ? handleOpenTrackEditor : handleOpenDetailsSheet}
                 >
                   <Icon name="eye-open" className="h-5 w-5 mr-3" />
                   View track details
                 </Button>
+                {user ? (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-12 text-base"
+                    onClick={handleOpenReportDialog}
+                  >
+                    <Icon name="question-mark-circled" className="h-5 w-5 mr-3" />
+                    Report Issue
+                  </Button>
+                ) : null}
+                {canFlagForReview && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-12 text-base"
+                    onClick={() => {
+                      setIsActionsSheetOpen(false);
+                      openFlagDialog();
+                    }}
+                  >
+                    <Icon name="file-text" className="h-5 w-5 mr-3" />
+                    Flag for review
+                  </Button>
+                )}
                 {track.serviceUrl && (
                   <Button variant="ghost" className="w-full justify-start h-12 text-base" asChild>
                     <a href={track.serviceUrl} target="_blank" rel="noopener noreferrer">
@@ -839,6 +942,32 @@ export const TrackListItem = memo(function TrackListItem({
           </Sheet>
         </>
       )}
+      {isReportDialogOpen ? (
+        <ReportIssueDialog
+          trackId={track.id}
+          trackTitle={track.title}
+          open={isReportDialogOpen}
+          onOpenChange={setIsReportDialogOpen}
+        />
+      ) : null}
+      {canFlagForReview && (
+        <FlagForReviewDialog
+          entityType="track"
+          entityId={track.id}
+          entityName={track.title}
+          open={isFlagDialogOpen}
+          onOpenChange={setIsFlagDialogOpen}
+        />
+      )}
+      {/*
+        Sibling of the row, same as the mobile sheets: the dialog portals to
+        document.body, but React events still bubble through this tree. Keeping
+        it outside the playable row means opening or using the editor does not
+        start playback.
+      */}
+      {isCurator && isEditorOpen ? (
+        <TrackDetailsDialog trackId={track.id} open={isEditorOpen} onOpenChange={setIsEditorOpen} />
+      ) : null}
     </>
   );
 });
