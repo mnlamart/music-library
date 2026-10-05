@@ -142,6 +142,7 @@ export async function listLibraryUserTracks({
   sort,
   direction = defaultLibrarySortDirection(sort),
   hasAudioOnly = false,
+  genreId = null,
   cursor,
   limit = LIBRARY_TRACKS_PAGE_SIZE,
   now = new Date(),
@@ -150,11 +151,12 @@ export async function listLibraryUserTracks({
   sort: LibrarySortOption;
   direction?: SortDirection;
   hasAudioOnly?: boolean;
+  genreId?: string | null;
   cursor?: string | null;
   limit?: number;
   now?: Date;
 }): Promise<ListLibraryUserTracksResult> {
-  const where = buildLibraryUserTracksWhere({ userId, hasAudioOnly });
+  const where = buildLibraryUserTracksWhere({ userId, hasAudioOnly, genreId });
   const window = librarySortToWindow(sort);
 
   if (!window) {

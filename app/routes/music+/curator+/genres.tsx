@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher } from "react-router";
+import { Link, useLoaderData, useFetcher } from "react-router";
 import { useState } from "react";
 import { Button } from "#app/components/ui/button";
 import { Card, CardContent } from "#app/components/ui/card";
@@ -253,15 +253,12 @@ export default function GenresPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <button
-                        onClick={() => {
-                          // Navigate to library filtered by this genre (future feature)
-                          console.log("View tracks with genre:", genre.name);
-                        }}
+                      <Link
+                        to={`/library?genre=${encodeURIComponent(genre.id)}`}
                         className="font-medium hover:underline text-left"
                       >
                         {genre.name}
-                      </button>
+                      </Link>
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       {genre.trackCount}

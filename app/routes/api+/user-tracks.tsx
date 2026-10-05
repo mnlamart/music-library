@@ -5,7 +5,10 @@ import {
 import { listLibraryUserTracks } from "#app/features/listening-insights/library-tracks.server.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
-import { parseHasAudioOnlyParam } from "#app/utils/library-user-tracks.server.ts";
+import {
+  parseHasAudioOnlyParam,
+  parseLibraryGenreParam,
+} from "#app/utils/library-user-tracks.server.ts";
 import { parseSortDirection } from "#app/utils/sort-direction.ts";
 
 export async function loader({ request, url }: { request: Request; url: URL }) {
@@ -31,12 +34,14 @@ export async function loader({ request, url }: { request: Request; url: URL }) {
     }
 
     const hasAudioOnly = parseHasAudioOnlyParam(url.searchParams);
+    const genreId = parseLibraryGenreParam(url.searchParams);
 
     const { userTracks, pagination } = await listLibraryUserTracks({
       userId,
       sort,
       direction,
       hasAudioOnly,
+      genreId,
       cursor,
       limit,
     });
