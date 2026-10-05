@@ -426,6 +426,79 @@ describe("fingerprint-failures admin API", () => {
     expect(large.failures[0]?.title).toBe("Large Fail");
   });
 
+  test("file size buckets follow the displayed megabyte boundaries", async () => {
+    const cookie = await createAdminCookie();
+    const { youtube } = await ensureServices();
+    const mb = 1024 * 1024;
+
+    await createTrackWithAudio({
+      title: "Just under 1 MB",
+      artistName: "A",
+      serviceId: youtube.id,
+      audio: {
+        contentHash: "under-1mb",
+        audioFingerprint: null,
+        fileSize: mb - 1,
+        serviceId: youtube.id,
+      },
+    });
+    await createTrackWithAudio({
+      title: "Decimal megabyte",
+      artistName: "B",
+      serviceId: youtube.id,
+      audio: {
+        contentHash: "decimal-1mb",
+        audioFingerprint: null,
+        fileSize: 1_000_000,
+        serviceId: youtube.id,
+      },
+    });
+    await createTrackWithAudio({
+      title: "One mebibyte",
+      artistName: "C",
+      serviceId: youtube.id,
+      audio: {
+        contentHash: "one-mebibyte",
+        audioFingerprint: null,
+        fileSize: mb,
+        serviceId: youtube.id,
+      },
+    });
+    await createTrackWithAudio({
+      title: "Decimal ten megabytes",
+      artistName: "D",
+      serviceId: youtube.id,
+      audio: {
+        contentHash: "decimal-10mb",
+        audioFingerprint: null,
+        fileSize: 10_000_000,
+        serviceId: youtube.id,
+      },
+    });
+    await createTrackWithAudio({
+      title: "Ten mebibytes",
+      artistName: "E",
+      serviceId: youtube.id,
+      audio: {
+        contentHash: "ten-mebibytes",
+        audioFingerprint: null,
+        fileSize: 10 * mb,
+        serviceId: youtube.id,
+      },
+    });
+
+    const titles = async (size: string) => {
+      const result = unwrapLoaderData<{ failures: Array<{ title: string }> }>(
+        await loadApi(cookie, `?size=${size}`),
+      );
+      return result.failures.map((row) => row.title).sort();
+    };
+
+    expect(await titles("small")).toEqual(["Decimal megabyte", "Just under 1 MB"]);
+    expect(await titles("medium")).toEqual(["Decimal ten megabytes", "One mebibyte"]);
+    expect(await titles("large")).toEqual(["Ten mebibytes"]);
+  });
+
   test("paginates failure results", async () => {
     const cookie = await createAdminCookie();
     const { youtube } = await ensureServices();
