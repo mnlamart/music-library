@@ -294,6 +294,96 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
     expect(response.data.updated).toBe(1);
   });
 
+  test("writes the selected album id onto every track", async () => {
+    const mockTracks = [
+      {
+        id: "track-1",
+        title: "Track 1",
+        artistId: "artist-1",
+        albumId: null,
+        genre: null,
+        genres: [],
+        year: null,
+        trackNumber: null,
+        albumArtist: null,
+        bpm: null,
+        label: null,
+        isrc: null,
+        releaseDate: null,
+        originalDate: null,
+        originalYear: null,
+        totalTracks: null,
+        totalDiscs: null,
+        lyrics: null,
+      },
+      {
+        id: "track-2",
+        title: "Track 2",
+        artistId: "artist-1",
+        albumId: "album-old",
+        genre: null,
+        genres: [],
+        year: null,
+        trackNumber: null,
+        albumArtist: null,
+        bpm: null,
+        label: null,
+        isrc: null,
+        releaseDate: null,
+        originalDate: null,
+        originalYear: null,
+        totalTracks: null,
+        totalDiscs: null,
+        lyrics: null,
+      },
+    ];
+
+    vi.mocked(prisma.track.findMany).mockResolvedValue(mockTracks as never);
+    vi.mocked(prisma.album.findUnique).mockResolvedValue({ id: "album-2" } as never);
+
+    const mockTrackUpdate = vi
+      .fn()
+      .mockImplementation(async ({ where }: { where: { id: string } }) => ({
+        id: where.id,
+        title: where.id,
+        artistId: "artist-1",
+      }));
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
+      return callback({
+        trackEdit: {
+          create: vi.fn().mockResolvedValue({}),
+        },
+        track: {
+          update: mockTrackUpdate,
+        },
+      });
+    });
+
+    const response: any = await action(
+      makeRequest({
+        trackIds: ["track-1", "track-2"],
+        changes: { albumId: "album-2" },
+        comment: "Assign album",
+      }) as never,
+    );
+
+    expect(response.data.success).toBe(true);
+    expect(response.data.updatedCount).toBe(2);
+    expect(mockTrackUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "track-1" },
+        data: { albumId: "album-2" },
+      }),
+    );
+    expect(mockTrackUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "track-2" },
+        data: { albumId: "album-2" },
+      }),
+    );
+  });
+
   test("successfully updates multiple tracks in a transaction", async () => {
     const mockTracks = [
       {

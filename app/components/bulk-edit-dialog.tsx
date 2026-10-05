@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
+import { AlbumAutocomplete } from "#app/components/album-autocomplete";
 import { ArtistAutocomplete } from "#app/components/artist-autocomplete";
 import { GenreSelector, type Genre } from "#app/components/genre-selector";
 import { Button } from "#app/components/ui/button";
@@ -26,6 +27,7 @@ interface BulkEditDialogProps {
 interface BulkEditFormData {
   artistId: string | null;
   artistName: string;
+  albumId: string | null;
   albumName: string;
   genres: Genre[];
   year: string;
@@ -39,6 +41,7 @@ interface BulkEditFormData {
 const emptyForm: BulkEditFormData = {
   artistId: null,
   artistName: "",
+  albumId: null,
   albumName: "",
   genres: [],
   year: "",
@@ -66,6 +69,10 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
 
   const handleArtistChange = (id: string | null, name: string) => {
     setFormData((prev) => ({ ...prev, artistId: id, artistName: name }));
+  };
+
+  const handleAlbumChange = (id: string | null, name: string) => {
+    setFormData((prev) => ({ ...prev, albumId: id, albumName: name }));
   };
 
   const handleCreateArtist = async (name: string) => {
@@ -122,6 +129,7 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
     // Build changes object - only include non-empty fields
     const changes: Record<string, any> = {};
     if (formData.artistId) changes.artistId = formData.artistId;
+    if (formData.albumId) changes.albumId = formData.albumId;
     if (formData.genres.length > 0) {
       changes.genreIds = formData.genres.map((genre) => genre.id);
     }
@@ -230,15 +238,17 @@ export function BulkEditDialog({ trackIds, open, onClose, onSuccess }: BulkEditD
             />
 
             <div>
-              <Label htmlFor="albumName">Album</Label>
-              <Input
-                id="albumName"
-                value={formData.albumName}
-                onChange={(e) => setFormData((prev) => ({ ...prev, albumName: e.target.value }))}
+              <AlbumAutocomplete
+                value={formData.albumId}
+                albumName={formData.albumId ? formData.albumName : null}
+                onChange={handleAlbumChange}
+                label="Album"
                 placeholder="Leave blank to keep existing"
-                disabled
+                disabled={isSubmitting}
               />
-              <p className="text-xs text-muted-foreground mt-1">Album editing coming soon</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Choose an existing album. Leave blank to keep each track's current album.
+              </p>
             </div>
 
             <GenreSelector

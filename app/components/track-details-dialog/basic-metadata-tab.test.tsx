@@ -9,14 +9,49 @@ import { BasicMetadataTab } from "./basic-metadata-tab";
 
 vi.mock("react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router")>();
+  const React = await import("react");
   return {
     ...actual,
-    useFetcher: () => ({
-      state: "idle" as const,
-      data: undefined,
-      load: vi.fn(),
-      submit: vi.fn(),
-    }),
+    useFetcher: () => {
+      const [data, setData] = React.useState<
+        | {
+            albums?: Array<{
+              id: string;
+              name: string;
+              artistName: string;
+              year: number | null;
+              trackCount: number;
+            }>;
+            genres?: Array<{ id: string; name: string; trackCount: number }>;
+          }
+        | undefined
+      >(undefined);
+      return {
+        state: "idle" as const,
+        data,
+        load: (url: string) => {
+          if (url.startsWith("/api/albums/search")) {
+            const query = new URL(url, "http://localhost").searchParams.get("q") ?? "";
+            setData({
+              albums: query
+                ? [
+                    {
+                      id: "album-blue",
+                      name: "Kind of Blue",
+                      artistName: "Miles Davis",
+                      year: 1959,
+                      trackCount: 5,
+                    },
+                  ]
+                : [],
+            });
+            return;
+          }
+          setData({ genres: [] });
+        },
+        submit: vi.fn(),
+      };
+    },
   };
 });
 
@@ -56,7 +91,10 @@ test("shows the track artist name in the required Artist field", () => {
 
   expect(screen.getByRole("textbox", { name: /artist/i })).toHaveValue("Meryl");
   expect(screen.getByRole("textbox", { name: /^title/i })).toHaveValue("Coca-Cola Mentos");
-  expect(screen.getByRole("textbox", { name: /album/i })).toHaveValue("Ozoror");
+  const album = screen.getByRole("textbox", { name: /^album$/i });
+  expect(album).toHaveValue("Ozoror");
+  expect(album).toBeEnabled();
+  expect(screen.queryByText(/coming soon/i)).not.toBeInTheDocument();
   expect(screen.getByRole("spinbutton", { name: /year/i })).toHaveValue(2023);
 });
 
@@ -71,6 +109,7 @@ test("a title-only save keeps the existing artist id", async () => {
     expect.objectContaining({
       title: "Coca-Cola Mentos!",
       artistId: "artist-meryl",
+      albumId: "album-ozoror",
     }),
   );
 });
@@ -85,4 +124,62 @@ test("saving after the user clears the artist requires an artist", async () => {
 
   expect(screen.getByText("Artist is required")).toBeInTheDocument();
   expect(onSave).not.toHaveBeenCalled();
+});
+
+test("selecting an album saves that album id", async () => {
+  const user = userEvent.setup();
+  const onSave = renderTab();
+
+  const album = screen.getByRole("textbox", { name: /^album$/i });
+  await user.clear(album);
+  await user.type(album, "Kind");
+  await user.click(await screen.findByRole("button", { name: /Kind of Blue/ }));
+  await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: "Coca-Cola Mentos",
+      artistId: "artist-meryl",
+      albumId: "album-blue",
+    }),
+  );
+});
+
+test("clearing the album saves a null album id", async () => {
+  const user = userEvent.setup();
+  const onSave = renderTab();
+
+  await user.clear(screen.getByRole("textbox", { name: /^album$/i }));
+  await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: "Coca-Cola Mentos",
+      artistId: "artist-meryl",
+      albumId: null,
+    }),
+  );
+});
+
+test("restores an album draft and saves that album id", async () => {
+  const user = userEvent.setup();
+  const onSave = vi.fn();
+  render(
+    <BasicMetadataTab
+      track={track}
+      onSave={onSave}
+      initialDraft={{ albumId: "album-blue", albumName: "Kind of Blue" }}
+    />,
+  );
+
+  expect(screen.getByRole("textbox", { name: /^album$/i })).toHaveValue("Kind of Blue");
+  await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({
+      albumId: "album-blue",
+      title: "Coca-Cola Mentos",
+      artistId: "artist-meryl",
+    }),
+  );
 });
