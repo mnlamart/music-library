@@ -2,6 +2,7 @@ import { data } from "react-router";
 import { z } from "zod";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { type Route } from "./+types/merge.ts";
 
 const MergeGenresSchema = z.object({
@@ -9,8 +10,8 @@ const MergeGenresSchema = z.object({
   targetId: z.string().min(1, "Target genre is required"),
 });
 
-export async function clientAction() {
-  throw new Error("This route should only be called on the server");
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 /**

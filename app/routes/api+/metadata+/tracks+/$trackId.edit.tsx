@@ -3,6 +3,12 @@ import { z } from "zod";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireCuratorRole } from "#app/utils/permissions.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import {
+  primaryGenreName,
+  resolveOrderedGenres,
+  snapshotGenreIds,
+  type GenreRef,
+} from "#app/utils/track-genres.server.ts";
 import { type Route } from "./+types/$trackId.edit.ts";
 
 // Validation schema for track edit
@@ -117,16 +123,13 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
   }
 
-  // Verify all genres exist if provided
-  if (editData.genreIds && editData.genreIds.length > 0) {
-    const genres = await prisma.genre.findMany({
-      where: { id: { in: editData.genreIds } },
-      select: { id: true },
-    });
-
-    if (genres.length !== editData.genreIds.length) {
+  let nextGenres: GenreRef[] | undefined;
+  if (editData.genreIds !== undefined) {
+    const resolved = await resolveOrderedGenres(editData.genreIds);
+    if (!resolved.ok) {
       throw data({ error: "One or more genres not found" }, { status: 404 });
     }
+    nextGenres = resolved.genres;
   }
 
   // Parse dates
@@ -146,6 +149,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         artistId: track.artistId,
         albumId: track.albumId,
         genre: track.genre,
+        genreIds: snapshotGenreIds(track.genres, track.genre),
         year: track.year,
         trackNumber: track.trackNumber,
         albumArtist: track.albumArtist,
@@ -177,7 +181,12 @@ export async function action({ request, params }: Route.ActionArgs) {
         title: editData.title,
         artistId: editData.artistId,
         albumId: editData.albumId === undefined ? track.albumId : editData.albumId,
-        genre: editData.genre === undefined ? track.genre : editData.genre,
+        genre:
+          nextGenres !== undefined
+            ? primaryGenreName(nextGenres)
+            : editData.genre === undefined
+              ? track.genre
+              : editData.genre,
         year: editData.year === undefined ? track.year : editData.year,
         trackNumber: editData.trackNumber === undefined ? track.trackNumber : editData.trackNumber,
         albumArtist: editData.albumArtist === undefined ? track.albumArtist : editData.albumArtist,
@@ -191,10 +200,9 @@ export async function action({ request, params }: Route.ActionArgs) {
         totalTracks: editData.totalTracks === undefined ? track.totalTracks : editData.totalTracks,
         totalDiscs: editData.totalDiscs === undefined ? track.totalDiscs : editData.totalDiscs,
         lyrics: editData.lyrics === undefined ? track.lyrics : editData.lyrics,
-        // Update genres if provided
-        ...(editData.genreIds !== undefined && {
+        ...(nextGenres !== undefined && {
           genres: {
-            set: editData.genreIds.map((id) => ({ id })),
+            set: nextGenres.map((genre) => ({ id: genre.id })),
           },
         }),
       },

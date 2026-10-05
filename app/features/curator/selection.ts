@@ -10,7 +10,7 @@
  * first client render stay in sync.
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   broadcastCuratorMessage,
   subscribeToCuratorSync,
@@ -19,6 +19,22 @@ import {
 
 const SELECTION_MODE_KEY = "curator:selection-mode";
 const SELECTED_TRACKS_KEY = "curator:selected-tracks";
+
+// BroadcastChannel does not deliver a message to the channel that posted it.
+// The selection switch and the library list are separate hook instances in the
+// same tab, so they subscribe here and are notified directly on write.
+const selectionModeListeners = new Set<(enabled: boolean) => void>();
+const selectedTrackListeners = new Set<(trackIds: string[]) => void>();
+
+function notifyListeners<T>(listeners: Set<(value: T) => void>, value: T) {
+  for (const listener of listeners) {
+    try {
+      listener(value);
+    } catch (error) {
+      console.error("Error in selection listener:", error);
+    }
+  }
+}
 
 function readStorageItem(key: string): string | null {
   try {
@@ -41,6 +57,7 @@ export function setSelectionMode(enabled: boolean): void {
   if (typeof globalThis.localStorage === "undefined") return;
   try {
     globalThis.localStorage.setItem(SELECTION_MODE_KEY, String(enabled));
+    notifyListeners(selectionModeListeners, enabled);
     // Broadcast to other tabs
     broadcastCuratorMessage({
       type: "SELECTION_MODE_CHANGED",
@@ -73,6 +90,7 @@ export function saveSelectedTrackIds(trackIds: Set<string>): void {
   try {
     const array = Array.from(trackIds);
     globalThis.localStorage.setItem(SELECTED_TRACKS_KEY, JSON.stringify(array));
+    notifyListeners(selectedTrackListeners, array);
     // Broadcast to other tabs
     broadcastCuratorMessage({
       type: "SELECTION_UPDATED",
@@ -90,6 +108,7 @@ export function clearSelectedTrackIds(): void {
   if (typeof globalThis.localStorage === "undefined") return;
   try {
     globalThis.localStorage.removeItem(SELECTED_TRACKS_KEY);
+    notifyListeners(selectedTrackListeners, []);
     // Broadcast to other tabs
     broadcastCuratorMessage({
       type: "SELECTION_UPDATED",
@@ -109,6 +128,11 @@ export function useSelectionMode() {
   useEffect(() => {
     setSelectionModeState(getSelectionMode());
 
+    const onSelectionMode = (enabled: boolean) => {
+      setSelectionModeState(enabled);
+    };
+    selectionModeListeners.add(onSelectionMode);
+
     // Subscribe to selection mode changes from other tabs
     const unsubscribe = subscribeToCuratorSync((message: CuratorSyncMessage) => {
       if (message.type === "SELECTION_MODE_CHANGED") {
@@ -116,7 +140,10 @@ export function useSelectionMode() {
       }
     });
 
-    return unsubscribe;
+    return () => {
+      selectionModeListeners.delete(onSelectionMode);
+      unsubscribe();
+    };
   }, []);
 
   const toggleSelectionMode = useCallback(() => {
@@ -141,9 +168,22 @@ export function useSelectionMode() {
  */
 export function useSelection() {
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(() => new Set());
+  const selectedTrackIdsRef = useRef(selectedTrackIds);
+  selectedTrackIdsRef.current = selectedTrackIds;
+
+  const replaceSelection = useCallback((next: Set<string>) => {
+    selectedTrackIdsRef.current = next;
+    setSelectedTrackIds(next);
+    saveSelectedTrackIds(next);
+  }, []);
 
   useEffect(() => {
     setSelectedTrackIds(getSelectedTrackIds());
+
+    const onSelectedTracks = (trackIds: string[]) => {
+      setSelectedTrackIds(new Set(trackIds));
+    };
+    selectedTrackListeners.add(onSelectedTracks);
 
     // Subscribe to selection changes from other tabs
     const unsubscribe = subscribeToCuratorSync((message: CuratorSyncMessage) => {
@@ -152,45 +192,49 @@ export function useSelection() {
       }
     });
 
-    return unsubscribe;
+    return () => {
+      selectedTrackListeners.delete(onSelectedTracks);
+      unsubscribe();
+    };
   }, []);
 
-  const selectAll = useCallback((trackIds: string[]) => {
-    const newSelection = new Set(trackIds);
-    setSelectedTrackIds(newSelection);
-    saveSelectedTrackIds(newSelection);
-  }, []);
+  const selectAll = useCallback(
+    (trackIds: string[]) => {
+      replaceSelection(new Set(trackIds));
+    },
+    [replaceSelection],
+  );
 
   const deselectAll = useCallback(() => {
+    selectedTrackIdsRef.current = new Set();
     setSelectedTrackIds(new Set());
     clearSelectedTrackIds();
   }, []);
 
-  const toggleSelection = useCallback((trackId: string) => {
-    setSelectedTrackIds((prev) => {
-      const next = new Set(prev);
+  const toggleSelection = useCallback(
+    (trackId: string) => {
+      const next = new Set(selectedTrackIdsRef.current);
       if (next.has(trackId)) {
         next.delete(trackId);
       } else {
         next.add(trackId);
       }
-      saveSelectedTrackIds(next);
-      return next;
-    });
-  }, []);
+      replaceSelection(next);
+    },
+    [replaceSelection],
+  );
 
-  const selectRange = useCallback((startIndex: number, endIndex: number, allTrackIds: string[]) => {
-    const min = Math.min(startIndex, endIndex);
-    const max = Math.max(startIndex, endIndex);
-    const rangeIds = allTrackIds.slice(min, max + 1);
-
-    setSelectedTrackIds((prev) => {
-      const next = new Set(prev);
+  const selectRange = useCallback(
+    (startIndex: number, endIndex: number, allTrackIds: string[]) => {
+      const min = Math.min(startIndex, endIndex);
+      const max = Math.max(startIndex, endIndex);
+      const rangeIds = allTrackIds.slice(min, max + 1);
+      const next = new Set(selectedTrackIdsRef.current);
       rangeIds.forEach((id) => next.add(id));
-      saveSelectedTrackIds(next);
-      return next;
-    });
-  }, []);
+      replaceSelection(next);
+    },
+    [replaceSelection],
+  );
 
   const isSelected = useCallback(
     (trackId: string) => selectedTrackIds.has(trackId),

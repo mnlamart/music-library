@@ -3,6 +3,12 @@ import { z } from "zod";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireCuratorRole } from "#app/utils/permissions.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import {
+  primaryGenreName,
+  resolveOrderedGenres,
+  snapshotGenreIds,
+  type GenreRef,
+} from "#app/utils/track-genres.server.ts";
 import { type Route } from "./+types/bulk-edit.ts";
 
 // Validation schema for changes object (all fields optional, but at least one required)
@@ -12,6 +18,7 @@ const ChangesSchema = z
     artistId: z.string().min(1, "Artist ID cannot be empty").optional(),
     albumId: z.string().nullable().optional(),
     genre: z.string().nullable().optional(),
+    genreIds: z.array(z.string()).optional(),
     year: z.number().int().nullable().optional(),
     trackNumber: z.number().int().nullable().optional(),
     albumArtist: z.string().nullable().optional(),
@@ -77,6 +84,12 @@ export async function action({ request }: Route.ActionArgs) {
       artistId: true,
       albumId: true,
       genre: true,
+      genres: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       year: true,
       trackNumber: true,
       albumArtist: true,
@@ -129,6 +142,15 @@ export async function action({ request }: Route.ActionArgs) {
     }
   }
 
+  let resolvedGenres: GenreRef[] | undefined;
+  if (changes.genreIds !== undefined) {
+    const resolved = await resolveOrderedGenres(changes.genreIds);
+    if (!resolved.ok) {
+      throw data({ error: "One or more genres not found" }, { status: 404 });
+    }
+    resolvedGenres = resolved.genres;
+  }
+
   // Parse dates if provided
   const releaseDate =
     changes.releaseDate !== undefined
@@ -159,6 +181,7 @@ export async function action({ request }: Route.ActionArgs) {
           artistId: track.artistId,
           albumId: track.albumId,
           genre: track.genre,
+          genreIds: snapshotGenreIds(track.genres, track.genre),
           year: track.year,
           trackNumber: track.trackNumber,
           albumArtist: track.albumArtist,
@@ -180,7 +203,14 @@ export async function action({ request }: Route.ActionArgs) {
       if (changes.title !== undefined) trackUpdateData.title = changes.title;
       if (changes.artistId !== undefined) trackUpdateData.artistId = changes.artistId;
       if (changes.albumId !== undefined) trackUpdateData.albumId = changes.albumId;
-      if (changes.genre !== undefined) trackUpdateData.genre = changes.genre;
+      if (resolvedGenres !== undefined) {
+        trackUpdateData.genre = primaryGenreName(resolvedGenres);
+        trackUpdateData.genres = {
+          set: resolvedGenres.map((genre) => ({ id: genre.id })),
+        };
+      } else if (changes.genre !== undefined) {
+        trackUpdateData.genre = changes.genre;
+      }
       if (changes.year !== undefined) trackUpdateData.year = changes.year;
       if (changes.trackNumber !== undefined) trackUpdateData.trackNumber = changes.trackNumber;
       if (changes.albumArtist !== undefined) trackUpdateData.albumArtist = changes.albumArtist;

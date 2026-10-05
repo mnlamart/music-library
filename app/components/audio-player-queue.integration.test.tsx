@@ -14,6 +14,14 @@ import { type FullTrack } from "#app/types/frontend/shared";
 import { AudioPlayerProvider, useAudioPlayer } from "./audio-player-provider";
 import { TrackListItem } from "./track-list-item";
 
+vi.mock("#app/utils/user.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#app/utils/user.ts")>();
+  return {
+    ...actual,
+    useOptionalUser: () => undefined,
+  };
+});
+
 vi.mock("#app/components/track-details-dialog", () => ({
   TrackDetailsDialog: vi.fn(() => null),
 }));
@@ -25,6 +33,14 @@ vi.mock("#app/components/pwa/install-app-banner", () => ({
 vi.mock("#app/components/ui/use-toast.ts", () => ({
   toast: vi.fn(),
 }));
+
+vi.mock("#app/utils/user.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#app/utils/user.ts")>();
+  return {
+    ...actual,
+    useOptionalUser: () => ({ id: "user-1", roles: [] }),
+  };
+});
 
 vi.mock("#app/features/offline-storage/resolve-playback-url.client.ts", () => ({
   resolveTrackPlaybackSource: vi.fn().mockResolvedValue("https://cdn.example/track.mp3"),

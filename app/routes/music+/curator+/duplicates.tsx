@@ -1,43 +1,87 @@
-import { useLoaderData } from "react-router";
 import { useState } from "react";
-import { data } from "react-router";
+import { data, useLoaderData } from "react-router";
+import { AlbumMergeDialog, type AlbumOption } from "#app/components/album-merge-dialog";
+import { ArtistMergeDialog, type ArtistOption } from "#app/components/artist-merge-dialog";
+import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
 import { Button } from "#app/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card";
 import { Icon } from "#app/components/ui/icon";
-import { ArtistMergeDialog, type ArtistOption } from "#app/components/artist-merge-dialog";
-import { AlbumMergeDialog, type AlbumOption } from "#app/components/album-merge-dialog";
+import { requireCuratorRole } from "#app/utils/permissions.server.ts";
 import { type Route } from "./+types/duplicates";
 
-export async function loader({ request }: Route.LoaderArgs) {
-  // Fetch duplicate data from APIs
+type DuplicatePayload = {
+  exact: Array<Record<string, unknown>>;
+  fuzzy: Array<Record<string, unknown>>;
+};
+
+// request.url follows X-Forwarded-Host. Keep this lookup on a configured origin
+// and send only the session cookie, not the rest of the incoming headers.
+function trustedDuplicatesUrl(pathname: string) {
+  const configured = process.env.SITE_URL?.trim();
+  const origin = configured
+    ? configured.replace(/\/$/, "")
+    : `http://127.0.0.1:${process.env.PORT || "3000"}`;
+  return new URL(pathname, `${origin}/`).toString();
+}
+
+function sessionCookie(request: Request) {
+  const cookie = request.headers.get("cookie");
+  if (!cookie) return null;
+  return (
+    cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.toLowerCase().startsWith("en_session=")) ?? null
+  );
+}
+
+function isDuplicatePayload(value: unknown): value is DuplicatePayload {
+  if (!value || typeof value !== "object") return false;
+  const record = value as { exact?: unknown; fuzzy?: unknown };
+  return Array.isArray(record.exact) && Array.isArray(record.fuzzy);
+}
+
+async function readDuplicatePayload(response: Response): Promise<DuplicatePayload> {
+  if (!response.ok) {
+    throw new Error(`Duplicate lookup failed with status ${response.status}`);
+  }
+  let body: unknown;
   try {
-    const [artistsResponse, albumsResponse] = await Promise.all([
-      fetch(new URL("/api/curator/duplicates/artists", request.url).toString(), {
-        headers: request.headers,
-      }),
-      fetch(new URL("/api/curator/duplicates/albums", request.url).toString(), {
-        headers: request.headers,
-      }),
+    body = await response.json();
+  } catch (error) {
+    throw new Error("Duplicate lookup returned a non-JSON body", { cause: error });
+  }
+  if (!isDuplicatePayload(body)) {
+    throw new Error("Duplicate lookup returned an unexpected payload");
+  }
+  return body;
+}
+
+async function fetchDuplicateGroups(pathname: string, cookie: string | null) {
+  const response = await fetch(trustedDuplicatesUrl(pathname), {
+    headers: cookie ? { cookie } : {},
+  });
+  return readDuplicatePayload(response);
+}
+
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireCuratorRole(request);
+
+  try {
+    const cookie = sessionCookie(request);
+    const [artistsData, albumsData] = await Promise.all([
+      fetchDuplicateGroups("/api/curator/duplicates/artists", cookie),
+      fetchDuplicateGroups("/api/curator/duplicates/albums", cookie),
     ]);
 
-    const artistsData = (await artistsResponse.json()) as {
-      exact: any[];
-      fuzzy: any[];
-    };
-    const albumsData = (await albumsResponse.json()) as {
-      exact: any[];
-      fuzzy: any[];
-    };
-
-    // Combine exact and fuzzy groups for display
     const artistGroups = [
-      ...artistsData.exact.map((g: any) => ({ ...g, matchType: "exact" as const })),
-      ...artistsData.fuzzy.map((g: any) => ({ ...g, matchType: "fuzzy" as const })),
+      ...artistsData.exact.map((group) => ({ ...group, matchType: "exact" as const })),
+      ...artistsData.fuzzy.map((group) => ({ ...group, matchType: "fuzzy" as const })),
     ];
 
     const albumGroups = [
-      ...albumsData.exact.map((g: any) => ({ ...g, matchType: "exact" as const })),
-      ...albumsData.fuzzy.map((g: any) => ({ ...g, matchType: "fuzzy" as const })),
+      ...albumsData.exact.map((group) => ({ ...group, matchType: "exact" as const })),
+      ...albumsData.fuzzy.map((group) => ({ ...group, matchType: "fuzzy" as const })),
     ];
 
     return data({
@@ -46,10 +90,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     });
   } catch (error) {
     console.error("Error loading duplicates:", error);
-    return data({
-      artistGroups: [],
-      albumGroups: [],
-    });
+    throw data({ error: "Failed to load duplicates" }, { status: 500 });
   }
 }
 
@@ -417,5 +458,38 @@ export default function DuplicatesPage() {
         />
       )}
     </div>
+  );
+}
+
+function CuratorDuplicatesForbidden() {
+  return (
+    <div className="container mx-auto max-w-lg px-4 py-16 text-center">
+      <h1 className="text-2xl font-semibold">Curators only</h1>
+      <p className="mt-2 text-muted-foreground">
+        You need the curator or admin role to view duplicate detection.
+      </p>
+    </div>
+  );
+}
+
+function DuplicatesLookupError() {
+  return (
+    <div className="container mx-auto max-w-lg px-4 py-16 text-center">
+      <h1 className="text-2xl font-semibold">Could not load duplicates</h1>
+      <p className="mt-2 text-muted-foreground">
+        Duplicate detection failed. Try again in a moment.
+      </p>
+    </div>
+  );
+}
+
+export function ErrorBoundary() {
+  return (
+    <GeneralErrorBoundary
+      statusHandlers={{
+        403: CuratorDuplicatesForbidden,
+        500: DuplicatesLookupError,
+      }}
+    />
   );
 }

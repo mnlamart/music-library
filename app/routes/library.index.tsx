@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { data, useSearchParams } from "react-router";
+import { data, Link, useSearchParams } from "react-router";
 import { BulkEditDialog } from "#app/components/bulk-edit-dialog";
 import { OfflineLibraryView } from "#app/components/offline/offline-library-view.tsx";
 import { SelectionModeToggle } from "#app/components/selection-mode-toggle";
@@ -31,7 +31,10 @@ import { type LibraryOfflineLoaderData } from "#app/features/offline-app/offline
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { LIBRARY_TRACKS_PAGE_SIZE } from "#app/utils/library-tracks-pagination.ts";
-import { parseHasAudioOnlyParam } from "#app/utils/library-user-tracks.server.ts";
+import {
+  parseHasAudioOnlyParam,
+  parseLibraryGenreParam,
+} from "#app/utils/library-user-tracks.server.ts";
 import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
 import { userIsCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { type Route } from "./+types/library.index.ts";
@@ -64,6 +67,7 @@ type UserTrack = {
       format: string | null;
       objectKey: string;
     }>;
+    curatorNotesCount?: number;
   };
 };
 
@@ -82,7 +86,15 @@ type LibraryTrackListItemProps = {
   showCheckbox?: boolean;
   isSelected?: boolean;
   onToggleSelection?: (trackId: string) => void;
+  isCurator?: boolean;
 };
+
+function libraryHrefWithoutGenre(searchParams: URLSearchParams) {
+  const nextParams = new URLSearchParams(searchParams);
+  nextParams.delete("genre");
+  const query = nextParams.toString();
+  return query ? `/library?${query}` : "/library";
+}
 
 function LibraryTrackListItem({
   track,
@@ -94,6 +106,7 @@ function LibraryTrackListItem({
   showCheckbox = false,
   isSelected = false,
   onToggleSelection,
+  isCurator = false,
 }: LibraryTrackListItemProps) {
   return (
     <TrackListItem
@@ -106,6 +119,8 @@ function LibraryTrackListItem({
       showCheckbox={showCheckbox}
       isSelected={isSelected}
       onToggleSelection={onToggleSelection}
+      curatorNotesCount={isCurator ? (track.curatorNotesCount ?? 0) : 0}
+      isCurator={isCurator}
     />
   );
 }
@@ -119,6 +134,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     Math.max(1, parseInt(url.searchParams.get("limit") || String(LIBRARY_TRACKS_PAGE_SIZE))),
   );
   const hasAudioOnly = parseHasAudioOnlyParam(url.searchParams);
+  const genreId = parseLibraryGenreParam(url.searchParams);
   const sort = parseLibrarySort(url.searchParams.get("sort"));
   const direction = parseSortDirection(
     url.searchParams.get("dir"),
@@ -130,6 +146,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     sort,
     direction,
     hasAudioOnly,
+    genreId,
     cursor,
     limit,
   });
@@ -149,6 +166,12 @@ export async function loader({ request, url }: Route.LoaderArgs) {
   });
 
   const isCurator = await userIsCuratorOrAdmin(userId);
+  const genre = genreId
+    ? await prisma.genre.findUnique({
+        where: { id: genreId },
+        select: { id: true, name: true },
+      })
+    : null;
 
   return data({
     userTracks,
@@ -158,6 +181,8 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     direction,
     playlists,
     isCurator,
+    genreId,
+    genre,
   });
 }
 
@@ -176,6 +201,8 @@ export default function LibraryIndexRoute({
     direction: "desc" as SortDirection,
     playlists: [],
     isCurator: false,
+    genreId: null,
+    genre: null,
   };
   const {
     userTracks,
@@ -185,6 +212,8 @@ export default function LibraryIndexRoute({
     sort: loaderSort = "dateAdded",
     direction: loaderDirection = "desc",
     isCurator = false,
+    genreId = null,
+    genre = null,
   } = safeLoaderData;
   const offline = "offline" in safeLoaderData && safeLoaderData.offline;
   const offlineTracks =
@@ -193,6 +222,7 @@ export default function LibraryIndexRoute({
       : [];
   const pageSize = pagination?.limit ?? LIBRARY_TRACKS_PAGE_SIZE;
   const [searchParams, setSearchParams] = useSearchParams();
+  const clearGenreFilterHref = libraryHrefWithoutGenre(searchParams);
   const sort = parseLibrarySort(searchParams.get("sort") ?? loaderSort);
   const direction = parseSortDirection(
     searchParams.get("dir") ?? loaderDirection,
@@ -268,7 +298,7 @@ export default function LibraryIndexRoute({
     isPending,
     status,
   } = useInfiniteQuery({
-    queryKey: ["user-tracks", { pageSize, hasAudioOnly, sort, direction }],
+    queryKey: ["user-tracks", { pageSize, hasAudioOnly, sort, direction, genreId }],
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       params.set("limit", String(pageSize));
@@ -277,6 +307,9 @@ export default function LibraryIndexRoute({
       }
       if (hasAudioOnly) {
         params.set("hasAudio", "1");
+      }
+      if (genreId) {
+        params.set("genre", genreId);
       }
       if (sort !== "dateAdded") {
         params.set("sort", sort);
@@ -406,7 +439,18 @@ export default function LibraryIndexRoute({
   return (
     <div className="py-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <h1 className="text-2xl font-bold">Music Library</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Music Library</h1>
+          {genre && allItems.length > 0 ? (
+            <p className="text-muted-foreground mt-1 text-sm">
+              Showing tracks tagged with{" "}
+              <span className="font-medium text-foreground">{genre.name}</span>.{" "}
+              <Link to={clearGenreFilterHref} className="underline">
+                Clear filter
+              </Link>
+            </p>
+          ) : null}
+        </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2">
             <Select value={sort} onValueChange={handleSortChange}>
@@ -461,10 +505,34 @@ export default function LibraryIndexRoute({
       {allItems.length === 0 && !isFetching ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Icon name="file-text" className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No tracks yet</h3>
-          <p className="text-muted-foreground mb-4">
-            Start building your music library by uploading tracks.
-          </p>
+          {genre ? (
+            <>
+              <h3 className="text-lg font-semibold mb-2">No tracks tagged with {genre.name}</h3>
+              <p className="text-muted-foreground mb-4">
+                None of the tracks in your library use this genre.
+              </p>
+              <Link to={clearGenreFilterHref} className="underline">
+                Clear filter
+              </Link>
+            </>
+          ) : genreId ? (
+            <>
+              <h3 className="text-lg font-semibold mb-2">No tracks match this genre</h3>
+              <p className="text-muted-foreground mb-4">
+                Nothing in your library is tagged with this genre.
+              </p>
+              <Link to={clearGenreFilterHref} className="underline">
+                Clear filter
+              </Link>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-semibold mb-2">No tracks yet</h3>
+              <p className="text-muted-foreground mb-4">
+                Start building your music library by uploading tracks.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="h-[600px] w-full">
@@ -561,6 +629,7 @@ export default function LibraryIndexRoute({
                       showCheckbox={isCurator && selectionMode}
                       isSelected={selectedTrackIds.has(item.track.id)}
                       onToggleSelection={handleToggleSelection}
+                      isCurator={isCurator}
                     />
                   </div>
                 );

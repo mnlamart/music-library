@@ -12,7 +12,13 @@ interface Artist {
 }
 
 interface ArtistAutocompleteProps {
+  /** Selected artist id. Null when no artist is selected. */
   value: string | null;
+  /**
+   * Name for `value` when the parent already knows it.
+   * Avoids a lookup and keeps the field filled on first paint.
+   */
+  artistName?: string | null;
   onChange: (artistId: string | null, artistName: string) => void;
   onCreateNew?: (name: string) => Promise<void>;
   error?: string;
@@ -23,6 +29,8 @@ interface ArtistAutocompleteProps {
 }
 
 export function ArtistAutocomplete({
+  value,
+  artistName = null,
   onChange,
   onCreateNew,
   error,
@@ -31,12 +39,23 @@ export function ArtistAutocomplete({
   required = false,
   disabled = false,
 }: ArtistAutocompleteProps) {
-  const [inputValue, setInputValue] = useState("");
+  const artistId = value || null;
+  const knownName = artistName || null;
+  const [inputValue, setInputValue] = useState(artistId && knownName ? knownName : "");
+  const [isEditing, setIsEditing] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const searchFetcher = useFetcher<{ artists: Artist[] }>();
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const namesById = useRef(new Map<string, string>());
+  const editingRef = useRef(false);
+  const seenValueRef = useRef(artistId);
+  const seenNameRef = useRef(knownName);
+
+  if (artistId && knownName) {
+    namesById.current.set(artistId, knownName);
+  }
 
   const artists = searchFetcher.data?.artists ?? [];
   const isSearching = searchFetcher.state !== "idle";
@@ -57,6 +76,66 @@ export function ArtistAutocomplete({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Show the name for the current id, and follow the parent when that id changes.
+  // An empty input before the user types must not clear the selected artist.
+  useEffect(() => {
+    const valueChanged = seenValueRef.current !== artistId;
+    const nameChanged = seenNameRef.current !== knownName;
+    seenValueRef.current = artistId;
+    seenNameRef.current = knownName;
+
+    if (editingRef.current && !valueChanged && !nameChanged) {
+      return;
+    }
+
+    if (valueChanged || nameChanged) {
+      editingRef.current = false;
+      setIsEditing(false);
+      setIsOpen(false);
+    }
+
+    if (!artistId) {
+      setInputValue("");
+      return;
+    }
+
+    if (knownName) {
+      setInputValue(knownName);
+      return;
+    }
+
+    const cached = namesById.current.get(artistId);
+    if (cached) {
+      setInputValue(cached);
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/artists/${encodeURIComponent(artistId)}`, {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) return;
+        const body = (await response.json()) as { artist: Artist | null };
+        if (cancelled || !body.artist || body.artist.id !== artistId) return;
+        namesById.current.set(body.artist.id, body.artist.name);
+        if (editingRef.current) return;
+        setInputValue(body.artist.name);
+      } catch (lookupError) {
+        if (lookupError instanceof DOMException && lookupError.name === "AbortError") return;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [artistId, knownName]);
+
   const handleSearch = useCallback(
     (query: string) => {
       if (query.trim().length >= 1) {
@@ -70,16 +149,32 @@ export function ArtistAutocomplete({
   );
 
   useEffect(() => {
+    if (!isEditing) return;
+
     const debounce = setTimeout(() => {
-      if (inputValue) {
+      if (inputValue.trim()) {
         handleSearch(inputValue);
+      } else {
+        setIsOpen(false);
       }
     }, 300);
 
     return () => clearTimeout(debounce);
-  }, [inputValue, handleSearch]);
+  }, [inputValue, isEditing, handleSearch]);
+
+  const handleInputChange = (next: string) => {
+    editingRef.current = true;
+    setIsEditing(true);
+    setInputValue(next);
+    if (!next.trim() && artistId) {
+      onChange(null, "");
+    }
+  };
 
   const handleSelect = (artist: Artist) => {
+    namesById.current.set(artist.id, artist.name);
+    editingRef.current = false;
+    setIsEditing(false);
     setInputValue(artist.name);
     onChange(artist.id, artist.name);
     setIsOpen(false);
@@ -114,7 +209,7 @@ export function ArtistAutocomplete({
           id="artist-input"
           type="text"
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={(e) => handleInputChange(e.target.value)}
           onFocus={() => {
             if (inputValue.trim()) {
               handleSearch(inputValue);

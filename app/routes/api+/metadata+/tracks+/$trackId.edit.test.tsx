@@ -22,6 +22,9 @@ vi.mock("#app/utils/db.server.ts", () => ({
     trackEdit: {
       create: vi.fn(),
     },
+    genre: {
+      findMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
 }));
@@ -267,6 +270,90 @@ describe("POST /api/metadata/tracks/:trackId/edit", () => {
 
     expect(response.data.track.albumId).toBeNull();
     expect(response.data.track.genre).toBeNull();
+  });
+
+  test("snapshots current genre ids and syncs the legacy genre string from genreIds", async () => {
+    const existingTrack = {
+      id: "track-1",
+      title: "Old Title",
+      artistId: "artist-1",
+      albumId: null,
+      genre: "Rock",
+      genres: [
+        { id: "genre-pop", name: "Pop" },
+        { id: "genre-rock", name: "Rock" },
+      ],
+      year: 2020,
+      trackNumber: 1,
+      albumArtist: null,
+      bpm: null,
+      label: null,
+      isrc: null,
+      releaseDate: null,
+      originalDate: null,
+      originalYear: null,
+      totalTracks: null,
+      totalDiscs: null,
+      lyrics: null,
+    };
+
+    vi.mocked(prisma.track.findUnique).mockResolvedValue(existingTrack as never);
+    vi.mocked(prisma.artist.findUnique).mockResolvedValue({ id: "artist-1" } as never);
+    vi.mocked(prisma.genre.findMany).mockResolvedValue([
+      { id: "genre-soul", name: "Soul" },
+      { id: "genre-jazz", name: "Jazz" },
+    ] as never);
+
+    const mockTrackEditCreate = vi.fn().mockResolvedValue({
+      id: "edit-1",
+      user: { id: "user-1", username: "curator", name: "Curator User" },
+    });
+    const mockTrackUpdate = vi.fn().mockResolvedValue({
+      ...existingTrack,
+      title: "New Title",
+      genre: "Jazz",
+      artist: { id: "artist-1", name: "Artist Name" },
+      albumRecord: null,
+      genres: [
+        { id: "genre-jazz", name: "Jazz" },
+        { id: "genre-soul", name: "Soul" },
+      ],
+    });
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
+      return callback({
+        trackEdit: { create: mockTrackEditCreate },
+        track: { update: mockTrackUpdate },
+      });
+    });
+
+    await action(
+      makeRequest(
+        {
+          title: "New Title",
+          artistId: "artist-1",
+          genreIds: ["genre-jazz", "genre-soul"],
+        },
+        { trackId: "track-1" },
+      ) as never,
+    );
+
+    expect(mockTrackEditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          genre: "Rock",
+          genreIds: JSON.stringify(["genre-rock", "genre-pop"]),
+        }),
+      }),
+    );
+    expect(mockTrackUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          genre: "Jazz",
+          genres: { set: [{ id: "genre-jazz" }, { id: "genre-soul" }] },
+        }),
+      }),
+    );
   });
 
   test("rejects non-POST requests", async () => {

@@ -8,9 +8,28 @@ export type StatusHandler = (info: {
   params: Record<string, string | undefined>;
 }) => ReactElement | null;
 
+function formatRouteErrorData(data: unknown): string {
+  if (typeof data === "string") return data;
+  if (typeof data === "number" || typeof data === "boolean") return String(data);
+  if (data == null) return "";
+
+  if (typeof data === "object") {
+    const record = data as { error?: unknown; message?: unknown };
+    if (typeof record.error === "string" && record.error.length > 0) return record.error;
+    if (typeof record.message === "string" && record.message.length > 0) return record.message;
+    try {
+      return JSON.stringify(data);
+    } catch {
+      return "Unknown error";
+    }
+  }
+
+  return "";
+}
+
 const defaultStatusHandler: StatusHandler = ({ error }) => (
   <p>
-    {error.status} {error.data}
+    {error.status} {formatRouteErrorData(error.data)}
   </p>
 );
 
