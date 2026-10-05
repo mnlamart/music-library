@@ -112,18 +112,6 @@ export function TrackDetailsDialog({
     autoRelease: true,
   });
 
-  // The editor unmounts while Radix still has the dialog open, which leaves
-  // document.body.style.pointerEvents = "none" and blocks the library.
-  useEffect(() => {
-    return () => {
-      const restore = () => {
-        document.body.style.pointerEvents = "";
-      };
-      restore();
-      window.setTimeout(restore, 0);
-    };
-  }, []);
-
   useEffect(() => {
     if (open) {
       setActiveTab(initialTab);
