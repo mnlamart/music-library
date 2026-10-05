@@ -21,6 +21,7 @@ export function MentionAutocomplete({ value, onChange, textareaRef }: MentionAut
   const [mentionStart, setMentionStart] = useState(-1);
   const fetcher = useFetcher<{ curators: Curator[] }>();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const loadedQueryRef = useRef<string | null>(null);
 
   // Detect @ mentions and trigger autocomplete
   useEffect(() => {
@@ -42,17 +43,22 @@ export function MentionAutocomplete({ value, onChange, textareaRef }: MentionAut
         setMentionQuery(textAfterAt);
         setMentionStart(lastAtIndex);
         setShowDropdown(true);
-        setSelectedIndex(0);
 
-        // Fetch curators
-        if (textAfterAt.length >= 1) {
-          fetcher.load(`/api/curator/curators?q=${encodeURIComponent(textAfterAt)}`);
+        // useFetcher's identity changes when a load settles. Skip repeat
+        // loads for the same query so a successful response does not refetch.
+        if (loadedQueryRef.current !== textAfterAt) {
+          loadedQueryRef.current = textAfterAt;
+          setSelectedIndex(0);
+          if (textAfterAt.length >= 1) {
+            fetcher.load(`/api/curator/curators?q=${encodeURIComponent(textAfterAt)}`);
+          }
         }
         return;
       }
     }
 
     // Hide dropdown if not in mention context
+    loadedQueryRef.current = null;
     setShowDropdown(false);
   }, [value, textareaRef, fetcher]);
 
