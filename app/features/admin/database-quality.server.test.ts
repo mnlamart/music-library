@@ -4,9 +4,11 @@
  */
 import { afterEach, expect, test } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
+import { loadDuplicateDashboard } from "./duplicate-dashboard.server.ts";
 import { percentOfTracksAffected } from "./database-quality.ts";
 import {
   countTracksWithMetadataIssues,
+  getDuplicateTracksCount,
   getMetadataIssues,
   getStorageStats,
 } from "./database-quality.server.ts";
@@ -226,4 +228,70 @@ test("storage stats keep going when an audio file's track row is gone", async ()
     await prisma.artist.deleteMany({ where: { id: artist.id } });
     await prisma.$executeRawUnsafe("PRAGMA foreign_keys = ON");
   }
+});
+
+test("duplicate group count includes similar audio and matches the duplicates page", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const beforeAll = await loadDuplicateDashboard("all");
+  const beforeExact = await loadDuplicateDashboard("exact");
+
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Dup Count Artist ${suffix}`,
+      normalizedName: `dup-count-artist-${suffix}`,
+    },
+  });
+  createdArtistIds.push(artist.id);
+  const service = await prisma.service.create({
+    data: {
+      name: `dup-count-service-${suffix}`,
+      displayName: `Dup Count Service ${suffix}`,
+      baseUrl: "https://example.com",
+    },
+  });
+  createdServiceIds.push(service.id);
+
+  const fixtures = [
+    { title: "Exact A", contentHash: `exact-${suffix}`, audioFingerprint: `exact-a-${suffix}` },
+    { title: "Exact B", contentHash: `exact-${suffix}`, audioFingerprint: `exact-b-${suffix}` },
+    { title: "Similar A", contentHash: `similar-a-${suffix}`, audioFingerprint: "0123456789" },
+    { title: "Similar B", contentHash: `similar-b-${suffix}`, audioFingerprint: "012345678X" },
+  ];
+
+  const tracks = await Promise.all(
+    fixtures.map((fixture) =>
+      prisma.track.create({
+        data: {
+          title: `${fixture.title} ${suffix}`,
+          artistId: artist.id,
+          serviceId: service.id,
+          externalId: `quality-dup-${suffix}-${fixture.title.replace(/\s+/g, "-")}`,
+          duration: 180,
+          year: 2020,
+          audioFiles: {
+            create: {
+              objectKey: `audio/quality-dup/${suffix}/${fixture.title.replace(/\s+/g, "-")}.mp3`,
+              contentHash: fixture.contentHash,
+              audioFingerprint: fixture.audioFingerprint,
+              format: "mp3",
+              fileName: `${fixture.title}.mp3`,
+              fileSize: 4096,
+              serviceId: service.id,
+            },
+          },
+        },
+      }),
+    ),
+  );
+  createdTrackIds.push(...tracks.map((track) => track.id));
+
+  const all = await loadDuplicateDashboard("all");
+  const exact = await loadDuplicateDashboard("exact");
+  const count = await getDuplicateTracksCount();
+
+  expect(all.groups.some((group) => group.type === "similar")).toBe(true);
+  expect(all.stats.duplicateGroups).toBe(beforeAll.stats.duplicateGroups + 2);
+  expect(exact.stats.duplicateGroups).toBe(beforeExact.stats.duplicateGroups + 1);
+  expect(count).toBe(all.stats.duplicateGroups);
+  expect(count).toBeGreaterThan(exact.stats.duplicateGroups);
 });
