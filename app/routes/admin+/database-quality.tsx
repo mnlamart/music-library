@@ -31,9 +31,11 @@ import {
   formatBytes,
   METRIC_TARGETS,
   METRIC_WEIGHTS,
+  percentOfTracksAffected,
 } from "#app/features/admin/database-quality.ts";
 import {
   calculateHealthScore,
+  countTracksWithMetadataIssues,
   getDuplicateTracksCount,
   getMetadataIssues,
   getOrphanedFilesCount,
@@ -58,6 +60,7 @@ interface LoaderData {
   metrics: QualityMetrics;
   totalTracks: number;
   metadataIssues: MetadataIssues;
+  tracksWithMetadataIssues: number;
   storageStats: StorageStats;
   duplicateTracksCount: number;
   orphanedFilesCount: number;
@@ -77,6 +80,7 @@ export async function loader({ request }: Route.LoaderArgs): Promise<LoaderData>
     tracksWithGenre,
     tracksWithLyrics,
     metadataIssues,
+    tracksWithMetadataIssues,
     storageStats,
     duplicateTracksCount,
     orphanedFilesCount,
@@ -90,6 +94,7 @@ export async function loader({ request }: Route.LoaderArgs): Promise<LoaderData>
     prisma.track.count({ where: { genre: { not: null } } }),
     prisma.track.count({ where: { lyrics: { not: null } } }),
     getMetadataIssues(),
+    countTracksWithMetadataIssues(),
     getStorageStats(),
     getDuplicateTracksCount(),
     getOrphanedFilesCount(),
@@ -112,6 +117,7 @@ export async function loader({ request }: Route.LoaderArgs): Promise<LoaderData>
     metrics,
     totalTracks,
     metadataIssues,
+    tracksWithMetadataIssues,
     storageStats,
     duplicateTracksCount,
     orphanedFilesCount,
@@ -188,7 +194,7 @@ function OverviewTab({ loaderData }: { loaderData: LoaderData }) {
 }
 
 function MetadataTab({ loaderData }: { loaderData: LoaderData }) {
-  const { metadataIssues, totalTracks } = loaderData;
+  const { metadataIssues, totalTracks, tracksWithMetadataIssues } = loaderData;
   const currentYear = new Date().getFullYear();
 
   const issues = [
@@ -225,6 +231,7 @@ function MetadataTab({ loaderData }: { loaderData: LoaderData }) {
   ];
 
   const totalIssues = Object.values(metadataIssues).reduce((sum, count) => sum + count, 0);
+  const affectedPercent = percentOfTracksAffected(tracksWithMetadataIssues, totalTracks);
 
   return (
     <div className="space-y-6">
@@ -235,8 +242,7 @@ function MetadataTab({ loaderData }: { loaderData: LoaderData }) {
             <CardTitle className="text-3xl">{totalIssues.toLocaleString()}</CardTitle>
           </CardHeader>
           <CardContent className="text-muted-foreground text-sm">
-            {totalTracks > 0 ? ((totalIssues / totalTracks) * 100).toFixed(1) : "0.0"}% of tracks
-            affected
+            {affectedPercent.toFixed(1)}% of tracks affected
           </CardContent>
         </Card>
         <Card>
