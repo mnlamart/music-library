@@ -15,14 +15,16 @@ interface BasicMetadataTabProps {
 export function BasicMetadataTab({ track, onSave, disabled = false }: BasicMetadataTabProps) {
   const [title, setTitle] = useState(track.title);
   const [artistId, setArtistId] = useState(track.artist.id);
+  const [artistName, setArtistName] = useState(track.artist.name);
   const [albumName, setAlbumName] = useState(track.albumRecord?.name ?? "");
   const [genres, setGenres] = useState<Genre[]>(track.genres.map((g) => ({ ...g, trackCount: 0 })));
   const [year, setYear] = useState(track.year?.toString() ?? "");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleArtistChange = (id: string | null, _name: string) => {
+  const handleArtistChange = (id: string | null, name: string) => {
     setArtistId(id ?? "");
+    setArtistName(name);
     if (errors.artist) {
       setErrors((prev) => ({ ...prev, artist: "" }));
     }
@@ -139,7 +141,8 @@ export function BasicMetadataTab({ track, onSave, disabled = false }: BasicMetad
       </div>
 
       <ArtistAutocomplete
-        value={artistId}
+        value={artistId || null}
+        artistName={artistId ? artistName : null}
         onChange={handleArtistChange}
         onCreateNew={handleCreateArtist}
         error={errors.artist}
