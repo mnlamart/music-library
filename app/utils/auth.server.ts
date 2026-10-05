@@ -5,6 +5,10 @@ import { Authenticator } from "remix-auth";
 import { safeRedirect } from "remix-utils/safe-redirect";
 import { type Connection, type Password, type User } from "#prisma/client.js";
 import {
+  recordSecurityEvent,
+  SECURITY_EVENT_TYPES,
+} from "#app/features/security/track-event.server.ts";
+import {
   recordUsageEvent,
   USAGE_EVENT_TYPES,
 } from "#app/features/usage-analytics/record-usage.server.ts";
@@ -163,11 +167,13 @@ export async function signup({
   username,
   password,
   name,
+  request,
 }: {
   email: User["email"];
   username: User["username"];
   name: User["name"];
   password: string;
+  request?: Request;
 }) {
   const hashedPassword = await getPasswordHash(password);
 
@@ -193,6 +199,14 @@ export async function signup({
 
   void recordUsageEvent({ type: USAGE_EVENT_TYPES.signup, userId: session.userId }).catch(() => {});
 
+  await recordSecurityEvent({
+    request,
+    eventType: SECURITY_EVENT_TYPES.accountCreated,
+    userId: session.userId,
+    targetUserId: session.userId,
+    metadata: { username: username.toLowerCase(), phase: "completed" },
+  });
+
   return session;
 }
 
@@ -203,6 +217,7 @@ export async function signupWithConnection({
   providerId,
   providerName,
   imageUrl,
+  request,
 }: {
   email: User["email"];
   username: User["username"];
@@ -210,6 +225,7 @@ export async function signupWithConnection({
   providerId: Connection["providerId"];
   providerName: Connection["providerName"];
   imageUrl?: string;
+  request?: Request;
 }) {
   const user = await prisma.user.create({
     data: {
@@ -238,13 +254,28 @@ export async function signupWithConnection({
 
   void recordUsageEvent({ type: USAGE_EVENT_TYPES.signup, userId: user.id }).catch(() => {});
 
+  await recordSecurityEvent({
+    request,
+    eventType: SECURITY_EVENT_TYPES.accountCreated,
+    userId: user.id,
+    targetUserId: user.id,
+    metadata: { username: username.toLowerCase(), phase: "completed" },
+  });
+  await recordSecurityEvent({
+    request,
+    eventType: SECURITY_EVENT_TYPES.serviceConnected,
+    userId: user.id,
+    perpetual: false,
+    metadata: { provider: providerName },
+  });
+
   // Create and return the session
   const session = await prisma.session.create({
     data: {
       expirationDate: getSessionExpirationDate(),
       userId: user.id,
     },
-    select: { id: true, expirationDate: true },
+    select: { id: true, expirationDate: true, userId: true },
   });
 
   return session;

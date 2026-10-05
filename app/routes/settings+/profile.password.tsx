@@ -8,6 +8,10 @@ import { Button } from "#app/components/ui/button.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { StatusButton } from "#app/components/ui/status-button.tsx";
 import {
+  recordSecurityEvent,
+  SECURITY_EVENT_TYPES,
+} from "#app/features/security/track-event.server.ts";
+import {
   checkIsCommonPassword,
   getPasswordHash,
   requireUserId,
@@ -97,7 +101,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const { newPassword } = submission.value;
 
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     select: { username: true },
     where: { id: userId },
     data: {
@@ -107,6 +111,14 @@ export async function action({ request }: Route.ActionArgs) {
         },
       },
     },
+  });
+
+  await recordSecurityEvent({
+    request,
+    eventType: SECURITY_EVENT_TYPES.passwordChanged,
+    userId,
+    targetUserId: userId,
+    metadata: { username: updated.username },
   });
 
   return redirectWithToast(

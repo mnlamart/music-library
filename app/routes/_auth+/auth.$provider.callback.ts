@@ -1,5 +1,11 @@
 import { redirect } from "react-router";
 import {
+  recordLoginFailure,
+  recordLoginSuccess,
+  recordSecurityEvent,
+  SECURITY_EVENT_TYPES,
+} from "#app/features/security/track-event.server.ts";
+import {
   recordUsageEvent,
   USAGE_EVENT_TYPES,
 } from "#app/features/usage-analytics/record-usage.server.ts";
@@ -45,6 +51,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   );
 
   if (!authResult.success) {
+    await recordLoginFailure({
+      request,
+      reason: `provider_auth_failed:${providerName}`,
+    });
     console.error(authResult.error);
     throw await redirectWithToast(
       "/login",
@@ -104,6 +114,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         userId,
       },
     });
+    await recordSecurityEvent({
+      request,
+      eventType: SECURITY_EVENT_TYPES.serviceConnected,
+      userId,
+      perpetual: false,
+      metadata: { provider: providerName },
+    });
     return redirectWithToast(
       "/settings/profile/connections",
       {
@@ -133,6 +150,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         providerId: String(profile.id),
         userId: user.id,
       },
+    });
+    await recordSecurityEvent({
+      request,
+      eventType: SECURITY_EVENT_TYPES.serviceConnected,
+      userId: user.id,
+      perpetual: false,
+      metadata: { provider: providerName },
     });
     return makeSession(
       { request, userId: user.id },
@@ -180,6 +204,11 @@ async function makeSession(
     select: { disabledAt: true },
   });
   if (user?.disabledAt) {
+    await recordLoginFailure({
+      request,
+      userId,
+      reason: "disabled",
+    });
     return redirectWithToast(
       "/login",
       {
@@ -199,6 +228,12 @@ async function makeSession(
     },
   });
   void recordUsageEvent({ type: USAGE_EVENT_TYPES.login, userId }).catch(() => {});
+  await recordLoginSuccess({
+    request,
+    userId,
+    sessionId: session.id,
+    method: "provider",
+  });
   return handleNewSession(
     { request, session, redirectTo, remember: true },
     { headers: combineHeaders(responseInit?.headers, destroyRedirectTo) },

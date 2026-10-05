@@ -11,6 +11,7 @@ import { CheckboxField, ErrorList, Field } from "#app/components/forms.tsx";
 import { Spacer } from "#app/components/spacer.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { StatusButton } from "#app/components/ui/status-button.tsx";
+import { recordPasswordLoginResult } from "#app/features/security/track-event.server.ts";
 import { login, requireAnonymous } from "#app/utils/auth.server.ts";
 import { checkHoneypot } from "#app/utils/honeypot.server.ts";
 import { getErrorMessage, useIsPending } from "#app/utils/misc.tsx";
@@ -49,6 +50,13 @@ export async function action({ request }: Route.ActionArgs) {
         if (intent !== null) return { ...formValues, session: null };
 
         const loginResult = await login(formValues);
+        await recordPasswordLoginResult({
+          request,
+          username: formValues.username,
+          status: loginResult.status,
+          userId: loginResult.status === "success" ? loginResult.session.userId : null,
+          sessionId: loginResult.status === "success" ? loginResult.session.id : null,
+        });
         if (loginResult.status === "disabled") {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,

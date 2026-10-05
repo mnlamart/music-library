@@ -2,6 +2,8 @@ import { type SEOHandle } from "@nasa-gcn/remix-seo";
 import { Link } from "react-router";
 import { GeneralErrorBoundary } from "#app/components/error-boundary";
 import { Spacer } from "#app/components/spacer.tsx";
+import { Badge } from "#app/components/ui/badge.tsx";
+import { Button } from "#app/components/ui/button.tsx";
 import {
   Card,
   CardContent,
@@ -10,6 +12,8 @@ import {
   CardTitle,
 } from "#app/components/ui/card.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
+import { formatBytes } from "#app/features/admin/database-quality.ts";
+import { getAdminOverviewHealth } from "#app/features/admin/overview-health.server.ts";
 import { buildDayRange, getUtcDayStart } from "#app/features/usage-analytics/admin-users.server.ts";
 import { USAGE_METRICS } from "#app/features/usage-analytics/record-usage.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
@@ -21,6 +25,55 @@ export const handle: SEOHandle = {
 };
 
 const DAYS = 30;
+
+const HEALTH_TEXT = {
+  green: "text-green-600",
+  yellow: "text-yellow-600",
+  red: "text-red-600",
+} as const;
+
+export const adminNavSections = [
+  {
+    title: "System Health",
+    links: [
+      { label: "Database Quality", to: "/admin/database-quality" },
+      { label: "FTS Index", to: "/admin/fts-index" },
+      { label: "Cache Admin", to: "/admin/cache" },
+      { label: "DB backups", to: "/admin/db-backup" },
+    ],
+  },
+  {
+    title: "Content Management",
+    links: [
+      { label: "Orphaned Tracks", to: "/admin/orphaned-tracks" },
+      { label: "Missing Covers", to: "/admin/missing-covers" },
+      { label: "Duplicates", to: "/music/admin/duplicates" },
+      { label: "Audio Queue", to: "/admin/audio-queue" },
+      { label: "Fingerprint failures", to: "/music/admin/fingerprint-failures" },
+    ],
+  },
+  {
+    title: "User Management",
+    links: [{ label: "Users", to: "/admin/users" }],
+  },
+  {
+    title: "Security",
+    links: [
+      { label: "Security Events", to: "/admin/security-events" },
+      { label: "Failed Logins", to: "/admin/security-events?tab=failed" },
+    ],
+  },
+  {
+    title: "Settings",
+    links: [{ label: "YouTube Cookies", to: "/admin/youtube-cookies" }],
+  },
+] as const;
+
+const quickActions = [
+  { label: "Trigger FTS Reindex", to: "/admin/fts-index" },
+  { label: "View Failed Logins", to: "/admin/security-events?tab=failed" },
+  { label: "Clean Up Orphaned Files", to: "/admin/orphaned-tracks" },
+] as const;
 
 type SeriesPoint = { day: string; value: number };
 
@@ -50,7 +103,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     USAGE_METRICS.logins,
   ] as const;
 
-  const [totalUsers, activeUsers, disabledUsers, stats] = await Promise.all([
+  const [totalUsers, activeUsers, disabledUsers, stats, health] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { disabledAt: null } }),
     prisma.user.count({ where: { disabledAt: { not: null } } }),
@@ -62,6 +115,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       select: { day: true, metric: true, value: true },
       orderBy: { day: "asc" },
     }),
+    getAdminOverviewHealth(),
   ]);
 
   const byMetric = (metric: string) =>
@@ -102,6 +156,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       libraryAdds,
       logins,
     },
+    health,
   };
 }
 
@@ -149,64 +204,120 @@ function MiniBarChart({
 }
 
 export default function AdminOverviewRoute({ loaderData }: Route.ComponentProps) {
-  const { totals, series } = loaderData;
+  const { totals, series, health } = loaderData;
 
   return (
     <div className="container py-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-h1">Admin overview</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Usage for the last 30 days (UTC).{" "}
-            <Link to="/admin/users" className="underline">
-              Manage users
+      <div>
+        <h1 className="text-h1">Admin overview</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Usage for the last 30 days (UTC).{" "}
+          <Link to="/admin/users" className="underline">
+            Manage users
+          </Link>
+        </p>
+      </div>
+
+      <Spacer size="sm" />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Database quality</CardDescription>
+            <CardTitle
+              className={`text-3xl ${HEALTH_TEXT[health.color]}`}
+              data-testid="health-score"
+            >
+              <Link to="/admin/database-quality">{health.score}%</Link>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-sm">
+            {health.color === "green"
+              ? "Healthy"
+              : health.color === "yellow"
+                ? "Needs work"
+                : "Poor"}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Storage</CardDescription>
+            <CardTitle className="text-3xl">{formatBytes(health.storageBytes)}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-sm">
+            <Link to="/admin/orphaned-tracks" className="underline">
+              {health.orphanedWasteMb} MB orphaned waste
             </Link>
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/admin/audio-queue"
-            className="text-muted-foreground hover:text-foreground text-sm underline"
-          >
-            Audio queue
-          </Link>
-          <Link
-            to="/admin/db-backup"
-            className="text-muted-foreground hover:text-foreground text-sm underline"
-          >
-            DB backups
-          </Link>
-          <Link
-            to="/music/admin/fingerprint-failures"
-            className="text-muted-foreground hover:text-foreground text-sm underline"
-          >
-            Fingerprint failures
-          </Link>
-          <Link
-            to="/music/admin/duplicates"
-            className="text-muted-foreground hover:text-foreground text-sm underline"
-          >
-            Duplicates
-          </Link>
-          <Link
-            to="/admin/youtube-cookies"
-            className="text-muted-foreground hover:text-foreground text-sm underline"
-          >
-            YouTube cookies
-          </Link>
-          <Link
-            to="/admin/missing-covers"
-            className="text-muted-foreground hover:text-foreground text-sm underline"
-          >
-            Missing covers
-          </Link>
-          <Link
-            to="/admin/orphaned-tracks"
-            className="text-muted-foreground hover:text-foreground text-sm underline"
-          >
-            Orphaned tracks
-          </Link>
-        </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Security</CardDescription>
+            <CardTitle
+              className={`text-3xl ${health.securityAlert ? "text-red-600" : ""}`}
+              data-testid="failed-logins-24h"
+            >
+              {health.failedLogins24h}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-sm">
+            <Link to="/admin/security-events?tab=failed" className="underline">
+              Failed logins in 24h
+              {health.securityAlert ? " · threshold exceeded" : ""}
+            </Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Missing content</CardDescription>
+            <CardTitle className="text-3xl">{health.missingAudio + health.missingCovers}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-muted-foreground text-sm">
+            <Link to="/admin/orphaned-tracks" className="underline">
+              {health.missingAudio} without audio
+            </Link>
+            {" · "}
+            <Link to="/admin/missing-covers" className="underline">
+              {health.missingCovers} without covers
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Spacer size="sm" />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {adminNavSections.map((section) => (
+          <Card key={section.title}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{section.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1">
+              {section.links.map((link) => (
+                <div key={link.to} className="flex items-center gap-2">
+                  <Link to={link.to} className="text-foreground hover:underline text-sm">
+                    {link.label}
+                  </Link>
+                  {link.to === "/admin/security-events" && health.securityAlert ? (
+                    <Badge variant="destructive">{health.failedLogins24h} failed</Badge>
+                  ) : null}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Quick actions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {quickActions.map((action) => (
+              <Button key={action.label} variant="outline" size="sm" asChild>
+                <Link to={action.to}>{action.label}</Link>
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
       <Spacer size="sm" />
