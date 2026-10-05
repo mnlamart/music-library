@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { getEnv } from "./env.server.ts";
+import { formatInvalidEnvMessage, getEnv } from "./env.server.ts";
 
 describe("getEnv", () => {
   const originalDisableServiceWorker = process.env.DISABLE_SERVICE_WORKER;
@@ -22,5 +22,16 @@ describe("getEnv", () => {
     process.env.PLAYWRIGHT_TEST_BASE_URL = "http://localhost:3000/";
     expect(getEnv().DISABLE_SERVICE_WORKER).toBeUndefined();
     delete process.env.PLAYWRIGHT_TEST_BASE_URL;
+  });
+});
+
+describe("formatInvalidEnvMessage", () => {
+  test("names the invalid variables", () => {
+    expect(
+      formatInvalidEnvMessage({
+        IP_HASH_SALT: ["Too small: expected string to have >=8 characters"],
+        SESSION_SECRET: ["Required"],
+      }),
+    ).toBe("Invalid environment variables: IP_HASH_SALT, SESSION_SECRET");
   });
 });
