@@ -57,15 +57,17 @@ export async function parseMentions(content: string): Promise<string[]> {
 export async function getCuratorsForAutocomplete(query: string) {
   // Prisma's SQLite client rejects `mode` on `contains` (`Unknown argument mode`).
   // SQLite `contains` is already case-insensitive for ASCII, which covers @mentions.
+  // An empty query is the bare "@" menu and should list curators, not match nothing.
   const curators = await prisma.user.findMany({
     where: {
-      OR: [{ username: { contains: query } }, { name: { contains: query } }],
+      ...(query ? { OR: [{ username: { contains: query } }, { name: { contains: query } }] } : {}),
       roles: {
         some: {
           name: { in: ["curator", "admin"] },
         },
       },
     },
+    orderBy: { username: "asc" },
     select: {
       id: true,
       username: true,

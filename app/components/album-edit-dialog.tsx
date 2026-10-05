@@ -16,6 +16,8 @@ import { Textarea } from "#app/components/ui/textarea";
 import { Icon } from "#app/components/ui/icon";
 import { ImageUploader } from "#app/components/image-uploader";
 import { AlbumHistoryTab } from "#app/components/album-edit-dialog/album-history-tab";
+import { ArtistAutocomplete } from "#app/components/artist-autocomplete";
+import { CuratorNotes } from "#app/components/curator-notes";
 
 export interface Album {
   id: string;
@@ -37,15 +39,23 @@ interface AlbumEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
+  currentUserId?: string;
 }
 
-export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEditDialogProps) {
+export function AlbumEditDialog({
+  album,
+  open,
+  onOpenChange,
+  onSaved,
+  currentUserId,
+}: AlbumEditDialogProps) {
   const editFetcher = useFetcher();
   const restoreFetcher = useFetcher();
   const [activeTab, setActiveTab] = useState("metadata");
   const [coverImageId, setCoverImageId] = useState(album.coverImageId);
   const [coverObjectKey, setCoverObjectKey] = useState(album.coverImage?.objectKey || null);
 
+  const [artistName, setArtistName] = useState(album.artist.name);
   const [formData, setFormData] = useState({
     name: album.name,
     artistId: album.artistId,
@@ -119,10 +129,11 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className={`grid w-full ${currentUserId ? "grid-cols-4" : "grid-cols-3"}`}>
             <TabsTrigger value="metadata">Metadata</TabsTrigger>
             <TabsTrigger value="cover">Cover Art</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
+            {currentUserId ? <TabsTrigger value="notes">Notes</TabsTrigger> : null}
           </TabsList>
 
           <TabsContent value="metadata" className="space-y-4 mt-4">
@@ -139,13 +150,16 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="artist">Artist</Label>
-                <div className="text-sm text-muted-foreground">{album.artist.name}</div>
-                <p className="text-xs text-muted-foreground">
-                  To change the artist, use the merge albums feature
-                </p>
-              </div>
+              <ArtistAutocomplete
+                value={formData.artistId}
+                artistName={artistName}
+                onChange={(nextArtistId, nextArtistName) => {
+                  if (!nextArtistId) return;
+                  setArtistName(nextArtistName);
+                  setFormData((prev) => ({ ...prev, artistId: nextArtistId }));
+                }}
+                required
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="year">Year</Label>
@@ -200,6 +214,12 @@ export function AlbumEditDialog({ album, open, onOpenChange, onSaved }: AlbumEdi
           <TabsContent value="history" className="mt-4">
             <AlbumHistoryTab albumId={album.id} onRestore={handleRestore} />
           </TabsContent>
+
+          {currentUserId ? (
+            <TabsContent value="notes" className="mt-4">
+              <CuratorNotes entityType="album" entityId={album.id} currentUserId={currentUserId} />
+            </TabsContent>
+          ) : null}
         </Tabs>
       </DialogContent>
     </Dialog>

@@ -93,6 +93,10 @@ function renderAlbum(data: typeof loaderData = loaderData) {
           />
         ),
       },
+      {
+        path: "/api/curator/notes",
+        loader: () => ({ notes: [] }),
+      },
     ],
     { initialEntries: ["/albums/album-1"] },
   );
@@ -116,6 +120,21 @@ test("passes the CoverImage id into the editor, not the object key", () => {
   });
 
   expect(dialogAlbum.current?.coverImageId).toBe("cover-real-id");
+});
+
+test("shows curator notes on the album page", () => {
+  userState.current = userWith("curator", true);
+  renderAlbum();
+
+  expect(screen.getByRole("heading", { name: "Curator notes" })).toBeDefined();
+  expect(screen.getByLabelText("Add a note")).toBeDefined();
+});
+
+test("hides curator notes from listeners", () => {
+  userState.current = userWith("user", false);
+  renderAlbum();
+
+  expect(screen.queryByLabelText("Add a note")).toBeNull();
 });
 
 test("shows Flag for review next to Edit Album for curators", async () => {

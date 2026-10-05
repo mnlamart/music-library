@@ -86,7 +86,7 @@ export function AlbumHistoryTab({ albumId, onRestore }: AlbumHistoryTabProps) {
   return (
     <>
       <div className="space-y-4">
-        {history.map((entry, index) => (
+        {history.map((entry) => (
           <div
             key={entry.id}
             className="rounded-lg border p-4 transition-colors hover:bg-accent/50"
@@ -107,17 +107,15 @@ export function AlbumHistoryTab({ albumId, onRestore }: AlbumHistoryTabProps) {
                   </div>
                 )}
               </div>
-              {index > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleRestoreClick(entry.id)}
-                >
-                  <Icon name="reset" className="mr-2 h-4 w-4" />
-                  Restore
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleRestoreClick(entry.id)}
+              >
+                <Icon name="reset" className="mr-2 h-4 w-4" />
+                Restore
+              </Button>
             </div>
 
             <div className="mt-3 space-y-1">

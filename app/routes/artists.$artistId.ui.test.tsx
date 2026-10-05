@@ -90,6 +90,10 @@ function renderArtist() {
           />
         ),
       },
+      {
+        path: "/api/curator/notes",
+        loader: () => ({ notes: [] }),
+      },
     ],
     { initialEntries: ["/artists/artist-1"] },
   );
@@ -98,6 +102,21 @@ function renderArtist() {
 
 beforeEach(() => {
   userState.current = undefined;
+});
+
+test("shows curator notes on the artist page", () => {
+  userState.current = userWith("curator", true);
+  renderArtist();
+
+  expect(screen.getByRole("heading", { name: "Curator notes" })).toBeDefined();
+  expect(screen.getByLabelText("Add a note")).toBeDefined();
+});
+
+test("hides curator notes from listeners", () => {
+  userState.current = userWith("user", false);
+  renderArtist();
+
+  expect(screen.queryByLabelText("Add a note")).toBeNull();
 });
 
 test("shows Flag for review next to Edit Artist for curators", async () => {

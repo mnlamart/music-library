@@ -29,7 +29,22 @@ const notes = [
     mentions: [] as string[],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
-    replies: [] as [],
+    replies: [] as Array<{
+      id: string;
+      entityType: string;
+      entityId: string;
+      curator: {
+        id: string;
+        username: string;
+        name: string;
+        displayName: string;
+      };
+      content: string;
+      mentions: string[];
+      createdAt: string;
+      updatedAt: string;
+      replies: [];
+    }>,
   },
 ];
 
@@ -154,6 +169,45 @@ test("keeps edit and reply open after a saved note when the list re-renders", as
   );
   expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   expect(mocks.notesLoad).toHaveBeenCalledTimes(1);
+});
+
+test("deletes a reply and leaves the parent note", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("confirm", () => true);
+  notes[0]!.replies = [
+    {
+      id: "reply-1",
+      entityType: "track",
+      entityId: "track-1",
+      curator: notes[0]!.curator,
+      content: "Only the reply should go",
+      mentions: [],
+      createdAt: "2026-01-01T00:01:00.000Z",
+      updatedAt: "2026-01-01T00:01:00.000Z",
+      replies: [],
+    },
+  ];
+
+  render(<CuratorNotes {...props} />);
+
+  expect(screen.getByText("First impression")).toBeInTheDocument();
+  expect(screen.getByText("Only the reply should go")).toBeInTheDocument();
+
+  const trashButtons = screen
+    .getAllByRole("button")
+    .filter((button) => button.innerHTML.includes("trash"));
+  await user.click(trashButtons[1]!);
+
+  expect(mocks.createSubmit).toHaveBeenCalledWith(
+    {},
+    {
+      method: "DELETE",
+      action: "/api/curator/notes/reply-1",
+    },
+  );
+  expect(screen.getByText("First impression")).toBeInTheDocument();
+  notes[0]!.replies = [];
+  vi.unstubAllGlobals();
 });
 
 test("resets an open reply when a new submission succeeds", async () => {
