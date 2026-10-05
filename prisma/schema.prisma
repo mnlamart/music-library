@@ -868,6 +868,21 @@ model CuratorNote {
   @@index([createdAt])
 }
 
+/// Admin "keep both" flag for a duplicate group.
+/// Hidden from the default duplicate list and shown again with the intentional filter.
+/// Does not delete tracks.
+model DuplicateIntentionalGroup {
+  id        String   @id @default(cuid())
+  /// Exact groups use the content hash. Similar groups use `similar:` plus sorted audio file ids.
+  groupKey  String   @unique
+  /// "exact" or "similar"
+  groupType String
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([groupType])
+}
+
 /// Curator achievement badges
 model CuratorBadge {
   id         String   @id @default(cuid())

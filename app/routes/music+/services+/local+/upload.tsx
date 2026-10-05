@@ -851,6 +851,7 @@ function CompletionStep({
       fileName: string;
       title: string;
       artist: string;
+      storageSavedBytes?: number;
       exactDuplicate?: {
         trackId: string;
         title: string;
@@ -890,6 +891,7 @@ function CompletionStep({
                 fileName: string;
                 title: string;
                 artist: string;
+                storageSavedBytes?: number;
                 exactDuplicate?: {
                   trackId: string;
                   title: string;

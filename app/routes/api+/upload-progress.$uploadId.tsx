@@ -46,6 +46,41 @@ export interface StoredFileData {
   };
 }
 
+export interface SuccessfulTrackInfo {
+  trackId: string;
+  fileName: string;
+  title: string;
+  artist: string;
+  /** Bytes not uploaded again because this file reused an existing object. */
+  storageSavedBytes?: number;
+  exactDuplicate?: {
+    trackId: string;
+    title: string;
+    artist: string;
+    confidence: number;
+  };
+  fuzzyMatches?: Array<{
+    trackId: string;
+    title: string;
+    artist: string;
+    matchScore: number;
+    matchType: "fingerprint" | "metadata";
+  }>;
+}
+
+/** Progress payload sent to the upload completion screen. Undefined sizes are omitted. */
+export function serializeSuccessfulTrack(track: SuccessfulTrackInfo) {
+  return {
+    trackId: track.trackId,
+    fileName: track.fileName,
+    title: track.title,
+    artist: track.artist,
+    storageSavedBytes: track.storageSavedBytes,
+    exactDuplicate: track.exactDuplicate,
+    fuzzyMatches: track.fuzzyMatches,
+  };
+}
+
 // In-memory store for upload progress (in production, use Redis)
 const uploadProgressStore = new Map<
   string,
@@ -61,25 +96,7 @@ const uploadProgressStore = new Map<
     overallProgress: number;
     status: "active" | "completed" | "failed";
     startTime?: number; // Timestamp when upload started
-    successfulTracks?: Array<{
-      trackId: string;
-      fileName: string;
-      title: string;
-      artist: string;
-      exactDuplicate?: {
-        trackId: string;
-        title: string;
-        artist: string;
-        confidence: number;
-      };
-      fuzzyMatches?: Array<{
-        trackId: string;
-        title: string;
-        artist: string;
-        matchScore: number;
-        matchType: "fingerprint" | "metadata";
-      }>;
-    }>;
+    successfulTracks?: SuccessfulTrackInfo[];
     failedFiles?: Array<{
       fileId: string;
       fileName: string;
@@ -116,25 +133,7 @@ export function setUploadProgress(
     overallProgress: number;
     status: "active" | "completed" | "failed";
     startTime?: number;
-    successfulTracks?: Array<{
-      trackId: string;
-      fileName: string;
-      title: string;
-      artist: string;
-      exactDuplicate?: {
-        trackId: string;
-        title: string;
-        artist: string;
-        confidence: number;
-      };
-      fuzzyMatches?: Array<{
-        trackId: string;
-        title: string;
-        artist: string;
-        matchScore: number;
-        matchType: "fingerprint" | "metadata";
-      }>;
-    }>;
+    successfulTracks?: SuccessfulTrackInfo[];
     failedFiles?: Array<{
       fileId: string;
       fileName: string;
@@ -208,14 +207,7 @@ function pushProgressUpdate(uploadId: string) {
     overallProgress: progress.overallProgress,
     status: progress.status,
     uploadSpeed,
-    successfulTracks: (progress.successfulTracks || []).map((track) => ({
-      trackId: track.trackId,
-      fileName: track.fileName,
-      title: track.title,
-      artist: track.artist,
-      exactDuplicate: track.exactDuplicate,
-      fuzzyMatches: track.fuzzyMatches,
-    })),
+    successfulTracks: (progress.successfulTracks || []).map(serializeSuccessfulTrack),
     failedFiles: (progress.failedFiles || []).map((file) => ({
       fileId: file.fileId,
       fileName: file.fileName,
@@ -295,28 +287,7 @@ export function updateFileProgress(
 /**
  * Add successful track to progress store
  */
-export function addSuccessfulTrack(
-  uploadId: string,
-  trackInfo: {
-    trackId: string;
-    fileName: string;
-    title: string;
-    artist: string;
-    exactDuplicate?: {
-      trackId: string;
-      title: string;
-      artist: string;
-      confidence: number;
-    };
-    fuzzyMatches?: Array<{
-      trackId: string;
-      title: string;
-      artist: string;
-      matchScore: number;
-      matchType: "fingerprint" | "metadata";
-    }>;
-  },
-) {
+export function addSuccessfulTrack(uploadId: string, trackInfo: SuccessfulTrackInfo) {
   const current = uploadProgressStore.get(uploadId);
   if (!current) return;
 
@@ -415,14 +386,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
           overallProgress: initialProgress.overallProgress,
           status: initialProgress.status,
           uploadSpeed,
-          successfulTracks: (initialProgress.successfulTracks || []).map((track) => ({
-            trackId: track.trackId,
-            fileName: track.fileName,
-            title: track.title,
-            artist: track.artist,
-            exactDuplicate: track.exactDuplicate,
-            fuzzyMatches: track.fuzzyMatches,
-          })),
+          successfulTracks: (initialProgress.successfulTracks || []).map(serializeSuccessfulTrack),
           failedFiles: (initialProgress.failedFiles || []).map((file) => ({
             fileId: file.fileId,
             fileName: file.fileName,
@@ -475,14 +439,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
             overallProgress: progress.overallProgress,
             status: progress.status,
             uploadSpeed,
-            successfulTracks: (progress.successfulTracks || []).map((track) => ({
-              trackId: track.trackId,
-              fileName: track.fileName,
-              title: track.title,
-              artist: track.artist,
-              exactDuplicate: track.exactDuplicate,
-              fuzzyMatches: track.fuzzyMatches,
-            })),
+            successfulTracks: (progress.successfulTracks || []).map(serializeSuccessfulTrack),
             failedFiles: (progress.failedFiles || []).map((file) => ({
               fileId: file.fileId,
               fileName: file.fileName,

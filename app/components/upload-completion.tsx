@@ -16,12 +16,15 @@ import { Button } from "#app/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#app/components/ui/card";
 import { Icon } from "#app/components/ui/icon";
 import { useToast } from "#app/components/ui/use-toast";
+import { formatStorageSaved } from "#app/utils/format-storage-saved";
 
 interface SuccessfulTrack {
   trackId: string;
   fileName: string;
   title: string;
   artist: string;
+  /** Bytes not stored again because this upload reused an existing audio file. */
+  storageSavedBytes?: number;
   exactDuplicate?: {
     trackId: string;
     title: string;
@@ -338,10 +341,12 @@ function TrackItem({ track, onDelete, showDuplicateWarning }: TrackItemProps) {
                         <span className="font-medium">Reason:</span>
                         <span>Same audio content</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="font-medium">Storage saved:</span>
-                        <span>~{Math.round(Math.random() * 20 + 5)}MB</span>
-                      </div>
+                      {typeof track.storageSavedBytes === "number" && (
+                        <div className="flex justify-between">
+                          <span className="font-medium">Storage saved:</span>
+                          <span>{formatStorageSaved(track.storageSavedBytes)}</span>
+                        </div>
+                      )}
                     </>
                   )}
                   {track.fuzzyMatches && track.fuzzyMatches.length > 0 && (

@@ -24,20 +24,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "#app/components/ui/alert-dialog.tsx";
+import { markDuplicateGroupIntentional } from "#app/features/admin/duplicate-dashboard.server.ts";
 import { requireUserWithRole } from "#app/utils/permissions.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { type Route } from "./+types/duplicates.ts";
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export const handle: SEOHandle = {
   getSitemapEntries: () => null,
 };
 
-const FILTER_OPTIONS = ["all", "exact", "similar"] as const;
+const FILTER_OPTIONS = ["all", "exact", "similar", "intentional"] as const;
 type FilterOption = (typeof FILTER_OPTIONS)[number];
 
 interface DuplicateGroup {
   id: string;
-  type: "exact";
-  contentHash: string;
+  type: "exact" | "similar";
+  contentHash: string | null;
+  confidence?: number;
   tracks: Array<{
     trackId: string;
     title: string;
@@ -47,6 +54,7 @@ interface DuplicateGroup {
     fileName: string | null;
     format: string | null;
     audioFileId: string;
+    confidence?: number;
   }>;
 }
 
@@ -86,6 +94,32 @@ export async function loader({ request, url }: Route.LoaderArgs): Promise<Loader
   };
 }
 
+export async function action({ request }: Route.ActionArgs) {
+  const userId = await requireUserWithRole(request, "admin");
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  if (intent !== "mark-intentional") {
+    throw data({ error: "Unknown intent" }, { status: 400 });
+  }
+
+  const groupKey = formData.get("groupKey");
+  const groupType = formData.get("groupType");
+  if (typeof groupKey !== "string" || groupKey.length === 0) {
+    throw data({ error: "Missing group" }, { status: 400 });
+  }
+  if (groupType !== "exact" && groupType !== "similar") {
+    throw data({ error: "Invalid group type" }, { status: 400 });
+  }
+
+  await markDuplicateGroupIntentional({
+    groupKey,
+    groupType,
+    createdBy: userId,
+  });
+
+  return data({ ok: true as const });
+}
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -94,7 +128,13 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
 }
 
-function DuplicateGroupCard({ group }: { group: DuplicateGroup }) {
+function DuplicateGroupCard({
+  group,
+  allowKeepBoth,
+}: {
+  group: DuplicateGroup;
+  allowKeepBoth: boolean;
+}) {
   const [deleteTrackId, setDeleteTrackId] = useState<string | null>(null);
   const deleteFetcher = useFetcher();
   const { toast } = useToast();
@@ -154,7 +194,11 @@ function DuplicateGroupCard({ group }: { group: DuplicateGroup }) {
             <div className="flex-1">
               <CardTitle className="text-lg">{groupTitle}</CardTitle>
               <CardDescription className="mt-1">
-                {group.type === "exact" ? "Exact matches" : "Similar audio"} •{" "}
+                {group.type === "exact" ? "Exact matches" : "Similar audio"}
+                {group.type === "similar" && group.confidence != null
+                  ? ` • ${Math.round(group.confidence * 100)}% confidence`
+                  : ""}
+                {" • "}
                 {visibleTracks.length} tracks • {formatBytes(fileSize)} each
               </CardDescription>
             </div>
@@ -183,6 +227,9 @@ function DuplicateGroupCard({ group }: { group: DuplicateGroup }) {
                     by {track.artist}
                     {track.format && ` • ${track.format.toUpperCase()}`}
                     {track.fileName && ` • ${track.fileName}`}
+                    {group.type === "similar" && index > 0 && track.confidence != null
+                      ? ` • ${Math.round(track.confidence * 100)}% confidence`
+                      : ""}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -204,6 +251,16 @@ function DuplicateGroupCard({ group }: { group: DuplicateGroup }) {
               </div>
             ))}
           </div>
+          {allowKeepBoth && (
+            <Form method="post" className="mt-4">
+              <input type="hidden" name="intent" value="mark-intentional" />
+              <input type="hidden" name="groupKey" value={group.id} />
+              <input type="hidden" name="groupType" value={group.type} />
+              <Button type="submit" variant="outline" size="sm">
+                Keep both
+              </Button>
+            </Form>
+          )}
         </CardContent>
       </Card>
 
@@ -306,14 +363,11 @@ export default function DuplicatesRoute({ loaderData }: Route.ComponentProps) {
               type="submit"
               variant={activeFilter === option ? "default" : "outline"}
               size="sm"
-              disabled={option === "similar"} // Disabled until issue #224
             >
               {option === "all" && "All"}
               {option === "exact" && "Exact Hash"}
               {option === "similar" && "Similar Audio"}
-              {option === "similar" && (
-                <span className="ml-1 text-xs opacity-70">(coming soon)</span>
-              )}
+              {option === "intentional" && "Intentional"}
             </Button>
           </Form>
         ))}
@@ -331,12 +385,20 @@ export default function DuplicatesRoute({ loaderData }: Route.ComponentProps) {
                   ? "All audio files are unique"
                   : filter === "exact"
                     ? "No exact duplicate audio files found"
-                    : "No similar audio files found"}
+                    : filter === "intentional"
+                      ? "No groups marked as intentional"
+                      : "No similar audio files found"}
               </p>
             </CardContent>
           </Card>
         ) : (
-          groups.map((group) => <DuplicateGroupCard key={group.id} group={group} />)
+          groups.map((group) => (
+            <DuplicateGroupCard
+              key={group.id}
+              group={group}
+              allowKeepBoth={filter !== "intentional"}
+            />
+          ))
         )}
       </div>
 
