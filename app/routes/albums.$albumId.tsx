@@ -31,6 +31,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       id: true,
       name: true,
       year: true,
+      coverImageId: true,
       createdAt: true,
       artist: {
         select: { id: true, name: true },
@@ -182,7 +183,7 @@ export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
             album={{
               ...album,
               artistId: album.artist.id,
-              coverImageId: album.coverImage?.objectKey || null,
+              coverImageId: album.coverImageId,
             }}
             open={editDialogOpen}
             onOpenChange={setEditDialogOpen}

@@ -19,6 +19,10 @@ const userState = vi.hoisted(() => ({
   current: undefined as MockUser | null | undefined,
 }));
 
+const dialogAlbum = vi.hoisted(() => ({
+  current: null as { coverImageId?: string | null } | null,
+}));
+
 vi.mock("#app/utils/user.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("#app/utils/user.ts")>();
   return {
@@ -28,7 +32,10 @@ vi.mock("#app/utils/user.ts", async (importOriginal) => {
 });
 
 vi.mock("#app/components/album-edit-dialog.tsx", () => ({
-  AlbumEditDialog: () => null,
+  AlbumEditDialog: (props: { album: { coverImageId?: string | null } }) => {
+    dialogAlbum.current = props.album;
+    return null;
+  },
 }));
 
 beforeAll(() => {
@@ -54,7 +61,8 @@ const loaderData = {
     year: 2020,
     createdAt: new Date("2024-01-01"),
     artist: { id: "artist-1", name: "Album Artist" },
-    coverImage: null,
+    coverImageId: null as string | null,
+    coverImage: null as { objectKey: string } | null,
     tracks: [],
   },
   playlists: [],
@@ -72,14 +80,14 @@ function userWith(role: string, canEdit: boolean): MockUser {
   };
 }
 
-function renderAlbum() {
+function renderAlbum(data: typeof loaderData = loaderData) {
   const router = createMemoryRouter(
     [
       {
         path: "/albums/:albumId",
         element: (
           <AlbumRoute
-            loaderData={loaderData as never}
+            loaderData={data as never}
             params={{ albumId: "album-1" }}
             matches={[] as never}
           />
@@ -93,6 +101,21 @@ function renderAlbum() {
 
 beforeEach(() => {
   userState.current = undefined;
+  dialogAlbum.current = null;
+});
+
+test("passes the CoverImage id into the editor, not the object key", () => {
+  userState.current = userWith("curator", true);
+  renderAlbum({
+    ...loaderData,
+    album: {
+      ...loaderData.album,
+      coverImageId: "cover-real-id",
+      coverImage: { objectKey: "images/albums/not-the-id.jpg" },
+    },
+  });
+
+  expect(dialogAlbum.current?.coverImageId).toBe("cover-real-id");
 });
 
 test("shows Flag for review next to Edit Album for curators", async () => {
