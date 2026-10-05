@@ -198,7 +198,7 @@ export const cache: CachifiedCache = {
 export async function getAllCacheKeys(limit: number) {
   return {
     sqlite: getAllKeysStatement.all(limit).map((row) => (row as { key: string }).key),
-    lru: [...lru.keys()],
+    lru: [...lru.keys()].slice(0, limit),
   };
 }
 
@@ -207,7 +207,7 @@ export async function searchCacheKeys(search: string, limit: number) {
     sqlite: searchKeysStatement
       .all(`%${search}%`, limit)
       .map((row) => (row as { key: string }).key),
-    lru: [...lru.keys()].filter((key) => key.includes(search)),
+    lru: [...lru.keys()].filter((key) => key.includes(search)).slice(0, limit),
   };
 }
 
