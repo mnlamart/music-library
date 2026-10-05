@@ -10,6 +10,9 @@ const MAX_PAGE_SIZE = 100;
 const SIZE_FILTERS = ["all", "small", "medium", "large"] as const;
 type SizeFilter = (typeof SIZE_FILTERS)[number];
 
+/** Matches `formatBytes`, which labels 1024 bytes as 1 KB and 1024 KB as 1 MB. */
+const BYTES_PER_MB = 1024 * 1024;
+
 export interface FingerprintFailureStats {
   total: number;
   withContentHash: number;
@@ -60,11 +63,11 @@ function parsePositiveInt(value: string | null, fallback: number): number {
 function sizeWhere(size: SizeFilter): Prisma.TrackAudioFileWhereInput {
   switch (size) {
     case "small":
-      return { fileSize: { lt: 1_000_000 } };
+      return { fileSize: { lt: BYTES_PER_MB } };
     case "medium":
-      return { fileSize: { gte: 1_000_000, lt: 10_000_000 } };
+      return { fileSize: { gte: BYTES_PER_MB, lt: 10 * BYTES_PER_MB } };
     case "large":
-      return { fileSize: { gte: 10_000_000 } };
+      return { fileSize: { gte: 10 * BYTES_PER_MB } };
     default:
       return {};
   }
