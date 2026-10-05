@@ -36,6 +36,7 @@
    # Required for local development
    SESSION_SECRET=your-session-secret-here
    HONEYPOT_SECRET=your-honeypot-secret-here
+   IP_HASH_SALT=dev-ip-hash-salt-change-me
    SITE_URL=http://localhost:3000
 
    # YouTube Integration (optional for local dev)
@@ -340,6 +341,7 @@ For authenticated downloads (age-restricted or bot-protected content), upload a 
 
 - `SESSION_SECRET` - Random string for session encryption (generate with `openssl rand -hex 32`)
 - `HONEYPOT_SECRET` - Random string for form spam protection (generate with `openssl rand -hex 32`)
+- `IP_HASH_SALT` - Salt for hashing client IPs on security events (generate with `openssl rand -hex 32`)
 - `SITE_URL` - Your application URL (e.g., `http://localhost:3000` for local dev)
 
 ### Optional Variables
