@@ -178,6 +178,16 @@ export function restoreSession(storage?: KeyValueStorage | null, now = Date.now(
   return loadSession(storage, now);
 }
 
+/**
+ * The dashboard tab is saved when the curator changes it.
+ * The first paint must not write the tab back: Discard and Clear saved session
+ * would otherwise be undone by the page that is already open.
+ */
+export function dashboardTabToPersist(previous: string | null, next: string): string | null {
+  if (previous == null || previous === next || next === "overview") return null;
+  return next;
+}
+
 export function oldestTimestamp(states: SessionState[]): number | null {
   if (states.length === 0) return null;
   return states.reduce((oldest, state) => Math.min(oldest, state.timestamp), states[0]!.timestamp);
