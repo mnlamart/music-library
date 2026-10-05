@@ -89,13 +89,19 @@ function renderMenu(
     description: string | null;
     _count: { tracks: number };
   }>,
+  options?: { constrainHeight?: boolean },
 ) {
   const router = createMemoryRouter(
     [
       {
         path: "/",
         element: (
-          <AddToPlaylistMenu trackId="track-1" trackTitle="Test Song" playlists={playlists} />
+          <AddToPlaylistMenu
+            trackId="track-1"
+            trackTitle="Test Song"
+            playlists={playlists}
+            constrainHeight={options?.constrainHeight}
+          />
         ),
       },
     ],
@@ -122,6 +128,59 @@ test("expands inline create form and submits playlist name", async () => {
   await user.click(screen.getByRole("button", { name: "Create playlist" }));
 
   expect(mockCreateFetcher.submit).toHaveBeenCalled();
+});
+
+test("dropdown layout keeps a fixed playlist list ahead of New playlist", () => {
+  const { container } = renderMenu([
+    {
+      id: "playlist-1",
+      title: "Favorites",
+      description: null,
+      _count: { tracks: 3 },
+    },
+  ]);
+
+  const list = screen.getByTestId("add-to-playlist-list");
+  const menu = screen.getByRole("dialog", { name: "Add to playlist" });
+  expect(list.className).toContain("h-64");
+  expect(list.className).not.toContain("overflow-y-auto");
+  expect(menu.className).not.toContain("flex-col");
+  expect(container.querySelector("[data-radix-scroll-area-viewport]")).not.toBeNull();
+  expect(
+    list.compareDocumentPosition(screen.getByRole("button", { name: "New playlist" })) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+test("constrained sheet layout shrinks the list and keeps New playlist after it", async () => {
+  const user = userEvent.setup();
+  renderMenu(
+    [
+      {
+        id: "playlist-1",
+        title: "Favorites",
+        description: null,
+        _count: { tracks: 3 },
+      },
+    ],
+    { constrainHeight: true },
+  );
+
+  const list = screen.getByTestId("add-to-playlist-list");
+  const menu = screen.getByRole("dialog", { name: "Add to playlist" });
+  const newPlaylist = screen.getByRole("button", { name: "New playlist" });
+  expect(menu.className).toContain("flex");
+  expect(menu.className).toContain("flex-col");
+  expect(menu.className).toContain("min-h-0");
+  expect(list.className).toContain("h-64");
+  expect(list.className).toContain("min-h-0");
+  expect(list.className).toContain("shrink");
+  expect(list.className).toContain("overflow-y-auto");
+  expect(menu.contains(newPlaylist)).toBe(true);
+  expect(list.compareDocumentPosition(newPlaylist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+  await user.click(newPlaylist);
+  expect(screen.getByPlaceholderText("Playlist name")).toBeDefined();
 });
 
 test("shows new playlist button alongside existing playlists", () => {

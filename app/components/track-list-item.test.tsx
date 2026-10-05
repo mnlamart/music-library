@@ -608,6 +608,40 @@ test("curator mobile row menu opens TrackDetailsDialog without playing", async (
   expect(mockPlayTrack).not.toHaveBeenCalled();
 });
 
+test("mobile actions sheet scrolls inside a bounded flex column", async () => {
+  mockIsMobile = true;
+  const user = userEvent.setup();
+
+  renderTrackListItem({
+    track: playableTrack,
+    playlists: [],
+    showAudioFileDownload: true,
+  });
+
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+
+  const sheet = screen.getByTestId("track-actions-sheet");
+  expect(sheet.className).toContain("flex");
+  expect(sheet.className).toContain("flex-col");
+  expect(sheet.className).toContain("h-[60vh]");
+  expect(sheet.className).toContain("overflow-hidden");
+
+  const scroller = screen.getByTestId("track-actions-scroll");
+  expect(scroller.className).toContain("min-h-0");
+  expect(scroller.className).toContain("overflow-y-auto");
+  expect(sheet.contains(scroller)).toBe(true);
+  for (const name of ["Add to up next", "Add to queue", "Download"]) {
+    expect(scroller.contains(screen.getByRole("button", { name }))).toBe(true);
+  }
+
+  await user.click(screen.getByRole("button", { name: "Add to Playlist" }));
+
+  const playlistSheet = document.querySelector(".h-\\[80vh\\]");
+  expect(playlistSheet).not.toBeNull();
+  expect(playlistSheet!.className).not.toContain("overflow-y-auto");
+  expect(playlistSheet!.querySelector("[data-testid='track-actions-scroll']")).toBeNull();
+});
+
 test("showQuickAddToPlaylist opens playlist sheet directly on mobile", async () => {
   mockIsMobile = true;
   const user = userEvent.setup();

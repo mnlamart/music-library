@@ -86,6 +86,24 @@ vi.mock("#app/features/usage-analytics/report-play-event.client.ts", () => ({
   reportPlayEvent: vi.fn(),
 }));
 
+vi.mock("#app/components/add-to-playlist-menu", () => ({
+  AddToPlaylistMenu: ({
+    constrainHeight,
+    trackTitle,
+  }: {
+    constrainHeight?: boolean;
+    trackTitle: string;
+  }) => (
+    <div
+      data-testid="add-to-playlist-menu"
+      data-constrain-height={String(Boolean(constrainHeight))}
+    >
+      <button type="button">New playlist</button>
+      <span>{trackTitle}</span>
+    </div>
+  ),
+}));
+
 const mockTrack: FullTrack = {
   id: "track-1",
   title: "Test Song",
@@ -810,6 +828,29 @@ test("keeps the now-playing cover warm while the player is mounted", async () =>
     expect(screen.queryByTestId("player-now-playing-sheet")).toBeNull();
   });
   expect(screen.getByTestId("player-warm-cover")).toBeTruthy();
+});
+
+test("now playing add-to-playlist sheet constrains the menu so New playlist stays inside", async () => {
+  const user = userEvent.setup();
+  await renderPlayer();
+
+  await user.click(screen.getByLabelText("Open now playing"));
+  const nowPlaying = await screen.findByTestId("player-now-playing-sheet");
+  expect(nowPlaying.className).toContain("max-h-[85vh]");
+  expect(nowPlaying.className).not.toContain("overflow-y-auto");
+
+  await user.click(within(nowPlaying).getByLabelText("Add to playlist"));
+
+  const sheet = await screen.findByTestId("player-add-to-playlist-sheet");
+  expect(sheet.className).toContain("flex");
+  expect(sheet.className).toContain("flex-col");
+  expect(sheet.className).toContain("max-h-[60vh]");
+  expect(sheet.className).toContain("overflow-y-auto");
+  expect(within(sheet).getByTestId("add-to-playlist-menu")).toHaveAttribute(
+    "data-constrain-height",
+    "true",
+  );
+  expect(within(sheet).getByRole("button", { name: "New playlist" })).toBeTruthy();
 });
 
 test("overflow sheet opens with all action buttons", async () => {
