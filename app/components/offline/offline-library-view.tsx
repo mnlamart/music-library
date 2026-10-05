@@ -1,10 +1,15 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useRef } from "react";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useRef } from "react";
 import { Link } from "react-router";
 import { TrackListItem } from "#app/components/track-list-item.tsx";
 import { Button } from "#app/components/ui/button.tsx";
-import { ScrollArea } from "#app/components/ui/scroll-area";
 import { type OfflineTrackSummary } from "#app/features/offline-storage/types.ts";
+import {
+  estimateTrackListItemSize,
+  measureTrackListElement,
+  useListScrollMargin,
+  virtualRowOffset,
+} from "#app/utils/track-list-virtualizer.ts";
 
 type OfflineLibraryViewProps = {
   tracks: OfflineTrackSummary[];
@@ -37,14 +42,15 @@ function OfflineLibraryTrackItem({ track, index }: { track: OfflineTrackSummary;
 }
 
 export function OfflineLibraryView({ tracks }: OfflineLibraryViewProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollMargin = useListScrollMargin(listRef, tracks.length > 0);
 
-  const virtualizer = useVirtualizer({
+  const virtualizer = useWindowVirtualizer({
     count: tracks.length,
-    getScrollElement: () =>
-      parentRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
-    estimateSize: useCallback(() => 64, []),
+    estimateSize: (index) => estimateTrackListItemSize(index, false),
+    measureElement: measureTrackListElement,
     overscan: 5,
+    scrollMargin,
   });
 
   if (tracks.length === 0) {
@@ -61,38 +67,37 @@ export function OfflineLibraryView({ tracks }: OfflineLibraryViewProps) {
   }
 
   return (
-    <div className="h-[600px] w-full rounded-lg border">
-      <ScrollArea className="h-full w-full" ref={parentRef}>
-        <div
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            width: "100%",
-            position: "relative",
-          }}
-        >
-          {virtualizer.getVirtualItems().map((virtualItem) => {
-            const track = tracks[virtualItem.index];
-            if (!track) return null;
+    <div ref={listRef} className="relative min-w-0 rounded-lg border">
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: "100%",
+          position: "relative",
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const track = tracks[virtualItem.index];
+          if (!track) return null;
 
-            return (
-              <div
-                key={track.trackId}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: `${virtualItem.size}px`,
-                  transform: `translateY(${virtualItem.start}px)`,
-                }}
-                className="border-b last:border-b-0"
-              >
-                <OfflineLibraryTrackItem track={track} index={virtualItem.index} />
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
+          return (
+            <div
+              key={track.trackId}
+              data-index={virtualItem.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: virtualRowOffset(virtualItem.start, scrollMargin),
+              }}
+              className="border-b last:border-b-0"
+            >
+              <OfflineLibraryTrackItem track={track} index={virtualItem.index} />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

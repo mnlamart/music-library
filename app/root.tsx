@@ -367,7 +367,7 @@ function ShellLayout() {
       </header>
 
       <div
-        className="flex flex-1 flex-col pb-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom))] md:pb-0"
+        className="flex flex-1 flex-col pb-[calc(var(--bottom-bar-height)+var(--player-error-height,0px)+env(safe-area-inset-bottom))] md:pb-0"
         id="main-content"
       >
         <div className="container">
@@ -380,7 +380,7 @@ function ShellLayout() {
       <BottomNav />
 
       <footer
-        className="container py-8 pb-[calc(var(--bottom-bar-height)+2rem+env(safe-area-inset-bottom))] md:pb-8 text-center text-sm text-muted-foreground"
+        className="container py-8 pb-[calc(var(--bottom-bar-height)+var(--player-error-height,0px)+2rem+env(safe-area-inset-bottom))] md:pb-8 text-center text-sm text-muted-foreground"
         role="contentinfo"
       >
         <p>&copy; {new Date().getFullYear()} Music Library</p>

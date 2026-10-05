@@ -139,3 +139,40 @@ test("names the active genre when matching tracks are shown", async () => {
     screen.queryByRole("heading", { name: "No tracks tagged with Jazz" }),
   ).not.toBeInTheDocument();
 });
+
+function libraryUserTrack(id: string, title: string) {
+  return {
+    id: `ut-${id}`,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    track: {
+      id,
+      title,
+      artist: { id: "artist-1", name: "Miles Davis" },
+      duration: 180,
+      coverImage: null,
+      serviceUrl: null,
+      audioFiles: [],
+    },
+  };
+}
+
+test("scrolls library tracks with the page and keeps row spacing at the real row height", async () => {
+  renderLibrary({
+    ...baseLoaderData,
+    userTracks: [
+      libraryUserTrack("track-1", "Kind of Blue"),
+      libraryUserTrack("track-2", "So What"),
+    ],
+  });
+
+  const list = await screen.findByTestId("library-track-list");
+  expect(list.querySelector("[data-radix-scroll-area-viewport]")).toBeNull();
+
+  const first = list.querySelector<HTMLElement>("[data-index='1']");
+  const second = list.querySelector<HTMLElement>("[data-index='2']");
+  expect(first?.style.transform).toBe("translateY(64px)");
+  expect(second?.style.transform).toBe("translateY(144px)");
+  expect(
+    list.querySelector<HTMLElement>("[data-testid='library-virtual-spacer']")?.style.height,
+  ).toBe("224px");
+});

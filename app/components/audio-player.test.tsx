@@ -121,6 +121,29 @@ async function renderPlayer(props: Partial<AudioPlayerTestProps> = {}) {
   return { ...view, audioEl };
 }
 
+test("reserves page space for the playback error so the list can scroll past the player", async () => {
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const heightSpy = vi
+    .spyOn(HTMLElement.prototype, "offsetHeight", "get")
+    .mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === "player-playback-error" ? 48 : 0;
+    });
+
+  const { audioEl } = await renderPlayer();
+  Object.defineProperty(audioEl, "error", {
+    configurable: true,
+    value: { code: 1, message: "aborted" },
+  });
+  audioEl.dispatchEvent(new Event("error"));
+
+  await waitFor(() => {
+    expect(document.body.style.getPropertyValue("--player-error-height")).toBe("48px");
+  });
+
+  heightSpy.mockRestore();
+  consoleSpy.mockRestore();
+});
+
 test("shows playback error with user-friendly message for MEDIA_ERR_ABORTED (code 1)", async () => {
   const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -175,12 +198,12 @@ test("recovers from MEDIA_ERR_NETWORK with cached blob and resumes even when ele
     await import("#app/features/offline-storage/resolve-playback-url.client.ts");
   vi.mocked(resolvePlaybackAudioUrl).mockResolvedValue("blob:cached-track-1");
 
-  const playSpy = vi
-    .spyOn(window.HTMLMediaElement.prototype, "play")
-    .mockImplementation(function (this: HTMLMediaElement) {
-      Object.defineProperty(this, "paused", { configurable: true, value: false });
-      return Promise.resolve();
-    });
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    return Promise.resolve();
+  });
 
   const { audioEl } = await renderPlayer();
 
@@ -220,12 +243,12 @@ test("swaps to cached blob and resumes when going offline while playing", async 
       }),
   );
 
-  const playSpy = vi
-    .spyOn(window.HTMLMediaElement.prototype, "play")
-    .mockImplementation(function (this: HTMLMediaElement) {
-      Object.defineProperty(this, "paused", { configurable: true, value: false });
-      return Promise.resolve();
-    });
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    return Promise.resolve();
+  });
 
   // Ensure a true online → offline transition.
   window.dispatchEvent(new Event("online"));
@@ -351,12 +374,12 @@ test("recovers from MEDIA_ERR_SRC_NOT_SUPPORTED by re-resolving a fresh remote U
     .mockResolvedValueOnce("https://cdn.example/track-1.mp3")
     .mockResolvedValueOnce("https://cdn.example/track-1-fresh.mp3");
 
-  const playSpy = vi
-    .spyOn(window.HTMLMediaElement.prototype, "play")
-    .mockImplementation(function (this: HTMLMediaElement) {
-      Object.defineProperty(this, "paused", { configurable: true, value: false });
-      return Promise.resolve();
-    });
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    return Promise.resolve();
+  });
 
   const { audioEl } = await renderPlayer();
 
@@ -568,12 +591,12 @@ beforeEach(async () => {
 
 test("auto-plays after track change once the new audio URL has loaded", async () => {
   const wantsAutoPlayRef = { current: true };
-  const playSpy = vi
-    .spyOn(window.HTMLMediaElement.prototype, "play")
-    .mockImplementation(function (this: HTMLMediaElement) {
-      Object.defineProperty(this, "paused", { configurable: true, value: false });
-      return Promise.resolve();
-    });
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    return Promise.resolve();
+  });
 
   const { rerender } = render(
     <AudioPlayer {...defaultProps} playbackToken={1} wantsAutoPlayRef={wantsAutoPlayRef} />,
@@ -651,11 +674,11 @@ test("unlock tolerates jsdom play() returning undefined", async () => {
 });
 
 test("unlocks the audio element on the first pointer gesture", async () => {
-  const playSpy = vi
-    .spyOn(window.HTMLMediaElement.prototype, "play")
-    .mockImplementation(function (this: HTMLMediaElement) {
-      return Promise.resolve();
-    });
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    return Promise.resolve();
+  });
 
   await renderPlayer();
   playSpy.mockClear();
@@ -666,11 +689,11 @@ test("unlocks the audio element on the first pointer gesture", async () => {
 });
 
 test("unlocks the audio element on the first keydown", async () => {
-  const playSpy = vi
-    .spyOn(window.HTMLMediaElement.prototype, "play")
-    .mockImplementation(function (this: HTMLMediaElement) {
-      return Promise.resolve();
-    });
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    return Promise.resolve();
+  });
 
   await renderPlayer();
   playSpy.mockClear();
@@ -681,11 +704,11 @@ test("unlocks the audio element on the first keydown", async () => {
 });
 
 test("unlock is one-shot — later gestures of either type do not reload", async () => {
-  const playSpy = vi
-    .spyOn(window.HTMLMediaElement.prototype, "play")
-    .mockImplementation(function (this: HTMLMediaElement) {
-      return Promise.resolve();
-    });
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    return Promise.resolve();
+  });
 
   await renderPlayer();
   playSpy.mockClear();
@@ -912,12 +935,12 @@ function setProgress(audioEl: HTMLAudioElement, currentTime: number, duration: n
 }
 
 function mockPlay() {
-  return vi
-    .spyOn(window.HTMLMediaElement.prototype, "play")
-    .mockImplementation(function (this: HTMLMediaElement) {
-      setPaused(this, false);
-      return Promise.resolve();
-    });
+  return vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    setPaused(this, false);
+    return Promise.resolve();
+  });
 }
 
 /**

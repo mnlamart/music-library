@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/react-virtual";
+import { useWindowVirtualizer, defaultRangeExtractor, type Range } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { data, Link, useSearchParams } from "react-router";
 import { useCuratorFilterSession } from "#app/features/curator/use-curator-session.ts";
@@ -13,7 +13,6 @@ import { useSelection, useSelectionMode } from "#app/features/curator/selection.
 import { Checkbox } from "#app/components/ui/checkbox.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { Label } from "#app/components/ui/label.tsx";
-import { ScrollArea } from "#app/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -37,6 +36,12 @@ import {
   parseLibraryGenreParam,
 } from "#app/utils/library-user-tracks.server.ts";
 import { parseSortDirection, type SortDirection } from "#app/utils/sort-direction.ts";
+import {
+  estimateTrackListItemSize,
+  measureTrackListElement,
+  useListScrollMargin,
+  virtualRowOffset,
+} from "#app/utils/track-list-virtualizer.ts";
 import { userIsCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { type Route } from "./+types/library.index.ts";
 
@@ -229,7 +234,7 @@ export default function LibraryIndexRoute({
     searchParams.get("dir") ?? loaderDirection,
     defaultLibrarySortDirection(sort),
   );
-  const parentRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Selection mode and state management
   const { selectionMode } = useSelectionMode();
@@ -247,10 +252,7 @@ export default function LibraryIndexRoute({
     page: "/library",
     filters: libraryFilters,
     active: searchParams.toString().length > 0,
-    readScroll: () => {
-      const viewport = parentRef.current?.querySelector("[data-radix-scroll-area-viewport]");
-      return viewport instanceof HTMLElement ? viewport.scrollTop : window.scrollY;
-    },
+    readScroll: () => window.scrollY,
     onRestore: (state) => {
       const next = new URLSearchParams();
       for (const [key, value] of Object.entries(state.filters)) {
@@ -259,17 +261,13 @@ export default function LibraryIndexRoute({
       }
       setSearchParams(next, { preventScrollReset: true });
       window.setTimeout(() => {
-        const viewport = parentRef.current?.querySelector("[data-radix-scroll-area-viewport]");
-        if (viewport instanceof HTMLElement) viewport.scrollTop = state.scrollPosition;
+        window.scrollTo(0, state.scrollPosition);
       }, 50);
     },
   });
 
   const scrollLibraryToTop = useCallback(() => {
-    const viewport = parentRef.current?.querySelector("[data-radix-scroll-area-viewport]");
-    if (viewport instanceof HTMLElement) {
-      viewport.scrollTop = 0;
-    }
+    window.scrollTo({ top: 0 });
   }, []);
 
   const handleHasAudioOnlyChange = useCallback(
@@ -399,13 +397,16 @@ export default function LibraryIndexRoute({
     window.location.reload();
   }, [deselectAll]);
 
-  // Virtualization setup with sticky header support
-  const virtualizer = useVirtualizer({
+  // One document scroller. A nested 600px ScrollArea fought the page scroll on
+  // mobile, and its 64px slots were shorter than the 80px track rows.
+  const listReady = !offline && status === "success" && allItems.length > 0;
+  const scrollMargin = useListScrollMargin(listRef, listReady);
+  const virtualizer = useWindowVirtualizer({
     count: 1 + allItems.length + (hasNextPage ? 1 : 0), // 1 for header + items + 1 for loading indicator
-    getScrollElement: () =>
-      parentRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
-    estimateSize: () => 64, // Fixed track item size
-    overscan: 5, // Render 5 extra items outside viewport
+    estimateSize: (index) => estimateTrackListItemSize(index, true),
+    measureElement: measureTrackListElement,
+    overscan: 5,
+    scrollMargin,
     rangeExtractor: useCallback((range: Range) => {
       const next = new Set([0, ...defaultRangeExtractor(range)]);
       return [...next].sort((a, b) => a - b);
@@ -564,107 +565,101 @@ export default function LibraryIndexRoute({
           )}
         </div>
       ) : (
-        <div className="h-[600px] w-full">
-          {/* Virtualized Content with Sticky Header */}
-          <ScrollArea className="h-full w-full" ref={parentRef}>
-            <div
-              style={{
-                height: `${virtualizer.getTotalSize()}px`,
+        <div ref={listRef} data-testid="library-track-list" className="relative min-w-0">
+          <div
+            data-testid="library-virtual-spacer"
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const isHeader = virtualItem.index === 0;
+              const rowStyle = {
+                position: "absolute" as const,
+                top: 0,
+                left: 0,
                 width: "100%",
-                position: "relative",
-              }}
-            >
-              {virtualizer.getVirtualItems().map((virtualItem) => {
-                const isHeader = virtualItem.index === 0;
+                transform: virtualRowOffset(virtualItem.start, scrollMargin),
+              };
 
-                if (isHeader) {
-                  return (
-                    <div
-                      key="header"
-                      style={{
-                        position: "sticky",
-                        top: 0,
-                        zIndex: 10,
-                        height: `${virtualItem.size}px`,
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                      className="bg-background border-b"
-                    >
-                      <div className="flex items-center gap-4 px-1 py-3 text-sm font-medium text-muted-foreground sm:px-4">
-                        <div className="w-8 flex items-center justify-center min-w-8">#</div>
-                        <div className="flex-1 min-w-0">Title</div>
-                        <div className="hidden lg:flex items-center justify-center w-20">Saved</div>
-                        <div className="hidden md:flex text-xs text-muted-foreground w-12 text-center">
-                          Duration
-                        </div>
-                        <div className="flex items-center gap-1 w-8">Actions</div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // Adjust index for actual items (skip header)
-                const itemIndex = virtualItem.index - 1;
-
-                if (itemIndex >= allItems.length) {
-                  // Loading indicator
-                  return (
-                    <div
-                      key="loading"
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: `${virtualItem.size}px`,
-                        transform: `translateY(${virtualItem.start}px)`,
-                      }}
-                    >
-                      <div className="flex w-full justify-center py-4">
-                        {isFetchingNextPage ? (
-                          <Icon name="update" className="h-6 w-6 animate-spin" />
-                        ) : hasNextPage ? (
-                          "Loading more..."
-                        ) : (
-                          "Nothing more to load"
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-
-                const item = allItems[itemIndex];
-                if (!item) return null;
-
+              if (isHeader) {
                 return (
                   <div
-                    key={item.id}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: `${virtualItem.size}px`,
-                      transform: `translateY(${virtualItem.start}px)`,
-                    }}
+                    key="header"
+                    data-index={virtualItem.index}
+                    data-testid="library-virtual-row"
+                    ref={virtualizer.measureElement}
+                    style={{ ...rowStyle, position: "sticky", top: 0, zIndex: 10 }}
+                    className="bg-background border-b h-16"
                   >
-                    <LibraryTrackListItem
-                      track={item.track}
-                      userTrack={item}
-                      index={itemIndex}
-                      librarySort={sort}
-                      sortDirection={direction}
-                      playlists={playlists}
-                      showCheckbox={isCurator && selectionMode}
-                      isSelected={selectedTrackIds.has(item.track.id)}
-                      onToggleSelection={handleToggleSelection}
-                      isCurator={isCurator}
-                    />
+                    <div className="flex items-center gap-4 px-1 py-3 text-sm font-medium text-muted-foreground sm:px-4">
+                      <div className="w-8 flex items-center justify-center min-w-8">#</div>
+                      <div className="flex-1 min-w-0">Title</div>
+                      <div className="hidden lg:flex items-center justify-center w-20">Saved</div>
+                      <div className="hidden md:flex text-xs text-muted-foreground w-12 text-center">
+                        Duration
+                      </div>
+                      <div className="flex items-center gap-1 w-8">Actions</div>
+                    </div>
                   </div>
                 );
-              })}
-            </div>
-          </ScrollArea>
+              }
+
+              // Adjust index for actual items (skip header)
+              const itemIndex = virtualItem.index - 1;
+
+              if (itemIndex >= allItems.length) {
+                // Loading indicator
+                return (
+                  <div
+                    key="loading"
+                    data-index={virtualItem.index}
+                    data-testid="library-virtual-row"
+                    ref={virtualizer.measureElement}
+                    style={rowStyle}
+                  >
+                    <div className="flex w-full justify-center py-4">
+                      {isFetchingNextPage ? (
+                        <Icon name="update" className="h-6 w-6 animate-spin" />
+                      ) : hasNextPage ? (
+                        "Loading more..."
+                      ) : (
+                        "Nothing more to load"
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              const item = allItems[itemIndex];
+              if (!item) return null;
+
+              return (
+                <div
+                  key={item.id}
+                  data-index={virtualItem.index}
+                  data-testid="library-virtual-row"
+                  ref={virtualizer.measureElement}
+                  style={rowStyle}
+                >
+                  <LibraryTrackListItem
+                    track={item.track}
+                    userTrack={item}
+                    index={itemIndex}
+                    librarySort={sort}
+                    sortDirection={direction}
+                    playlists={playlists}
+                    showCheckbox={isCurator && selectionMode}
+                    isSelected={selectedTrackIds.has(item.track.id)}
+                    onToggleSelection={handleToggleSelection}
+                    isCurator={isCurator}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
