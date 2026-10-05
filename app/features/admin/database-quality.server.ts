@@ -73,7 +73,8 @@ export async function getMetadataIssues(): Promise<MetadataIssues> {
     }),
     prisma.track.count({
       where: {
-        OR: [{ duration: { lt: 5000 } }, { duration: { gt: 7200000 } }],
+        // Track.duration is stored in seconds, not milliseconds.
+        OR: [{ duration: { lt: 5 } }, { duration: { gt: 2 * 60 * 60 } }],
       },
     }),
     prisma.track.count({
