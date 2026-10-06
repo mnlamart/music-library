@@ -5,12 +5,15 @@
 import { test, expect } from "#tests/playwright-utils.ts";
 
 /**
- * Helper: dismiss the "Install app" banner if visible.
+ * Helper: dismiss the fixed "Install app" banner if visible.
+ * The home page also renders an in-flow card with the same button name, so the
+ * click is scoped to the fixed banner and must land without forcing through the nav.
  */
 async function dismissInstallBanner(page: import("@playwright/test").Page) {
-  const installBanner = page.getByRole("region", { name: "Install app" });
-  if (await installBanner.isVisible().catch(() => false)) {
-    await page.getByRole("button", { name: "Not now" }).click({ force: true });
+  const installBanner = page.getByTestId("install-app-banner");
+  const notNow = installBanner.getByRole("button", { name: "Not now" });
+  if (await notNow.isVisible().catch(() => false)) {
+    await notNow.click();
   }
 }
 
