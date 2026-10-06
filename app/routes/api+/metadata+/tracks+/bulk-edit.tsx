@@ -58,13 +58,13 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     body = await request.json();
   } catch {
-    throw data({ error: "Invalid JSON body" }, { status: 400 });
+    return data({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   // Validate request body
   const parseResult = BulkEditSchema.safeParse(body);
   if (!parseResult.success) {
-    throw data(
+    return data(
       {
         error: "Validation failed",
         details: parseResult.error.flatten().fieldErrors,
@@ -109,7 +109,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (tracks.length !== trackIds.length) {
     const foundIds = new Set(tracks.map((t) => t.id));
     const missingIds = trackIds.filter((id) => !foundIds.has(id));
-    throw data(
+    return data(
       {
         error: "Some tracks not found",
         missingTrackIds: missingIds,
@@ -126,7 +126,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     if (!artist) {
-      throw data({ error: "Artist not found" }, { status: 404 });
+      return data({ error: "Artist not found" }, { status: 404 });
     }
   }
 
@@ -138,7 +138,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
 
     if (!album) {
-      throw data({ error: "Album not found" }, { status: 404 });
+      return data({ error: "Album not found" }, { status: 404 });
     }
   }
 
@@ -146,7 +146,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (changes.genreIds !== undefined) {
     const resolved = await resolveOrderedGenres(changes.genreIds);
     if (!resolved.ok) {
-      throw data({ error: "One or more genres not found" }, { status: 404 });
+      return data({ error: "One or more genres not found" }, { status: 404 });
     }
     resolvedGenres = resolved.genres;
   }
