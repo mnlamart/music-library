@@ -143,9 +143,11 @@ export function QueueTable() {
       setEntityType("all");
       setSource("all");
       setPage(1);
+      const matter = queueMatter(claimed);
+      const joined = /[.!?]$/.test(matter) ? matter : `${matter}.`;
       toast({
         title: "Claim saved",
-        description: `${claimed.entityDetails.name}. Matter: ${queueMatter(claimed)}. Find it under My claims.`,
+        description: `${claimed.entityDetails.name}. Matter: ${joined} Find it under My claims.`,
       });
     }
     setReloadKey((value) => value + 1);

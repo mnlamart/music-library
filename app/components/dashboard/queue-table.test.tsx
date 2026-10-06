@@ -146,8 +146,9 @@ test("claiming a report points the curator at My claims", async () => {
       description: expect.stringContaining("So What — Miles Davis"),
     }),
   );
-  expect(mockToast.mock.calls[0]?.[0].description).toContain("The artist credit is wrong");
-  expect(mockToast.mock.calls[0]?.[0].description).toContain("My claims");
+  expect(mockToast.mock.calls[0]?.[0].description).toBe(
+    "So What — Miles Davis. Matter: The artist credit is wrong. Find it under My claims.",
+  );
   expect(mockLoad).toHaveBeenCalledWith(expect.stringContaining("status=mine"));
 });
 
