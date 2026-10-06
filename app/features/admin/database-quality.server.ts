@@ -2,13 +2,9 @@
  * Server-side functions for Admin Database Quality & Health Monitoring
  */
 
+import { loadDuplicateDashboard } from "#app/features/admin/duplicate-dashboard.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
-import {
-  METRIC_WEIGHTS,
-  type MetricTarget,
-  METRIC_TARGETS,
-  formatBytes,
-} from "./database-quality.ts";
+import { METRIC_WEIGHTS } from "./database-quality.ts";
 
 export function getHealthColor(percentage: number): "green" | "yellow" | "red" {
   if (percentage >= 90) return "green";
@@ -248,8 +244,11 @@ export async function getStorageStats(): Promise<StorageStats> {
     format: f.format,
     fileSize: f.fileSize || 0,
     trackId: f.trackId,
-    trackTitle: f.track.title,
-    artistName: f.track.artist.name,
+    // Orphaned storage rows keep a trackId after the Track row is gone.
+    // SQLite does not always enforce that foreign key, and this list is part
+    // of the page the admin overview links to for the health score.
+    trackTitle: f.track?.title ?? "Missing track",
+    artistName: f.track?.artist?.name ?? "—",
   }));
 
   return {
@@ -268,23 +267,13 @@ export async function getStorageStats(): Promise<StorageStats> {
   };
 }
 
+/**
+ * Same group total as `/music/admin/duplicates` with no filter: exact-hash and
+ * similar-audio groups, excluding ones marked intentional, capped at the page size.
+ */
 export async function getDuplicateTracksCount(): Promise<number> {
-  const duplicateHashes = await prisma.trackAudioFile.groupBy({
-    by: ["contentHash"],
-    _count: true,
-    having: {
-      contentHash: {
-        _count: {
-          gt: 1,
-        },
-      },
-    },
-    where: {
-      contentHash: { not: null },
-    },
-  });
-
-  return duplicateHashes.length;
+  const dashboard = await loadDuplicateDashboard("all");
+  return dashboard.stats.duplicateGroups;
 }
 
 export async function getOrphanedFilesCount(): Promise<number> {

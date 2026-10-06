@@ -34,9 +34,9 @@ export interface TrackDetails {
   artist: { id: string; name: string };
   albumRecord: { id: string; name: string } | null;
   duration: number | null;
-  createdAt: string;
-  releaseDate: string | null;
-  originalDate: string | null;
+  createdAt: string | Date;
+  releaseDate: string | Date | null;
+  originalDate: string | Date | null;
   coverImage: { objectKey: string } | null;
   service: { displayName: string } | null;
   serviceUrl: string | null;

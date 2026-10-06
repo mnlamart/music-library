@@ -12,9 +12,33 @@ import {
 
 const AWARD_TTL_MS = 5 * 60 * 1000;
 let awardedAt = 0;
+let awardQueue: Promise<unknown> = Promise.resolve();
 
 export function resetBadgeAwardCache() {
   awardedAt = 0;
+}
+
+/**
+ * The dashboard awards badges from the leaderboard and the activity feed at
+ * the same time. Run one award at a time so the second insert does not hit
+ * the unique curator/badge constraint and fail the page.
+ */
+function enqueueAward<T>(task: () => Promise<T>): Promise<T> {
+  const run = awardQueue.then(task, task);
+  awardQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "P2002"
+  );
 }
 
 function asNumber(value: unknown): number {
@@ -120,7 +144,16 @@ export async function loadCuratorCounts(): Promise<Map<string, CuratorCounts>> {
   return totals;
 }
 
-export async function awardCuratorBadges({
+export function awardCuratorBadges(options?: {
+  force?: boolean;
+  now?: number;
+}): Promise<{ awarded: number; skipped: boolean }> {
+  // The dashboard loads metrics, the leaderboard, and activity together.
+  // Each one awards badges, so parallel calls must not insert the same row.
+  return enqueueAward(() => awardCuratorBadgesOnce(options));
+}
+
+async function awardCuratorBadgesOnce({
   force = false,
   now = Date.now(),
 }: { force?: boolean; now?: number } = {}): Promise<{ awarded: number; skipped: boolean }> {
@@ -147,14 +180,22 @@ export async function awardCuratorBadges({
   });
   const have = new Set(existing.map((row) => `${row.curatorId}:${row.badgeType}`));
   const missing = earned.filter((row) => !have.has(`${row.curatorId}:${row.badgeType}`));
+  let awarded = missing.length;
   if (missing.length > 0) {
-    await prisma.curatorBadge.createMany({
-      data: missing.map((row) => ({ curatorId: row.curatorId, badgeType: row.badgeType })),
-    });
+    try {
+      await prisma.curatorBadge.createMany({
+        data: missing.map((row) => ({ curatorId: row.curatorId, badgeType: row.badgeType })),
+      });
+    } catch (error) {
+      // A second process can still collide between the lookup and the write.
+      // Keep the badges that won the insert instead of failing the dashboard.
+      if (!isUniqueConstraintError(error)) throw error;
+      awarded = 0;
+    }
   }
 
   awardedAt = now;
-  return { awarded: missing.length, skipped: false };
+  return { awarded, skipped: false };
 }
 
 export async function badgesForCurators(

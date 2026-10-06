@@ -1,5 +1,5 @@
 import { type SEOHandle } from "@nasa-gcn/remix-seo";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { ActivityTab } from "#app/components/dashboard/activity-tab.tsx";
 import { OverviewTab } from "#app/components/dashboard/overview-tab.tsx";
@@ -13,6 +13,7 @@ import {
   getLeaderboard,
 } from "#app/features/curator/dashboard.server.ts";
 import {
+  dashboardTabToPersist,
   saveSessionState,
   SESSION_SAVE_DEBOUNCE_MS,
 } from "#app/features/curator/session-recovery.client.ts";
@@ -41,12 +42,15 @@ export default function CuratorDashboard({ loaderData }: Route.ComponentProps) {
   const requested = searchParams.get("tab");
   const tab = TABS.includes(requested as (typeof TABS)[number]) ? requested! : "overview";
 
+  const seenTab = useRef<string | null>(null);
   useEffect(() => {
-    if (tab === "overview" || typeof saveSessionState !== "function") return;
+    const next = dashboardTabToPersist(seenTab.current, tab);
+    seenTab.current = tab;
+    if (!next || typeof saveSessionState !== "function") return;
     const timer = window.setTimeout(() => {
       saveSessionState({
         type: "activeTab",
-        dashboardTab: tab,
+        dashboardTab: next,
         timestamp: Date.now(),
       });
     }, SESSION_SAVE_DEBOUNCE_MS);

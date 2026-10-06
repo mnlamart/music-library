@@ -1,6 +1,7 @@
 import { data, Link } from "react-router";
 import { useState } from "react";
 import { AlbumEditDialog } from "#app/components/album-edit-dialog.tsx";
+import { CuratorNotes } from "#app/components/curator-notes.tsx";
 import { FlagForReviewDialog } from "#app/components/flag-for-review-dialog.tsx";
 import { Breadcrumbs, type BreadcrumbHandle } from "#app/components/breadcrumbs.tsx";
 import { MusicEntityHeader } from "#app/components/music-entity-header.tsx";
@@ -178,6 +179,13 @@ export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
           </div>
         )}
 
+        {canFlagForReview && user ? (
+          <section className="mt-10">
+            <h2 className="mb-4 text-xl font-semibold">Curator notes</h2>
+            <CuratorNotes entityType="album" entityId={album.id} currentUserId={user.id} />
+          </section>
+        ) : null}
+
         {canEdit && (
           <AlbumEditDialog
             album={{
@@ -188,6 +196,7 @@ export default function AlbumRoute({ loaderData }: Route.ComponentProps) {
             open={editDialogOpen}
             onOpenChange={setEditDialogOpen}
             onSaved={() => window.location.reload()}
+            currentUserId={user?.id}
           />
         )}
         {canFlagForReview && (

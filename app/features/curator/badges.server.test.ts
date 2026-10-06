@@ -81,6 +81,29 @@ afterEach(async () => {
 });
 
 describe("awardCuratorBadges", () => {
+  test("parallel awards insert a new badge once", async () => {
+    const curator = await createCurator("ParallelBadge");
+    const { track, artist } = await createTrack("Parallel Track");
+    await prisma.trackEdit.create({
+      data: {
+        trackId: track.id,
+        editedBy: curator.id,
+        title: track.title,
+        artistId: artist.id,
+        genre: "Jazz",
+      },
+    });
+    resetBadgeAwardCache();
+
+    const [first, second] = await Promise.all([
+      awardCuratorBadges({ force: true }),
+      awardCuratorBadges({ force: true }),
+    ]);
+
+    expect(first.awarded + second.awarded).toBe(1);
+    expect(await prisma.curatorBadge.count({ where: { curatorId: curator.id } })).toBe(1);
+  });
+
   test("9 edits do not store Getting Started and the 10th does, once", async () => {
     const curator = await createCurator("BadgeCurator");
     const { track, artist } = await createTrack("Badge Track");
@@ -118,6 +141,31 @@ describe("awardCuratorBadges", () => {
     const secondAward = await awardCuratorBadges({ force: true });
     expect(secondAward.awarded).toBe(0);
     expect(await prisma.curatorBadge.count({ where: { curatorId: curator.id } })).toBe(2);
+  });
+
+  test("overlapping awards store each badge once", async () => {
+    const curator = await createCurator("RaceCurator");
+    const { track, artist } = await createTrack("Race Track");
+    await prisma.trackEdit.create({
+      data: {
+        trackId: track.id,
+        editedBy: curator.id,
+        title: track.title,
+        artistId: artist.id,
+        genre: "Jazz",
+      },
+    });
+    resetBadgeAwardCache();
+
+    const results = await Promise.all([awardCuratorBadges(), awardCuratorBadges()]);
+
+    expect(results.filter((result) => result.skipped)).toHaveLength(1);
+    expect(results.reduce((sum, result) => sum + result.awarded, 0)).toBe(1);
+    expect(
+      (await prisma.curatorBadge.findMany({ where: { curatorId: curator.id } })).map(
+        (badge) => badge.badgeType,
+      ),
+    ).toEqual(["first_edit"]);
   });
 
   test("counts merges, genre changes, and resolved user reports without awarding early", async () => {

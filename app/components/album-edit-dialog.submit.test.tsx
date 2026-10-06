@@ -48,6 +48,25 @@ function renderDialog(current: Album) {
         element: <AlbumEditDialog album={current} open onOpenChange={() => {}} />,
       },
       {
+        path: "/api/artists/search",
+        loader: () => ({
+          artists: [{ id: "artist-2", name: "Audit Split Artist", trackCount: 1 }],
+        }),
+      },
+      {
+        path: "/api/images/from-url",
+        action: async () => ({
+          success: true,
+          image: {
+            id: "cover-from-url",
+            objectKey: "images/albums/album-1/from-url.jpg",
+            width: 600,
+            height: 600,
+            isPrimary: false,
+          },
+        }),
+      },
+      {
         path: "/api/images/upload",
         action: async () => ({
           success: true,
@@ -131,6 +150,60 @@ test("a name change keeps the existing CoverImage id instead of the object key",
     artistId: "artist-1",
     year: 1969,
     coverImageId: "cover-old",
+    comment: "",
+  });
+});
+
+test("saves a different artist chosen from the artist field", async () => {
+  const user = userEvent.setup();
+  const { getSubmission } = renderDialog(album);
+
+  const artistInput = screen.getByLabelText(/^Artist/);
+  await user.clear(artistInput);
+  await user.type(artistInput, "Audit");
+  await user.click(await screen.findByRole("button", { name: /Audit Split Artist/ }));
+  await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+  await waitFor(() => {
+    expect(getSubmission()).not.toBeNull();
+  });
+
+  expect(getSubmission()!.body).toEqual({
+    name: "Abbey Road",
+    artistId: "artist-2",
+    year: 1969,
+    coverImageId: null,
+    comment: "",
+  });
+});
+
+test("a cover from URL is saved as the CoverImage id", async () => {
+  const user = userEvent.setup();
+  const { getSubmission } = renderDialog(album);
+
+  await user.click(screen.getByRole("tab", { name: "Cover Art" }));
+  await user.click(screen.getByRole("button", { name: "From URL" }));
+  await user.type(screen.getByLabelText(/image url/i), "https://example.com/cover.jpg");
+  await user.click(screen.getByRole("button", { name: "Upload" }));
+  await user.click(screen.getByRole("tab", { name: "Metadata" }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: "Save Changes" }).hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+  await waitFor(() => {
+    expect(getSubmission()).not.toBeNull();
+  });
+
+  expect(getSubmission()!.body).toEqual({
+    name: "Abbey Road",
+    artistId: "artist-1",
+    year: 1969,
+    coverImageId: "cover-from-url",
     comment: "",
   });
 });

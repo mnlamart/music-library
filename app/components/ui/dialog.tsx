@@ -26,6 +26,27 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+/**
+ * Track editors unmount in the same turn they dismiss. Radix then leaves
+ * `pointer-events: none` on document.body, so the page underneath stops
+ * receiving clicks. Release that lock once no dialog is left open.
+ */
+function ClearStuckBodyPointerEvents() {
+  React.useEffect(() => {
+    return () => {
+      const release = () => {
+        if (document.querySelector("[role='dialog']")) return;
+        if (document.body.style.pointerEvents === "none") {
+          document.body.style.pointerEvents = "";
+        }
+      };
+      release();
+      window.setTimeout(release, 0);
+    };
+  }, []);
+  return null;
+}
+
 function isToastInteraction(event: {
   target: EventTarget | null;
   detail?: { originalEvent?: { target: EventTarget | null } };
@@ -61,6 +82,7 @@ const DialogContent = React.forwardRef<
         onInteractOutside?.(event);
       }}
     >
+      <ClearStuckBodyPointerEvents />
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
         <Icon name="cross-1" className="h-4 w-4" />

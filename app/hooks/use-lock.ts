@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type EntityType = "track" | "artist" | "album";
 
@@ -23,9 +23,14 @@ export interface UseLockResult {
   refresh: () => void;
 }
 
+const OTHER_LOCK_POLL_MS = 4000;
+const releaseInFlight = new Set<string>();
+
 /**
- * Hook to manage entity locks
- * Automatically acquires lock on mount and releases on unmount
+ * Hook to manage entity locks.
+ * Acquires on mount when autoAcquire is set, and releases an owned lock on unmount.
+ * A 409 from acquire means another curator holds the lock: the banner reads their name
+ * from the status endpoint, and editing stays disabled until that lock is gone.
  */
 export function useLock(
   entityType: EntityType,
@@ -37,90 +42,202 @@ export function useLock(
 ): UseLockResult {
   const { autoAcquire = true, autoRelease = true } = options;
 
+  const autoAcquireRef = useRef(autoAcquire);
+  const autoReleaseRef = useRef(autoRelease);
+  autoAcquireRef.current = autoAcquire;
+  autoReleaseRef.current = autoRelease;
+
+  const entityTypeRef = useRef(entityType);
+  const entityIdRef = useRef(entityId);
+  entityTypeRef.current = entityType;
+  entityIdRef.current = entityId;
+
+  const mountedRef = useRef(true);
+  const ownedRef = useRef(false);
+  const myUserIdRef = useRef<string | null>(null);
+  const acquireGen = useRef(0);
+
   const [lock, setLock] = useState<LockInfo | null>(null);
+  const [isLockedByOther, setIsLockedByOther] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Acquire lock
+  const releaseRequest = useCallback((type: EntityType, id: string) => {
+    ownedRef.current = false;
+    const key = `${type}:${id}`;
+    if (releaseInFlight.has(key)) return;
+    releaseInFlight.add(key);
+    void fetch("/api/locks/release", {
+      method: "POST",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entityType: type, entityId: id }),
+    })
+      .catch((err) => {
+        console.error("Failed to release lock:", err);
+      })
+      .finally(() => {
+        releaseInFlight.delete(key);
+      });
+  }, []);
+
+  const readStatus = useCallback(async (): Promise<LockInfo | null> => {
+    const type = entityTypeRef.current;
+    const id = entityIdRef.current;
+    const res = await fetch(
+      `/api/locks/status?entityType=${encodeURIComponent(type)}&entityId=${encodeURIComponent(id)}`,
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { lock: LockInfo | null };
+    return data.lock ?? null;
+  }, []);
+
+  const showMine = useCallback((next: LockInfo) => {
+    myUserIdRef.current = next.lockedBy;
+    ownedRef.current = true;
+    setLock(next);
+    setIsLockedByOther(false);
+    setError(null);
+  }, []);
+
+  const showOther = useCallback((next: LockInfo) => {
+    ownedRef.current = false;
+    setLock(next);
+    setIsLockedByOther(true);
+  }, []);
+
   const acquire = useCallback(() => {
+    const generation = ++acquireGen.current;
+    const type = entityTypeRef.current;
+    const id = entityIdRef.current;
     setIsLoading(true);
     setError(null);
 
-    fetch("/api/locks/acquire", {
+    void fetch("/api/locks/acquire", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entityType, entityId }),
+      body: JSON.stringify({ entityType: type, entityId: id }),
     })
       .then(async (res) => {
-        if (!res.ok) {
-          const data = (await res.json()) as { message?: string };
-          throw new Error(data.message || "Failed to acquire lock");
+        if (!mountedRef.current) {
+          // Only the latest acquire may release. An older response must not
+          // delete a lock the current editor still holds, or send a second release.
+          if (res.ok && autoReleaseRef.current && generation === acquireGen.current) {
+            releaseRequest(type, id);
+          }
+          return;
         }
-        return res.json() as Promise<{ lock: LockInfo }>;
-      })
-      .then((data) => {
-        setLock(data.lock);
-        setError(null);
+        if (generation !== acquireGen.current) return;
+
+        if (res.status === 409) {
+          let message = "This entity is currently locked by another curator";
+          try {
+            const body = (await res.json()) as { message?: string };
+            if (body.message) message = body.message;
+          } catch {
+            // The status lookup still identifies the holder.
+          }
+          const statusLock = await readStatus().catch(() => null);
+          if (!mountedRef.current || generation !== acquireGen.current) return;
+          if (statusLock && myUserIdRef.current && statusLock.lockedBy === myUserIdRef.current) {
+            showMine(statusLock);
+            return;
+          }
+          if (statusLock) {
+            showOther(statusLock);
+            setError(message);
+            return;
+          }
+          setError(message);
+          return;
+        }
+
+        if (!res.ok) {
+          let message = "Failed to acquire lock";
+          try {
+            const body = (await res.json()) as { message?: string };
+            if (body.message) message = body.message;
+          } catch {
+            // Fall back to the generic message.
+          }
+          throw new Error(message);
+        }
+
+        const data = (await res.json()) as { lock: LockInfo };
+        if (!mountedRef.current) {
+          if (autoReleaseRef.current && generation === acquireGen.current) releaseRequest(type, id);
+          return;
+        }
+        if (generation !== acquireGen.current) return;
+        showMine(data.lock);
       })
       .catch((err: unknown) => {
+        if (!mountedRef.current || generation !== acquireGen.current) return;
         setError(err instanceof Error ? err.message : "Unknown error");
       })
       .finally(() => {
-        setIsLoading(false);
+        if (mountedRef.current && generation === acquireGen.current) setIsLoading(false);
       });
-  }, [entityType, entityId]);
+  }, [readStatus, releaseRequest, showMine, showOther]);
 
-  // Release lock
   const release = useCallback(() => {
-    if (!lock) return;
+    const type = entityTypeRef.current;
+    const id = entityIdRef.current;
+    myUserIdRef.current = null;
+    setLock(null);
+    setIsLockedByOther(false);
+    if (ownedRef.current) releaseRequest(type, id);
+  }, [releaseRequest]);
 
-    fetch("/api/locks/release", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entityType, entityId }),
-    })
-      .then(() => {
-        setLock(null);
-      })
-      .catch((err) => {
-        console.error("Failed to release lock:", err);
-      });
-  }, [entityType, entityId, lock]);
-
-  // Refresh lock status
   const refresh = useCallback(() => {
-    fetch(`/api/locks/status?entityType=${entityType}&entityId=${entityId}`)
-      .then((res) => res.json() as Promise<{ lock: LockInfo | null }>)
-      .then((data) => {
-        setLock(data.lock);
+    void readStatus()
+      .then((next) => {
+        if (!mountedRef.current) return;
+        if (!next) {
+          const shouldAcquire = autoAcquireRef.current;
+          ownedRef.current = false;
+          myUserIdRef.current = null;
+          setLock(null);
+          setIsLockedByOther(false);
+          setError(null);
+          if (shouldAcquire) acquire();
+          return;
+        }
+        if (myUserIdRef.current && next.lockedBy === myUserIdRef.current) {
+          showMine(next);
+          return;
+        }
+        showOther(next);
       })
       .catch((err: unknown) => {
         console.error("Failed to fetch lock status:", err);
       });
-  }, [entityType, entityId]);
+  }, [acquire, readStatus, showMine, showOther]);
 
-  // Auto-acquire on mount
   useEffect(() => {
-    if (autoAcquire) {
-      acquire();
-    }
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (!autoReleaseRef.current || !ownedRef.current) return;
+      releaseRequest(entityTypeRef.current, entityIdRef.current);
+    };
+  }, [releaseRequest]);
+
+  useEffect(() => {
+    if (autoAcquire) acquire();
   }, [autoAcquire, acquire]);
 
-  // Auto-release on unmount
   useEffect(() => {
-    return () => {
-      if (autoRelease && lock) {
-        release();
-      }
-    };
-  }, [autoRelease, lock, release]);
-
-  const isLocked = !!lock;
-  const isLockedByOther = false; // Will be determined by comparing lock.lockedBy with current user
+    if (!isLockedByOther) return;
+    const timer = window.setInterval(() => {
+      refresh();
+    }, OTHER_LOCK_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [isLockedByOther, refresh]);
 
   return {
     lock,
-    isLocked,
+    isLocked: !!lock,
     isLockedByOther,
     isLoading,
     error,

@@ -41,6 +41,19 @@ export function ArtistMergeDialog({
   const [comment, setComment] = useState("");
   const [keepAsAlias, setKeepAsAlias] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
+  const [appliedPair, setAppliedPair] = useState(
+    `${initialSource?.id ?? ""}:${initialTarget?.id ?? ""}`,
+  );
+  const nextPair = `${initialSource?.id ?? ""}:${initialTarget?.id ?? ""}`;
+  // The dialog stays mounted while the parent picks a pair, so the first
+  // state snapshot is empty. Apply the latest pair before paint.
+  if (appliedPair !== nextPair) {
+    setAppliedPair(nextPair);
+    setSourceArtist(initialSource);
+    setTargetArtist(initialTarget);
+    setComment("");
+    setConfirmed(false);
+  }
 
   const isSubmitting = mergeFetcher.state !== "idle";
   const canSubmit = sourceArtist && targetArtist && comment.trim() && confirmed;

@@ -4,8 +4,15 @@
  */
 import { afterEach, expect, test } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
+import { loadDuplicateDashboard } from "./duplicate-dashboard.server.ts";
 import { percentOfTracksAffected } from "./database-quality.ts";
-import { countTracksWithMetadataIssues, getMetadataIssues } from "./database-quality.server.ts";
+import {
+  countTracksWithMetadataIssues,
+  getDuplicateTracksCount,
+  getMetadataIssues,
+  getStorageStats,
+} from "./database-quality.server.ts";
+import { getAdminOverviewHealth } from "./overview-health.server.ts";
 
 const createdTrackIds: string[] = [];
 const createdArtistIds: string[] = [];
@@ -162,4 +169,129 @@ test("affected track count is a distinct union and excludes artists without genr
   expect(percent).toBeGreaterThanOrEqual(0);
   expect(percent).toBeLessThanOrEqual(100);
   expect(percent).toBeCloseTo((affectedAfterOverlap / totalTracks) * 100);
+});
+
+test("storage stats keep going when an audio file's track row is gone", async () => {
+  const suffix = `orphan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Orphan Artist ${suffix}`,
+      normalizedName: `orphan-artist-${suffix}`,
+    },
+  });
+  const service = await prisma.service.create({
+    data: {
+      name: `orphan-service-${suffix}`,
+      displayName: `Orphan Service ${suffix}`,
+      baseUrl: "https://example.com",
+    },
+  });
+  const track = await prisma.track.create({
+    data: {
+      title: `Orphaned file ${suffix}`,
+      artistId: artist.id,
+      serviceId: service.id,
+      externalId: `orphan-track-${suffix}`,
+    },
+  });
+  const file = await prisma.trackAudioFile.create({
+    data: {
+      trackId: track.id,
+      serviceId: service.id,
+      objectKey: `orphan/${suffix}.mp3`,
+      format: "mp3",
+      fileSize: 2_000_000_000,
+    },
+  });
+
+  try {
+    await prisma.$executeRawUnsafe("PRAGMA foreign_keys = OFF");
+    await prisma.$executeRaw`DELETE FROM Track WHERE id = ${track.id}`;
+    const remaining = await prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(*) as count FROM TrackAudioFile WHERE id = ${file.id}
+    `;
+    expect(Number(remaining[0]?.count ?? 0)).toBe(1);
+
+    const stats = await getStorageStats();
+    const listed = stats.largestFiles.find((row) => row.id === file.id);
+    expect(listed?.trackTitle).toBe("Missing track");
+    expect(listed?.artistName).toBe("—");
+    expect(stats.totalBytes).toBeGreaterThanOrEqual(2_000_000_000);
+
+    const health = await getAdminOverviewHealth();
+    expect(health.storageBytes).toBe(stats.totalBytes);
+  } finally {
+    await prisma.$executeRawUnsafe("PRAGMA foreign_keys = OFF");
+    await prisma.trackAudioFile.deleteMany({ where: { id: file.id } });
+    await prisma.track.deleteMany({ where: { id: track.id } });
+    await prisma.service.deleteMany({ where: { id: service.id } });
+    await prisma.artist.deleteMany({ where: { id: artist.id } });
+    await prisma.$executeRawUnsafe("PRAGMA foreign_keys = ON");
+  }
+});
+
+test("duplicate group count includes similar audio and matches the duplicates page", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const beforeAll = await loadDuplicateDashboard("all");
+  const beforeExact = await loadDuplicateDashboard("exact");
+
+  const artist = await prisma.artist.create({
+    data: {
+      name: `Dup Count Artist ${suffix}`,
+      normalizedName: `dup-count-artist-${suffix}`,
+    },
+  });
+  createdArtistIds.push(artist.id);
+  const service = await prisma.service.create({
+    data: {
+      name: `dup-count-service-${suffix}`,
+      displayName: `Dup Count Service ${suffix}`,
+      baseUrl: "https://example.com",
+    },
+  });
+  createdServiceIds.push(service.id);
+
+  const fixtures = [
+    { title: "Exact A", contentHash: `exact-${suffix}`, audioFingerprint: `exact-a-${suffix}` },
+    { title: "Exact B", contentHash: `exact-${suffix}`, audioFingerprint: `exact-b-${suffix}` },
+    { title: "Similar A", contentHash: `similar-a-${suffix}`, audioFingerprint: "0123456789" },
+    { title: "Similar B", contentHash: `similar-b-${suffix}`, audioFingerprint: "012345678X" },
+  ];
+
+  const tracks = await Promise.all(
+    fixtures.map((fixture) =>
+      prisma.track.create({
+        data: {
+          title: `${fixture.title} ${suffix}`,
+          artistId: artist.id,
+          serviceId: service.id,
+          externalId: `quality-dup-${suffix}-${fixture.title.replace(/\s+/g, "-")}`,
+          duration: 180,
+          year: 2020,
+          audioFiles: {
+            create: {
+              objectKey: `audio/quality-dup/${suffix}/${fixture.title.replace(/\s+/g, "-")}.mp3`,
+              contentHash: fixture.contentHash,
+              audioFingerprint: fixture.audioFingerprint,
+              format: "mp3",
+              fileName: `${fixture.title}.mp3`,
+              fileSize: 4096,
+              serviceId: service.id,
+            },
+          },
+        },
+      }),
+    ),
+  );
+  createdTrackIds.push(...tracks.map((track) => track.id));
+
+  const all = await loadDuplicateDashboard("all");
+  const exact = await loadDuplicateDashboard("exact");
+  const count = await getDuplicateTracksCount();
+
+  expect(all.groups.some((group) => group.type === "similar")).toBe(true);
+  expect(all.stats.duplicateGroups).toBe(beforeAll.stats.duplicateGroups + 2);
+  expect(exact.stats.duplicateGroups).toBe(beforeExact.stats.duplicateGroups + 1);
+  expect(count).toBe(all.stats.duplicateGroups);
+  expect(count).toBeGreaterThan(exact.stats.duplicateGroups);
 });

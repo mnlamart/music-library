@@ -82,6 +82,22 @@ describe("getCuratorsForAutocomplete against sqlite", () => {
     expect(matchedIds.has(outsider!)).toBe(false);
   });
 
+  test("lists curators for a bare @ without matching listeners", async () => {
+    const findMany = vi.spyOn(prisma.user, "findMany");
+    await getCuratorsForAutocomplete("");
+    const args = findMany.mock.calls.at(-1)?.[0];
+    findMany.mockRestore();
+
+    expect(args).toBeDefined();
+    expect(JSON.stringify(args)).not.toContain("contains");
+
+    const rows = await prisma.user.findMany({ ...args, take: undefined });
+    const usernames = rows.map((row) => row.username);
+    expect(usernames).toContain(curatorUsername);
+    expect(usernames).toContain(nameMatchUsername);
+    expect(usernames).not.toContain(outsiderUsername);
+  });
+
   test("sends query arguments the sqlite client accepts", async () => {
     const findMany = vi.spyOn(prisma.user, "findMany");
 

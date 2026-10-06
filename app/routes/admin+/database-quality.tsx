@@ -475,7 +475,9 @@ function DuplicatesTab({ loaderData }: { loaderData: LoaderData }) {
       <Card>
         <CardHeader>
           <CardTitle>Duplicate Detection</CardTitle>
-          <CardDescription>Tracks with identical audio content (by content hash)</CardDescription>
+          <CardDescription>
+            Exact and similar audio groups on the duplicate management page
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
