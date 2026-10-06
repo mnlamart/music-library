@@ -222,6 +222,7 @@ test("shows Track Deleted when deleting the last extra unmounts the group", asyn
   await user.click(screen.getByRole("button", { name: /^delete$/i }));
 
   const dialog = await screen.findByRole("alertdialog");
+  expect(within(dialog).getByRole("heading", { name: "Delete Copy Song?" })).toBeInTheDocument();
   await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
 
   expect(fetcherControls.get().submit).toHaveBeenCalledWith(null, {
@@ -247,8 +248,8 @@ test("shows Track Deleted when deleting the last extra unmounts the group", asyn
 
   expect(toastSpy).toHaveBeenCalledTimes(1);
   expect(toastSpy).toHaveBeenCalledWith({
-    title: "Track Deleted",
-    description: "Track has been removed from the database.",
+    title: "Track deleted",
+    description: "Copy Song. It has been removed from the library.",
   });
 });
 
@@ -289,8 +290,8 @@ test("shows Track Deleted once when the group stays mounted after delete", async
   expect(screen.queryByText("Copy Song")).not.toBeInTheDocument();
   expect(toastSpy).toHaveBeenCalledTimes(1);
   expect(toastSpy).toHaveBeenCalledWith({
-    title: "Track Deleted",
-    description: "Track has been removed from the database.",
+    title: "Track deleted",
+    description: "Copy Song. It has been removed from the library.",
   });
 });
 

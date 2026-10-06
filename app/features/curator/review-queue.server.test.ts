@@ -185,3 +185,37 @@ test("my claims is empty when the curator is not identified", async () => {
   expect(result.items).toEqual([]);
   expect(result.total).toBe(0);
 });
+
+test("a listener's report list includes only reports they filed", async () => {
+  const owner = await createCurator("Ada");
+  const other = await createCurator("Grace");
+  const { track } = await createTrack("Flamenco Sketches");
+  const mine = await prisma.reviewQueueItem.create({
+    data: {
+      entityType: "track",
+      entityId: track.id,
+      source: "user_report",
+      issueType: "wrong_metadata",
+      description: "The title is misspelled",
+      reporterId: owner.id,
+      status: "open",
+    },
+  });
+  await prisma.reviewQueueItem.create({
+    data: {
+      entityType: "track",
+      entityId: track.id,
+      source: "user_report",
+      issueType: "other",
+      description: "Someone else's report",
+      reporterId: other.id,
+      status: "open",
+    },
+  });
+
+  const result = await listReviewQueue({ status: "all", reporterId: owner.id });
+
+  expect(result.items.map((item) => item.id)).toEqual([mine.id]);
+  expect(result.items[0]?.entityDetails.name).toContain("Flamenco Sketches");
+  expect(result.items[0]?.entityDetails.name).not.toBe(track.id);
+});

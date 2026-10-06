@@ -276,10 +276,13 @@ describe("curator activity", () => {
     const page = await getActivity({ curatorId: alice.id, page: 1, pageSize: 20, now });
     expect(page.items.map((item) => item.message)).toEqual([
       `Alice split '${artist.name}' (1 minute ago)`,
-      "Alice edited 'Track X' (2 minutes ago)",
+      "Alice edited 'Track X — Artist Track X' (2 minutes ago)",
     ]);
     expect(page.items[0]?.action).toBe("split");
+    expect(page.items[0]?.matter).toBe("Split: side project");
     expect(page.items[1]?.action).toBe("edited");
+    expect(page.items[1]?.entityName).toBe("Track X — Artist Track X");
+    expect(page.items[1]?.matter).toBeNull();
 
     await prisma.trackEdit.createMany({
       data: Array.from({ length: 20 }, (_, index) => ({

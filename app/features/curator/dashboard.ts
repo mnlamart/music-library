@@ -65,6 +65,7 @@ export type ActivityItem = {
   entityName: string;
   summary: string;
   message: string;
+  matter: string | null;
   createdAt: string;
   curator: CuratorRef;
   badges?: CuratorBadgeSummary[];
@@ -142,6 +143,16 @@ export function activityVerb(action: ActivityAction): string {
   if (action === "merged") return "merged";
   if (action === "split") return "split";
   return "edited";
+}
+
+export function activityMatter(comment: string | null | undefined): string | null {
+  const text = comment?.trim() ?? "";
+  if (!text) return null;
+  if (text.startsWith("SPLIT:")) {
+    const detail = text.slice("SPLIT:".length).trim();
+    return detail ? `Split: ${detail}` : "Split the artist.";
+  }
+  return text;
 }
 
 export function activitySummary(

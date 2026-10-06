@@ -7,6 +7,7 @@ import {
   DASHBOARD_METRICS_CACHE_KEY,
   DASHBOARD_METRICS_TTL_MS,
   activityAction,
+  activityMatter,
   activitySummary,
   assignRanks,
   completenessPercent,
@@ -276,7 +277,10 @@ async function loadEditRows(
       where,
       orderBy: { editedAt: "desc" },
       take,
-      include: { user: userSelect, track: { select: { id: true, title: true } } },
+      include: {
+        user: userSelect,
+        track: { select: { id: true, title: true, artist: { select: { name: true } } } },
+      },
     });
     for (const row of tracks) {
       rows.push({
@@ -285,7 +289,7 @@ async function loadEditRows(
         comment: row.comment,
         entityType: "track",
         entityId: row.trackId,
-        entityName: row.track.title,
+        entityName: `${row.track.title} — ${row.track.artist.name}`,
         curator: row.user,
       });
     }
@@ -316,7 +320,10 @@ async function loadEditRows(
       where,
       orderBy: { editedAt: "desc" },
       take,
-      include: { user: userSelect, album: { select: { id: true, name: true } } },
+      include: {
+        user: userSelect,
+        album: { select: { id: true, name: true, artist: { select: { name: true } } } },
+      },
     });
     for (const row of albums) {
       rows.push({
@@ -325,7 +332,7 @@ async function loadEditRows(
         comment: row.comment,
         entityType: "album",
         entityId: row.albumId,
-        entityName: row.album.name,
+        entityName: `${row.album.name} — ${row.album.artist.name}`,
         curator: row.user,
       });
     }
@@ -345,6 +352,7 @@ function toActivityItem(row: EditRow, now: Date, badges: ActivityItem["badges"])
     entityName: row.entityName,
     summary,
     message: formatActivityLine(summary, row.createdAt, now),
+    matter: activityMatter(row.comment),
     createdAt: row.createdAt.toISOString(),
     curator: row.curator,
     badges,

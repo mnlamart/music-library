@@ -1,5 +1,5 @@
 import { useFetcher } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "#app/components/ui/button";
 import {
   Dialog,
@@ -19,6 +19,8 @@ import {
 import { Label } from "#app/components/ui/label";
 import { Textarea } from "#app/components/ui/textarea";
 import { Icon } from "#app/components/ui/icon";
+import { toast } from "#app/components/ui/use-toast.ts";
+import { filedReportMessage, queueMatter } from "#app/features/curator/review-queue.ts";
 
 interface FlagForReviewDialogProps {
   entityType: "track" | "artist" | "album";
@@ -49,15 +51,23 @@ export function FlagForReviewDialog({
 
   const isSubmitting = fetcher.state !== "idle";
   const isValid = flagType !== "";
+  const seenResult = useRef<unknown>(null);
 
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.success) {
-      // Reset form and close dialog on success
-      setFlagType("");
-      setComment("");
-      onOpenChange(false);
-    }
-  }, [fetcher.state, fetcher.data, onOpenChange]);
+    if (fetcher.state !== "idle" || !fetcher.data?.success) return;
+    if (seenResult.current === fetcher.data) return;
+    seenResult.current = fetcher.data;
+    toast({
+      title: "Flag filed",
+      description: filedReportMessage(
+        entityName,
+        queueMatter({ issueType: flagType, description: comment }),
+      ),
+    });
+    setFlagType("");
+    setComment("");
+    onOpenChange(false);
+  }, [comment, entityName, fetcher.data, fetcher.state, flagType, onOpenChange]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

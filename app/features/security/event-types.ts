@@ -14,3 +14,25 @@ export const SECURITY_EVENT_TYPES = {
 } as const;
 
 export type SecurityEventType = (typeof SECURITY_EVENT_TYPES)[keyof typeof SECURITY_EVENT_TYPES];
+
+export const SECURITY_EVENT_LABELS: Record<SecurityEventType, string> = {
+  login_success: "Successful login",
+  login_failed: "Failed login",
+  account_created: "Account created",
+  account_disabled: "Account disabled",
+  account_enabled: "Account enabled",
+  account_deleted: "Account deleted",
+  password_changed: "Password changed",
+  password_reset: "Password reset",
+  role_changed: "Role changed",
+  service_connected: "Service connected",
+  service_disconnected: "Service disconnected",
+  session_revoked: "Session revoked",
+};
+
+export function securityEventLabel(eventType: string): string {
+  if (eventType in SECURITY_EVENT_LABELS) {
+    return SECURITY_EVENT_LABELS[eventType as SecurityEventType];
+  }
+  return eventType.replaceAll("_", " ");
+}
