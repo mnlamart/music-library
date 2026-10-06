@@ -2,7 +2,7 @@ import { describe, expect, test, vi, beforeEach } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { parseMentions } from "#app/utils/mention-parser.server.ts";
-import { action } from "./$id.ts";
+import { action, clientAction } from "./$id.ts";
 
 vi.mock("#app/utils/curator.server.ts", () => ({
   requireCuratorOrAdmin: vi.fn(),
@@ -215,5 +215,21 @@ describe("DELETE /api/curator/notes/:id", () => {
     expect(prisma.curatorNote.delete).toHaveBeenCalledWith({
       where: { id: "note-1" },
     });
+  });
+});
+
+describe("clientAction for /api/curator/notes/:id", () => {
+  test("forwards edit and delete submissions to the server action", async () => {
+    const payload = { success: true };
+    const serverAction = vi.fn().mockResolvedValue(payload);
+
+    const result = await clientAction({
+      request: new Request("http://localhost/api/curator/notes/note-1", { method: "DELETE" }),
+      params: { id: "note-1" },
+      serverAction,
+    } as never);
+
+    expect(serverAction).toHaveBeenCalledOnce();
+    expect(result).toEqual(payload);
   });
 });

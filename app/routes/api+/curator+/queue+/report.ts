@@ -2,7 +2,12 @@ import { data } from "react-router";
 import { z } from "zod";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { type Route } from "./+types/report";
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 const reportSchema = z.object({
   trackId: z.string().min(1),

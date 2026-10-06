@@ -2,6 +2,12 @@ import { data, type ActionFunctionArgs } from "react-router";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { parseMentions } from "#app/utils/mention-parser.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/$id.ts";
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({ request, params }: ActionFunctionArgs) {
   const curatorId = await requireCuratorOrAdmin(request);

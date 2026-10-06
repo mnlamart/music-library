@@ -2,7 +2,7 @@ import { describe, expect, test, vi, beforeEach } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { parseMentions } from "#app/utils/mention-parser.server.ts";
-import { loader, action } from "./index.ts";
+import { loader, action, clientAction } from "./index.ts";
 
 vi.mock("#app/utils/curator.server.ts", () => ({
   requireCuratorOrAdmin: vi.fn(),
@@ -354,5 +354,21 @@ describe("POST /api/curator/notes", () => {
       expect(e.init.status).toBe(400);
       expect(e.data.message).toContain("must be for the same entity");
     }
+  });
+});
+
+describe("clientAction for /api/curator/notes", () => {
+  test("forwards the fetcher submission to the server action", async () => {
+    const payload = { note: { id: "note-1" } };
+    const serverAction = vi.fn().mockResolvedValue(payload);
+
+    const result = await clientAction({
+      request: new Request("http://localhost/api/curator/notes", { method: "POST" }),
+      params: {},
+      serverAction,
+    } as never);
+
+    expect(serverAction).toHaveBeenCalledOnce();
+    expect(result).toEqual(payload);
   });
 });

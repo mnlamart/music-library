@@ -8,6 +8,10 @@ const ROUTES_DIR = join(fileURLToPath(new URL(".", import.meta.url)));
 /**
  * Action-only routes hit via raw fetch/XHR (not React Router Form/fetcher).
  * Those POSTs go straight to the server action and do not need clientAction.
+ *
+ * The installed app is a SPA: the service worker serves index.html with
+ * isSpaMode, and React Router returns 405 if a fetcher or <Form> submits to a
+ * route that does not export clientAction. Do not allowlist those routes.
  */
 const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/upload-audio.tsx",
@@ -16,9 +20,6 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/metadata+/tracks+/bulk-edit.tsx",
   "_auth+/webauthn+/registration.ts",
   "_auth+/webauthn+/authentication.ts",
-  // Curator notes JSON APIs (called via fetch)
-  "api+/curator+/notes+/index.ts",
-  "api+/curator+/notes+/$id.ts",
   // Lock system JSON APIs (called via fetch)
   "api+/locks+/acquire.ts",
   "api+/locks+/release.ts",
@@ -36,16 +37,6 @@ const ACTION_ONLY_RAW_FETCH_ALLOWLIST = new Set([
   "api+/rooms+/$roomCode.queue.tsx",
   "api+/rooms+/$roomCode.play-events.tsx",
   "api+/rooms+/$roomCode.audition.ts",
-  // Curator Queue JSON APIs
-  "api+/curator+/queue+/report.ts",
-  "api+/curator+/queue+/flag.ts",
-  "api+/curator+/queue+/$id.claim.ts",
-  "api+/curator+/queue+/$id.unclaim.ts",
-  "api+/curator+/queue+/$id.resolve.ts",
-  // Lock Management JSON APIs
-  "api+/locks+/acquire.ts",
-  "api+/locks+/release.ts",
-  "api+/locks+/force-unlock.ts",
 ]);
 
 function walkFiles(dir: string): string[] {
