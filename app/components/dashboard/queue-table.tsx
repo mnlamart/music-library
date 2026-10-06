@@ -26,7 +26,11 @@ import {
   entityPath,
   entityTypeLabel,
   QUEUE_STATUS_MINE,
+  queueActionFeedback,
   queueMatter,
+  queueStatusLabel,
+  resolutionLabel,
+  type QueueMove,
   type ReviewQueueListItem,
 } from "#app/features/curator/review-queue.ts";
 import { useCuratorFilterSession } from "#app/features/curator/use-curator-session.ts";
@@ -131,23 +135,25 @@ export function QueueTable() {
   }, [url, reloadKey]);
 
   const lastAction = useRef<unknown>(null);
-  const pendingClaim = useRef<ReviewQueueListItem | null>(null);
+  const pendingMove = useRef<QueueMove | null>(null);
   useEffect(() => {
     if (actionFetcher.state !== "idle" || actionFetcher.data == null) return;
     if (lastAction.current === actionFetcher.data) return;
     lastAction.current = actionFetcher.data;
-    const claimed = pendingClaim.current;
-    pendingClaim.current = null;
-    if (actionFetcher.data.success && claimed) {
-      setStatus(QUEUE_STATUS_MINE);
+    const move = pendingMove.current;
+    pendingMove.current = null;
+    if (actionFetcher.data.success && move) {
+      const feedback = queueActionFeedback(move);
+      setStatus(feedback.status);
       setEntityType("all");
       setSource("all");
       setPage(1);
-      const matter = queueMatter(claimed);
-      const joined = /[.!?]$/.test(matter) ? matter : `${matter}.`;
+      toast({ title: feedback.title, description: feedback.description });
+    } else if (actionFetcher.data.success === false) {
       toast({
-        title: "Claim saved",
-        description: `${claimed.entityDetails.name}. Matter: ${joined} Find it under My claims.`,
+        title: "Could not update the queue",
+        description: actionFetcher.data.error ?? "Try again.",
+        variant: "destructive",
       });
     }
     setReloadKey((value) => value + 1);
@@ -166,8 +172,8 @@ export function QueueTable() {
     <div data-testid="queue-table">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Open reports stay in the shared pool. After you claim one, the matter and the track,
-          artist, or album name stay listed under My claims.
+          Open reports stay in the shared pool. Claim one and it stays under My claims. Unclaim puts
+          it back on Open. Resolve keeps it under Resolved, with the decision written on the card.
         </p>
         <Button
           type="button"
@@ -281,7 +287,7 @@ export function QueueTable() {
                         {item.priority === 3 ? "High" : item.priority === 2 ? "Medium" : "Low"}
                       </Badge>
                       <Badge variant={item.status === "claimed" ? "default" : "outline"}>
-                        {item.status}
+                        {queueStatusLabel(item.status)}
                       </Badge>
                       <Badge variant="outline">{SOURCE_LABELS[item.source] ?? item.source}</Badge>
                       <Badge variant="outline">
@@ -311,7 +317,7 @@ export function QueueTable() {
                     </div>
                     {item.resolution ? (
                       <div className="mt-2 rounded bg-muted p-2 text-sm">
-                        <strong>Resolution:</strong> {item.resolution}
+                        <strong>Resolution:</strong> {resolutionLabel(item.resolution)}
                         {item.resolutionComment ? (
                           <p className="mt-1">{item.resolutionComment}</p>
                         ) : null}
@@ -323,7 +329,7 @@ export function QueueTable() {
                       <Button
                         size="sm"
                         onClick={() => {
-                          pendingClaim.current = item;
+                          pendingMove.current = { kind: "claim", item };
                           submitAction(`/api/curator/queue/${item.id}/claim`);
                         }}
                       >
@@ -335,7 +341,10 @@ export function QueueTable() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => submitAction(`/api/curator/queue/${item.id}/unclaim`)}
+                          onClick={() => {
+                            pendingMove.current = { kind: "unclaim", item };
+                            submitAction(`/api/curator/queue/${item.id}/unclaim`);
+                          }}
                         >
                           Unclaim
                         </Button>
@@ -431,6 +440,12 @@ export function QueueTable() {
               disabled={!selectedItem || !resolution || !resolutionComment.trim()}
               onClick={() => {
                 if (!selectedItem) return;
+                pendingMove.current = {
+                  kind: "resolve",
+                  item: selectedItem,
+                  resolution,
+                  resolutionComment,
+                };
                 const formData = new FormData();
                 formData.set("resolution", resolution);
                 formData.set("resolutionComment", resolutionComment);

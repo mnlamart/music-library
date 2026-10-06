@@ -27,6 +27,7 @@ import {
 import { markDuplicateGroupIntentional } from "#app/features/admin/duplicate-dashboard.server.ts";
 import { requireUserWithRole } from "#app/utils/permissions.server.ts";
 import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { redirectWithToast } from "#app/utils/toast.server.ts";
 import { type Route } from "./+types/duplicates.ts";
 
 export async function clientAction(args: Route.ClientActionArgs) {
@@ -117,7 +118,16 @@ export async function action({ request }: Route.ActionArgs) {
     createdBy: userId,
   });
 
-  return data({ ok: true as const });
+  const groupTitle = formData.get("groupTitle");
+  const title =
+    typeof groupTitle === "string" && groupTitle.trim().length > 0
+      ? groupTitle.trim()
+      : "This group";
+
+  return redirectWithToast("/music/admin/duplicates?filter=intentional", {
+    title: "Kept both",
+    description: `${title}. This group is listed under Intentional.`,
+  });
 }
 
 function formatBytes(bytes: number): string {
@@ -139,15 +149,7 @@ function DuplicateGroupCard({
   const deleteFetcher = useFetcher();
   const { toast } = useToast();
   const toastedTrackId = useRef<string | null>(null);
-
-  const handleDelete = (trackId: string) => {
-    deleteFetcher.submit(null, {
-      method: "DELETE",
-      action: `/api/admin/tracks/${trackId}`,
-    });
-    setDeleteTrackId(null);
-  };
-
+  const pendingDelete = useRef<{ id: string; title: string } | null>(null);
   const isDeleting = deleteFetcher.state === "submitting";
 
   // Toast when the action payload arrives. A one-track group leaves the loader
@@ -161,19 +163,21 @@ function DuplicateGroupCard({
     toastedTrackId.current = trackId;
 
     const { objectsDeleted, objectsPreserved } = result;
+    const pending = pendingDelete.current;
+    const deletedTitle = pending && pending.id === trackId ? pending.title : "This track";
 
-    let description = "Track has been removed from the database.";
+    let detail = "It has been removed from the library.";
     if (objectsDeleted > 0 && objectsPreserved > 0) {
-      description = `Deleted ${objectsDeleted} audio file(s), preserved ${objectsPreserved} shared file(s).`;
+      detail = `Deleted ${objectsDeleted} audio file(s), preserved ${objectsPreserved} shared file(s).`;
     } else if (objectsPreserved > 0) {
-      description = `Track removed. All ${objectsPreserved} audio file(s) preserved (shared with other tracks).`;
+      detail = `All ${objectsPreserved} audio file(s) were kept because other tracks use them.`;
     } else if (objectsDeleted > 0) {
-      description = `Track and ${objectsDeleted} audio file(s) deleted from storage.`;
+      detail = `The track and ${objectsDeleted} audio file(s) were deleted from storage.`;
     }
 
     toast({
-      title: "Track Deleted",
-      description,
+      title: "Track deleted",
+      description: `${deletedTitle}. ${detail}`,
     });
   }, [deleteFetcher.data, toast]);
 
@@ -183,6 +187,16 @@ function DuplicateGroupCard({
       deleteFetcher.formData?.get("trackId") !== track.trackId &&
       deleteFetcher.data?.trackId !== track.trackId,
   );
+
+  const handleDelete = (trackId: string) => {
+    const title = visibleTracks.find((track) => track.trackId === trackId)?.title ?? "This track";
+    pendingDelete.current = { id: trackId, title };
+    deleteFetcher.submit(null, {
+      method: "DELETE",
+      action: `/api/admin/tracks/${trackId}`,
+    });
+    setDeleteTrackId(null);
+  };
 
   // Don't show group if only one track left
   if (visibleTracks.length <= 1) {
@@ -263,6 +277,7 @@ function DuplicateGroupCard({
               <input type="hidden" name="intent" value="mark-intentional" />
               <input type="hidden" name="groupKey" value={group.id} />
               <input type="hidden" name="groupType" value={group.type} />
+              <input type="hidden" name="groupTitle" value={groupTitle} />
               <Button type="submit" variant="outline" size="sm">
                 Keep both
               </Button>
@@ -277,10 +292,17 @@ function DuplicateGroupCard({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete track?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete{" "}
+              {visibleTracks.find((track) => track.trackId === deleteTrackId)?.title ??
+                "this track"}
+              ?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the track from the database. The audio file will only be
-              deleted from storage if no other tracks reference it.
+              This removes{" "}
+              {visibleTracks.find((track) => track.trackId === deleteTrackId)?.title ?? "the track"}{" "}
+              from the library. The audio file is deleted from storage only when no other track uses
+              it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

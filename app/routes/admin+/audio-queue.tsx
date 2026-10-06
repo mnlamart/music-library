@@ -1,6 +1,6 @@
 // TEST FILE — see audio-queue.test.tsx for unit tests
 import { type SEOHandle } from "@nasa-gcn/remix-seo";
-import { data, Form, useSearchParams } from "react-router";
+import { data, Form, Link, useSearchParams } from "react-router";
 import { GeneralErrorBoundary } from "#app/components/error-boundary";
 import { Spacer } from "#app/components/spacer.tsx";
 import { Badge } from "#app/components/ui/badge.tsx";
@@ -536,16 +536,22 @@ export default function AudioQueueRoute({ loaderData }: Route.ComponentProps) {
             ) : (
               jobs.map((job) => (
                 <TableRow key={job.id}>
-                  <TableCell className="font-medium max-w-[200px] truncate">
-                    {job.trackTitle}
+                  <TableCell className="max-w-[200px] truncate">
+                    <Link to={`/library/${job.trackId}`} className="font-medium hover:underline">
+                      {job.trackTitle}
+                    </Link>
                   </TableCell>
                   <TableCell>{job.artistName}</TableCell>
                   <TableCell>{job.serviceDisplayName}</TableCell>
                   <TableCell>
                     <StatusBadge status={job.status} />
                     {job.priority && (
-                      <Badge variant="outline" className="ml-1 text-[10px]">
-                        PRI
+                      <Badge
+                        variant="outline"
+                        className="ml-1 text-[10px]"
+                        title="This job runs ahead of the regular queue"
+                      >
+                        Priority
                       </Badge>
                     )}
                   </TableCell>

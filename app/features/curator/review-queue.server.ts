@@ -9,12 +9,14 @@ export async function listReviewQueue({
   source,
   page = 1,
   claimedBy,
+  reporterId,
 }: {
   status?: string;
   entityType?: string;
   source?: string;
   page?: number;
   claimedBy?: string;
+  reporterId?: string;
 }) {
   const safePage = Math.max(1, page);
   const mine = status === QUEUE_STATUS_MINE;
@@ -31,6 +33,7 @@ export async function listReviewQueue({
     ...(mine ? { status: "claimed", claimedBy } : status && status !== "all" ? { status } : {}),
     ...(entityType ? { entityType } : {}),
     ...(source ? { source } : {}),
+    ...(reporterId ? { reporterId } : {}),
   };
 
   const [items, total] = await Promise.all([

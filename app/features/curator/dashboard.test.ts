@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   activityAction,
+  activityMatter,
   activitySummary,
   activityToCsv,
   assignRanks,
@@ -48,6 +49,13 @@ describe("dashboard calculations", () => {
     expect(activityAction("Merged into Queen: duplicate")).toBe("merged");
     expect(activityAction("SPLIT: moved side project")).toBe("split");
     expect(activityAction('CREATED via split from "Queen": side project')).toBe("split");
+  });
+
+  test("activity matter keeps the edit comment and reads a split", () => {
+    expect(activityMatter("Fixed the credit")).toBe("Fixed the credit");
+    expect(activityMatter("SPLIT: side project")).toBe("Split: side project");
+    expect(activityMatter("  ")).toBeNull();
+    expect(activityMatter(null)).toBeNull();
   });
 
   test("formats the live activity line", () => {
@@ -101,6 +109,7 @@ describe("dashboard calculations", () => {
         entityName: 'Track "X"',
         summary: "Alice edited 'Track \"X\"'",
         message: "unused",
+        matter: null,
         createdAt: "2026-10-02T12:00:00.000Z",
         curator: { id: "u", username: "alice", name: "Alice" },
       },

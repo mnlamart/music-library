@@ -167,7 +167,6 @@ function FailureRow({ row }: { row: FingerprintFailureRow }) {
           <p className="text-muted-foreground text-xs">by {row.artist}</p>
         </div>
       </TableCell>
-      <TableCell className="font-mono text-xs">{row.id.slice(0, 10)}…</TableCell>
       <TableCell>
         <div className="max-w-[180px] truncate font-mono text-xs" title={row.objectKey}>
           {row.objectKey}
@@ -366,7 +365,6 @@ export default function FingerprintFailuresRoute({ loaderData }: Route.Component
               <TableHeader>
                 <TableRow>
                   <TableHead>Track</TableHead>
-                  <TableHead>Audio ID</TableHead>
                   <TableHead>Object / file</TableHead>
                   <TableHead>Format / service</TableHead>
                   <TableHead>Size</TableHead>

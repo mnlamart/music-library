@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 import { CuratorBadges } from "#app/components/curator-badge.tsx";
-import { formatActivityLine, type ActivityResult } from "#app/features/curator/dashboard.ts";
+import {
+  activityVerb,
+  curatorLabel,
+  formatRelativeTime,
+  type ActivityResult,
+} from "#app/features/curator/dashboard.ts";
+import { entityPath } from "#app/features/curator/review-queue.ts";
 
 const POLL_MS = 30_000;
 
@@ -91,13 +97,27 @@ export function ActivityFeed({
 
   return (
     <ul className="space-y-3" data-testid="activity-feed">
-      {items.map((item) => (
-        <li key={item.id} className="min-w-0 text-sm">
-          <p className="break-words">{formatActivityLine(item.summary, item.createdAt, now)}</p>
-          <CuratorBadges badges={item.badges} />
-          <p className="text-xs text-muted-foreground capitalize">{item.entityType}</p>
-        </li>
-      ))}
+      {items.map((item) => {
+        const href = entityPath(item.entityType, item.entityId);
+        return (
+          <li key={item.id} className="min-w-0 text-sm">
+            <p className="break-words">
+              {curatorLabel(item.curator)} {activityVerb(item.action)}{" "}
+              {href ? (
+                <Link to={href} className="font-medium hover:underline">
+                  {item.entityName}
+                </Link>
+              ) : (
+                item.entityName
+              )}{" "}
+              ({formatRelativeTime(new Date(item.createdAt), now)})
+            </p>
+            {item.matter ? <p className="text-muted-foreground">{item.matter}</p> : null}
+            <CuratorBadges badges={item.badges} />
+            <p className="text-xs text-muted-foreground capitalize">{item.entityType}</p>
+          </li>
+        );
+      })}
     </ul>
   );
 }

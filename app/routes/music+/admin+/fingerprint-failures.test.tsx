@@ -130,6 +130,8 @@ test("track title and View open the library track page", async () => {
     "href",
     "/library/track-lovestory",
   );
+  expect(screen.queryByRole("columnheader", { name: "Audio ID" })).not.toBeInTheDocument();
+  expect(screen.queryByText(/audio-file/)).not.toBeInTheDocument();
 });
 
 test("The fingerprint-failures admin page renders heading and stats", async () => {

@@ -1,5 +1,5 @@
 import { useFetcher } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "#app/components/ui/button";
 import {
   Dialog,
@@ -19,6 +19,8 @@ import {
 import { Label } from "#app/components/ui/label";
 import { Textarea } from "#app/components/ui/textarea";
 import { Icon } from "#app/components/ui/icon";
+import { toast } from "#app/components/ui/use-toast.ts";
+import { filedReportMessage } from "#app/features/curator/review-queue.ts";
 
 interface ReportIssueDialogProps {
   trackId: string;
@@ -47,15 +49,20 @@ export function ReportIssueDialog({
 
   const isSubmitting = fetcher.state !== "idle";
   const isValid = issueType && description.trim().length > 0;
+  const seenResult = useRef<unknown>(null);
 
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.success) {
-      // Reset form and close dialog on success
-      setIssueType("");
-      setDescription("");
-      onOpenChange(false);
-    }
-  }, [fetcher.state, fetcher.data, onOpenChange]);
+    if (fetcher.state !== "idle" || !fetcher.data?.success) return;
+    if (seenResult.current === fetcher.data) return;
+    seenResult.current = fetcher.data;
+    toast({
+      title: "Report filed",
+      description: filedReportMessage(trackTitle, description.trim()),
+    });
+    setIssueType("");
+    setDescription("");
+    onOpenChange(false);
+  }, [description, fetcher.data, fetcher.state, onOpenChange, trackTitle]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "#app/components/ui/table.tsx";
-import { SECURITY_EVENT_TYPES } from "#app/features/security/event-types.ts";
+import { SECURITY_EVENT_TYPES, securityEventLabel } from "#app/features/security/event-types.ts";
 import {
   forceLogoutSession,
   forceLogoutUserSessions,
@@ -349,7 +349,7 @@ function AccountChanges({
           rows.map((row) => (
             <TableRow key={row.id}>
               <TableCell>{formatWhen(row.createdAt)}</TableCell>
-              <TableCell>{row.eventType}</TableCell>
+              <TableCell>{securityEventLabel(row.eventType)}</TableCell>
               <TableCell>{row.actorUsername ?? "system"}</TableCell>
               <TableCell>{row.targetUsername ?? "—"}</TableCell>
               <TableCell>{row.summary}</TableCell>
@@ -436,7 +436,7 @@ function Timeline({
             <option value="">All</option>
             {Object.values(SECURITY_EVENT_TYPES).map((eventType) => (
               <option key={eventType} value={eventType}>
-                {eventType}
+                {securityEventLabel(eventType)}
               </option>
             ))}
           </select>
@@ -490,7 +490,7 @@ function Timeline({
             timeline.events.map((event) => (
               <TableRow key={event.id}>
                 <TableCell>{formatWhen(event.createdAt)}</TableCell>
-                <TableCell>{event.eventType}</TableCell>
+                <TableCell>{securityEventLabel(event.eventType)}</TableCell>
                 <TableCell>{event.username ?? "—"}</TableCell>
                 <TableCell>{event.targetUsername ?? "—"}</TableCell>
                 <TableCell className="font-mono">{event.ipHash ?? "—"}</TableCell>

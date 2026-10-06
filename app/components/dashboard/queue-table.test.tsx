@@ -152,6 +152,42 @@ test("claiming a report points the curator at My claims", async () => {
   expect(mockLoad).toHaveBeenCalledWith(expect.stringContaining("status=mine"));
 });
 
+test("unclaiming a report puts it back on the open list", async () => {
+  const user = userEvent.setup();
+  queueData = {
+    ...queueData,
+    items: [
+      queueItem({
+        status: "claimed",
+        claimedBy: "curator-1",
+        claimedByUser: { id: "curator-1", username: "ada", name: "Ada" },
+      }),
+    ],
+  };
+  const view = render(
+    <MemoryRouter>
+      <QueueTable />
+    </MemoryRouter>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "My claims" }));
+  await user.click(screen.getByRole("button", { name: "Unclaim" }));
+
+  actionData = { success: true };
+  view.rerender(
+    <MemoryRouter>
+      <QueueTable />
+    </MemoryRouter>,
+  );
+
+  expect(mockToast.mock.calls.at(-1)?.[0]).toEqual({
+    title: "Claim released",
+    description:
+      "So What — Miles Davis. Matter: The artist credit is wrong. It's back in the open list.",
+  });
+  expect(mockLoad.mock.calls.at(-1)?.[0]).toContain("status=open");
+});
+
 test("My claims loads only the curator's claimed reports", async () => {
   const user = userEvent.setup();
   render(

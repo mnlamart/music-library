@@ -57,3 +57,14 @@ test("includes Party Room link for all viewports", async () => {
   expect(rooms.className).not.toMatch(/\bmax-md:hidden\b/);
   expect(rooms).toHaveAttribute("href", "/rooms");
 });
+
+test("includes My reports for every signed-in user", async () => {
+  const user = userEvent.setup();
+  renderDropdown();
+
+  await user.click(screen.getByRole("button", { name: /user menu/i }));
+
+  const reports = await screen.findByRole("menuitem", { name: /my reports/i });
+  expect(reports).toHaveAttribute("href", "/reports");
+  expect(reports.className).not.toMatch(/\bmax-md:hidden\b/);
+});
