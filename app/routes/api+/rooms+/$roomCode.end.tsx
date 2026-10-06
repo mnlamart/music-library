@@ -1,5 +1,11 @@
 import { endRoom, findOpenRoomByCode } from "#app/features/party-room/party-room.server.ts";
 import { partyRoomErrorResponse, resolveActor } from "#app/features/party-room/request.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/$roomCode.end.ts";
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({
   request,

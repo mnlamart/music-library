@@ -11,10 +11,16 @@ import {
 } from "#app/features/party-room/participant-seat.server.ts";
 import { partyRoomErrorResponse, readJsonBody } from "#app/features/party-room/request.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/$roomCode.audition.ts";
 
 const BodySchema = z.object({
   trackId: z.string().min(1).max(128),
 });
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({
   request,

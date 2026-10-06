@@ -13,6 +13,7 @@ import { StatusButton } from "#app/components/ui/status-button.tsx";
 import { requireUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { getUserImgSrc, useDoubleCheck, useIsPending } from "#app/utils/misc.tsx";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { uploadProfileImage } from "#app/utils/storage.server.ts";
 import { type Route } from "./+types/profile.photo.ts";
 import { type BreadcrumbHandle } from "./profile.tsx";
@@ -51,6 +52,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
   invariantResponse(user, "User not found", { status: 404 });
   return { user };
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request }: Route.ActionArgs) {

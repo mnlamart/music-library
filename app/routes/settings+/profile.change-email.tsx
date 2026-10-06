@@ -15,6 +15,7 @@ import { prisma } from "#app/utils/db.server.ts";
 import { sendEmail } from "#app/utils/email.server.ts";
 import { useIsPending } from "#app/utils/misc.tsx";
 import { EmailSchema } from "#app/utils/user-validation.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { verifySessionStorage } from "#app/utils/verification.server.ts";
 import { type Route } from "./+types/profile.change-email.ts";
 import { EmailChangeEmail } from "./profile.change-email.server.tsx";
@@ -43,6 +44,10 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     throw redirect(`/login?${params}`);
   }
   return { user };
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request }: Route.ActionArgs) {

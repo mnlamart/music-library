@@ -20,11 +20,17 @@ import { joinRoom, PartyRoomError } from "#app/features/party-room/party-room.se
 import { Button } from "#app/components/ui/button.tsx";
 import { Input } from "#app/components/ui/input.tsx";
 import { Label } from "#app/components/ui/label.tsx";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/rooms.$code._index.ts";
 
 export async function loader({ request, params }: { request: Request; params: { code?: string } }) {
   const code = parseRoomCodeInput(params.code ?? "") ?? (params.code ?? "").toUpperCase();
   const participant = await resolveRoomParticipantByCode(request, code);
   return { code, seated: Boolean(participant), participant };
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request, params }: { request: Request; params: { code?: string } }) {

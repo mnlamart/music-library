@@ -1,11 +1,17 @@
 import { ROOM_PLAY_EVENT_TYPES } from "#app/features/party-room/constants.ts";
 import { findOpenRoomByCode } from "#app/features/party-room/party-room.server.ts";
 import { recordRoomPlayEvent } from "#app/features/party-room/queue.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import {
   partyRoomErrorResponse,
   readJsonBody,
   resolveActor,
 } from "#app/features/party-room/request.server.ts";
+import { type Route } from "./+types/$roomCode.play-events.ts";
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({
   request,

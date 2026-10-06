@@ -4,6 +4,8 @@ import { data, type ActionFunctionArgs } from "react-router";
 import { extractAudioMetadata } from "#app/utils/audio-metadata.server";
 import { requireUserWithRole } from "#app/utils/permissions.server";
 import { extractAudioFilesFromZip } from "#app/utils/zip-extraction.server";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/extract-metadata.ts";
 
 // Maximum file size: 100MB for single file, 500MB for ZIP
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -29,6 +31,10 @@ const ALLOWED_ZIP_MIME_TYPES = [
   "application/x-zip-compressed",
   "application/x-zip",
 ];
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({ request }: ActionFunctionArgs) {
   await requireUserWithRole(request, "admin");

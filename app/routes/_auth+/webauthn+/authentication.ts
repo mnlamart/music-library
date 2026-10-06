@@ -12,6 +12,7 @@ import {
 } from "#app/features/usage-analytics/record-usage.server.ts";
 import { getSessionExpirationDate } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { handleNewSession } from "../login.server.ts";
 import { type Route } from "./+types/authentication.ts";
 import { PasskeyLoginBodySchema, getWebAuthnConfig, passkeyCookie } from "./utils.server.ts";
@@ -28,6 +29,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
 
   return Response.json({ options }, { headers: { "Set-Cookie": cookieHeader } });
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request }: Route.ActionArgs) {

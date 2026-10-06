@@ -19,6 +19,7 @@ import {
 } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { useIsPending } from "#app/utils/misc.tsx";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { redirectWithToast } from "#app/utils/toast.server.ts";
 import { PasswordSchema } from "#app/utils/user-validation.ts";
 import { type Route } from "./+types/profile.password.ts";
@@ -59,6 +60,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const userId = await requireUserId(request);
   await requirePassword(userId);
   return {};
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request }: Route.ActionArgs) {
