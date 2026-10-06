@@ -30,6 +30,7 @@ async function returnedValidation(request: Request) {
     const thrown = error as { data?: { error?: string }; init?: { status?: number } };
     throw new Error(
       `expected a returned 400 payload, but the action threw ${thrown.init?.status ?? "unknown"}: ${thrown.data?.error ?? String(error)}`,
+      { cause: error },
     );
   }
 }
