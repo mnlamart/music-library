@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 import { Badge } from "#app/components/ui/badge.tsx";
 import { Button } from "#app/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "#app/components/ui/card.tsx";
@@ -21,7 +21,14 @@ import {
   SelectValue,
 } from "#app/components/ui/select.tsx";
 import { Textarea } from "#app/components/ui/textarea.tsx";
-import { type ReviewQueueListItem } from "#app/features/curator/review-queue.ts";
+import { toast } from "#app/components/ui/use-toast.ts";
+import {
+  entityPath,
+  entityTypeLabel,
+  QUEUE_STATUS_MINE,
+  queueMatter,
+  type ReviewQueueListItem,
+} from "#app/features/curator/review-queue.ts";
 import { useCuratorFilterSession } from "#app/features/curator/use-curator-session.ts";
 
 type QueueResponse = {
@@ -31,6 +38,11 @@ type QueueResponse = {
   pageSize: number;
   totalPages: number;
   currentUserId: string;
+};
+
+type QueueActionResult = {
+  success?: boolean;
+  error?: string;
 };
 
 const ISSUE_TYPE_LABELS: Record<string, string> = {
@@ -54,6 +66,24 @@ const RESOLUTION_OPTIONS = [
   { value: "cannot_fix", label: "Cannot fix" },
 ];
 
+function QueueItemHeading({ item }: { item: ReviewQueueListItem }) {
+  const href = entityPath(item.entityType, item.entityId);
+  return (
+    <>
+      <h3 className="mb-1 text-lg font-semibold">
+        {href ? (
+          <Link to={href} className="hover:underline">
+            {item.entityDetails.name}
+          </Link>
+        ) : (
+          item.entityDetails.name
+        )}
+      </h3>
+      <p className="mb-2 text-xs text-muted-foreground">{entityTypeLabel(item.entityType)}</p>
+    </>
+  );
+}
+
 function queueUrl(filters: { status: string; entityType: string; source: string; page: number }) {
   const params = new URLSearchParams();
   params.set("status", filters.status);
@@ -65,7 +95,7 @@ function queueUrl(filters: { status: string; entityType: string; source: string;
 
 export function QueueTable() {
   const queueFetcher = useFetcher<QueueResponse>();
-  const actionFetcher = useFetcher();
+  const actionFetcher = useFetcher<QueueActionResult>();
   const [status, setStatus] = useState("open");
   const [entityType, setEntityType] = useState("all");
   const [source, setSource] = useState("all");
@@ -101,10 +131,25 @@ export function QueueTable() {
   }, [url, reloadKey]);
 
   const lastAction = useRef<unknown>(null);
+  const pendingClaim = useRef<ReviewQueueListItem | null>(null);
   useEffect(() => {
     if (actionFetcher.state !== "idle" || actionFetcher.data == null) return;
     if (lastAction.current === actionFetcher.data) return;
     lastAction.current = actionFetcher.data;
+    const claimed = pendingClaim.current;
+    pendingClaim.current = null;
+    if (actionFetcher.data.success && claimed) {
+      setStatus(QUEUE_STATUS_MINE);
+      setEntityType("all");
+      setSource("all");
+      setPage(1);
+      const matter = queueMatter(claimed);
+      const joined = /[.!?]$/.test(matter) ? matter : `${matter}.`;
+      toast({
+        title: "Claim saved",
+        description: `${claimed.entityDetails.name}. Matter: ${joined} Find it under My claims.`,
+      });
+    }
     setReloadKey((value) => value + 1);
   }, [actionFetcher.state, actionFetcher.data]);
 
@@ -119,6 +164,22 @@ export function QueueTable() {
 
   return (
     <div data-testid="queue-table">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Open reports stay in the shared pool. After you claim one, the matter and the track,
+          artist, or album name stay listed under My claims.
+        </p>
+        <Button
+          type="button"
+          variant={status === QUEUE_STATUS_MINE ? "default" : "outline"}
+          onClick={() => {
+            setStatus(QUEUE_STATUS_MINE);
+            setPage(1);
+          }}
+        >
+          My claims
+        </Button>
+      </div>
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-lg">Filters</CardTitle>
@@ -140,7 +201,8 @@ export function QueueTable() {
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="open">Open</SelectItem>
-                  <SelectItem value="claimed">Claimed</SelectItem>
+                  <SelectItem value={QUEUE_STATUS_MINE}>My claims</SelectItem>
+                  <SelectItem value="claimed">Claimed by anyone</SelectItem>
                   <SelectItem value="resolved">Resolved</SelectItem>
                 </SelectContent>
               </Select>
@@ -226,10 +288,11 @@ export function QueueTable() {
                         {ISSUE_TYPE_LABELS[item.issueType] ?? item.issueType}
                       </Badge>
                     </div>
-                    <h3 className="mb-1 text-lg font-semibold">{item.entityDetails.name}</h3>
-                    {item.description ? (
-                      <p className="mb-2 text-sm text-muted-foreground">{item.description}</p>
-                    ) : null}
+                    <QueueItemHeading item={item} />
+                    <p className="mb-2 text-sm">
+                      <span className="font-medium">Matter</span>{" "}
+                      <span className="text-muted-foreground">{queueMatter(item)}</span>
+                    </p>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                       {item.reporter ? (
                         <span>Reported by {item.reporter.name || item.reporter.username}</span>
@@ -259,7 +322,10 @@ export function QueueTable() {
                     {item.status === "open" ? (
                       <Button
                         size="sm"
-                        onClick={() => submitAction(`/api/curator/queue/${item.id}/claim`)}
+                        onClick={() => {
+                          pendingClaim.current = item;
+                          submitAction(`/api/curator/queue/${item.id}/claim`);
+                        }}
                       >
                         Claim
                       </Button>

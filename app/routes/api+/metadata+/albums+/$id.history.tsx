@@ -1,6 +1,7 @@
 import { data } from "react-router";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireUserId } from "#app/utils/auth.server.ts";
+import { labelsForChangeSets } from "#app/utils/history-display.server.ts";
 import { type Route } from "./+types/$id.history.ts";
 
 interface FieldChange {
@@ -95,6 +96,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       changes,
     };
   });
+
+  const labels = await labelsForChangeSets(history.map((entry) => entry.changes));
+  for (const [index, entry] of history.entries()) {
+    Object.assign(entry, { labels: labels[index] });
+  }
 
   return data({ history });
 }

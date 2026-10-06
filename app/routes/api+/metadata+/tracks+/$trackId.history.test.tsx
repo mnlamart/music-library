@@ -15,6 +15,15 @@ vi.mock("#app/utils/db.server.ts", () => ({
     trackEdit: {
       findMany: vi.fn(),
     },
+    artist: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    album: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    coverImage: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   },
 }));
 
@@ -186,6 +195,73 @@ describe("GET /api/metadata/tracks/:trackId/history", () => {
     expect(history2.changes.title).toEqual({ from: "Original Title", to: "Old Title" });
     expect(history2.changes.genre).toEqual({ from: "Unknown", to: "Rock" });
     expect(history2.changes.year).toEqual({ from: 2019, to: 2020 });
+    expect(history1.labels?.artistId).toEqual({
+      from: "Unknown artist",
+      to: "Unknown artist",
+    });
+  });
+
+  test("labels artist and album changes with their names", async () => {
+    vi.mocked(prisma.artist.findMany).mockResolvedValue([
+      { id: "artist-1", name: "Bill Evans" },
+      { id: "artist-2", name: "Miles Davis" },
+    ] as never);
+    vi.mocked(prisma.album.findMany).mockResolvedValue([
+      { id: "album-1", name: "Kind of Blue" },
+    ] as never);
+
+    const currentTrack = {
+      title: "New Title",
+      artistId: "artist-2",
+      albumId: "album-1",
+      genre: "Jazz",
+      year: 2021,
+      trackNumber: 1,
+      albumArtist: null,
+      bpm: null,
+      label: null,
+      isrc: null,
+      releaseDate: null,
+      originalDate: null,
+      originalYear: null,
+      totalTracks: null,
+      totalDiscs: null,
+      lyrics: null,
+    };
+    const edit = {
+      id: "edit-1",
+      editedAt: new Date("2021-06-01"),
+      comment: "Fixed the credit",
+      title: "New Title",
+      artistId: "artist-1",
+      albumId: null,
+      genre: "Jazz",
+      year: 2021,
+      trackNumber: 1,
+      albumArtist: null,
+      bpm: null,
+      label: null,
+      isrc: null,
+      releaseDate: null,
+      originalDate: null,
+      originalYear: null,
+      totalTracks: null,
+      totalDiscs: null,
+      lyrics: null,
+      user: { id: "user-1", username: "curator", name: "Curator" },
+    };
+
+    vi.mocked(prisma.track.findUnique)
+      .mockResolvedValueOnce({ id: "track-1" } as never)
+      .mockResolvedValueOnce(currentTrack as never);
+    vi.mocked(prisma.trackEdit.findMany).mockResolvedValue([edit] as never);
+
+    const response: any = await loader(makeRequest({ trackId: "track-1" }) as never);
+    const history = response.data.history[0];
+
+    expect(history.changes.artistId).toEqual({ from: "artist-1", to: "artist-2" });
+    expect(history.labels.artistId).toEqual({ from: "Bill Evans", to: "Miles Davis" });
+    expect(history.labels.albumId).toEqual({ from: "(empty)", to: "Kind of Blue" });
   });
 
   test("handles null and undefined values in changes", async () => {

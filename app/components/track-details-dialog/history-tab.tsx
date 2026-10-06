@@ -2,6 +2,7 @@ import { useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { Button } from "#app/components/ui/button";
 import { Icon } from "#app/components/ui/icon";
+import { displayedChange, type HistoryLabel } from "#app/utils/history-display.ts";
 import { CommentDialog } from "./comment-dialog";
 
 interface HistoryEntry {
@@ -20,6 +21,7 @@ interface HistoryEntry {
       to: string | number | null;
     }
   >;
+  labels?: Record<string, HistoryLabel>;
 }
 
 interface HistoryTabProps {
@@ -137,14 +139,17 @@ export function HistoryTab({ trackId, onRestore }: HistoryTabProps) {
             </div>
 
             <div className="mt-3 space-y-1">
-              {Object.entries(entry.changes).map(([field, change]) => (
-                <div key={field} className="text-xs">
-                  <span className="font-medium">{formatFieldName(field)}:</span>
-                  <span className="text-muted-foreground ml-2">
-                    {formatValue(change.from)} → {formatValue(change.to)}
-                  </span>
-                </div>
-              ))}
+              {Object.entries(entry.changes).map(([field, change]) => {
+                const shown = displayedChange(change, entry.labels?.[field], formatValue);
+                return (
+                  <div key={field} className="text-xs">
+                    <span className="font-medium">{formatFieldName(field)}:</span>
+                    <span className="text-muted-foreground ml-2">
+                      {shown.from} → {shown.to}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
