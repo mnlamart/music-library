@@ -202,3 +202,37 @@ test("shows an error toast when the API rejects the request", () => {
     }),
   );
 });
+
+test("toasts validation failures and leaves the dialog open", () => {
+  const onClose = vi.fn();
+  mockFetcher.data = { error: "Validation failed" };
+
+  renderDialog({ onClose });
+
+  expect(screen.getByText(/Bulk Edit - 2 tracks selected/)).toBeInTheDocument();
+  expect(toast).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: "Error",
+      description: "Validation failed",
+      variant: "destructive",
+    }),
+  );
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+test("toasts missing tracks and leaves the dialog open", () => {
+  const onClose = vi.fn();
+  mockFetcher.data = { error: "Some tracks not found" };
+
+  renderDialog({ onClose });
+
+  expect(screen.getByText(/Bulk Edit - 2 tracks selected/)).toBeInTheDocument();
+  expect(toast).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: "Error",
+      description: "Some tracks not found",
+      variant: "destructive",
+    }),
+  );
+  expect(onClose).not.toHaveBeenCalled();
+});

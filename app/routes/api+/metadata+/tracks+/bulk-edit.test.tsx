@@ -1,7 +1,7 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import { prisma } from "#app/utils/db.server.ts";
 import { requireCuratorRole } from "#app/utils/permissions.server.ts";
-import { action } from "./bulk-edit.tsx";
+import { action, clientAction } from "./bulk-edit.tsx";
 
 vi.mock("#app/utils/permissions.server.ts", () => ({
   requireCuratorRole: vi.fn(),
@@ -40,6 +40,18 @@ function makeRequest(body: any) {
   };
 }
 
+async function expectReturnedError(body: unknown, status: number, error: string) {
+  const response = (await action(makeRequest(body) as never)) as {
+    type: string;
+    data: { error?: string; missingTrackIds?: string[] };
+    init: { status?: number } | null;
+  };
+  expect(response.type).toBe("DataWithResponseInit");
+  expect(response.init?.status).toBe(status);
+  expect(response.data.error).toBe(error);
+  return response;
+}
+
 describe("POST /api/metadata/tracks/bulk-edit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,83 +75,83 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
   });
 
   test("validates required fields", async () => {
-    const body = {
-      trackIds: [],
-      changes: {},
-      comment: "",
-    };
-
-    try {
-      await action(makeRequest(body) as never);
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(400);
-      expect(e.data.error).toBe("Validation failed");
-    }
+    const response = await expectReturnedError(
+      {
+        trackIds: [],
+        changes: {},
+        comment: "",
+      },
+      400,
+      "Validation failed",
+    );
+    expect(response.data).toHaveProperty("details");
   });
 
   test("requires at least one track ID", async () => {
-    const body = {
-      trackIds: [],
-      changes: { title: "New Title" },
-      comment: "Test",
-    };
-
-    try {
-      await action(makeRequest(body) as never);
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(400);
-      expect(e.data.error).toBe("Validation failed");
-    }
+    await expectReturnedError(
+      {
+        trackIds: [],
+        changes: { title: "New Title" },
+        comment: "Test",
+      },
+      400,
+      "Validation failed",
+    );
   });
 
   test("enforces maximum 500 tracks per request", async () => {
-    const body = {
-      trackIds: Array.from({ length: 501 }, (_, i) => `track-${i}`),
-      changes: { title: "New Title" },
-      comment: "Test",
-    };
-
-    try {
-      await action(makeRequest(body) as never);
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(400);
-      expect(e.data.error).toBe("Validation failed");
-    }
+    await expectReturnedError(
+      {
+        trackIds: Array.from({ length: 501 }, (_, i) => `track-${i}`),
+        changes: { title: "New Title" },
+        comment: "Test",
+      },
+      400,
+      "Validation failed",
+    );
   });
 
   test("requires at least one field in changes", async () => {
-    const body = {
-      trackIds: ["track-1"],
-      changes: {},
-      comment: "Test",
-    };
-
-    try {
-      await action(makeRequest(body) as never);
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(400);
-      expect(e.data.error).toBe("Validation failed");
-    }
+    await expectReturnedError(
+      {
+        trackIds: ["track-1"],
+        changes: {},
+        comment: "Test",
+      },
+      400,
+      "Validation failed",
+    );
   });
 
   test("requires comment for bulk operations", async () => {
-    const body = {
-      trackIds: ["track-1"],
-      changes: { title: "New Title" },
-      comment: "",
+    await expectReturnedError(
+      {
+        trackIds: ["track-1"],
+        changes: { title: "New Title" },
+        comment: "",
+      },
+      400,
+      "Validation failed",
+    );
+  });
+
+  test("returns invalid JSON as a 400 payload", async () => {
+    const response = (await action({
+      request: new Request("http://localhost/api/metadata/tracks/bulk-edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{",
+      }),
+      params: {},
+    } as never)) as {
+      type: string;
+      data: { error?: string };
+      init: { status?: number } | null;
     };
 
-    try {
-      await action(makeRequest(body) as never);
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(400);
-      expect(e.data.error).toBe("Validation failed");
-    }
+    expect(response.type).toBe("DataWithResponseInit");
+    expect(response.init?.status).toBe(400);
+    expect(response.data.error).toBe("Invalid JSON body");
   });
 
   test("validates all tracks exist before updating (all-or-nothing)", async () => {
@@ -154,14 +166,9 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
       comment: "Test bulk edit",
     };
 
-    try {
-      await action(makeRequest(body) as never);
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(404);
-      expect(e.data.error).toBe("Some tracks not found");
-      expect(e.data.missingTrackIds).toEqual(["track-3"]);
-    }
+    const response = await expectReturnedError(body, 404, "Some tracks not found");
+    expect(response.data.missingTrackIds).toEqual(["track-3"]);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   test("validates artist exists when changing artistId", async () => {
@@ -194,13 +201,8 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
       comment: "Test bulk edit",
     };
 
-    try {
-      await action(makeRequest(body) as never);
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(404);
-      expect(e.data.error).toBe("Artist not found");
-    }
+    await expectReturnedError(body, 404, "Artist not found");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   test("validates album exists when changing albumId", async () => {
@@ -233,13 +235,8 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
       comment: "Test bulk edit",
     };
 
-    try {
-      await action(makeRequest(body) as never);
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(404);
-      expect(e.data.error).toBe("Album not found");
-    }
+    await expectReturnedError(body, 404, "Album not found");
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   test("allows setting albumId to null", async () => {
@@ -995,20 +992,84 @@ describe("POST /api/metadata/tracks/bulk-edit", () => {
       { id: "genre-jazz", name: "Jazz" },
     ] as never);
 
-    try {
-      await action(
-        makeRequest({
-          trackIds: ["track-1"],
-          changes: { genreIds: ["genre-jazz", "genre-missing"] },
-          comment: "Retag",
-        }) as never,
-      );
-      expect.unreachable("action should have thrown");
-    } catch (e: any) {
-      expect(e.init.status).toBe(404);
-      expect(e.data.error).toBe("One or more genres not found");
-    }
+    await expectReturnedError(
+      {
+        trackIds: ["track-1"],
+        changes: { genreIds: ["genre-jazz", "genre-missing"] },
+        comment: "Retag",
+      },
+      404,
+      "One or more genres not found",
+    );
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("clientAction for POST /api/metadata/tracks/bulk-edit", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireCuratorRole).mockResolvedValue("user-1");
+  });
+
+  test("returns validation failures so the fetcher receives data.error", async () => {
+    const result = await clientAction({
+      ...makeRequest({
+        trackIds: Array.from({ length: 501 }, (_, i) => `track-${i}`),
+        changes: { title: "New Title" },
+        comment: "Too many tracks",
+      }),
+      serverAction() {
+        return action(
+          makeRequest({
+            trackIds: Array.from({ length: 501 }, (_, i) => `track-${i}`),
+            changes: { title: "New Title" },
+            comment: "Too many tracks",
+          }) as never,
+        );
+      },
+    } as never);
+
+    expect(result).toMatchObject({
+      type: "DataWithResponseInit",
+      init: { status: 400 },
+      data: { error: "Validation failed" },
+    });
+  });
+
+  test("returns missing tracks so the fetcher receives data.error", async () => {
+    vi.mocked(prisma.track.findMany).mockResolvedValue([] as never);
+
+    const args = makeRequest({
+      trackIds: ["track-missing"],
+      changes: { title: "New Title" },
+      comment: "Missing track",
+    });
+    const result = await clientAction({
+      ...args,
+      serverAction: () => action(args as never),
+    } as never);
+
+    expect(result).toMatchObject({
+      type: "DataWithResponseInit",
+      init: { status: 404 },
+      data: { error: "Some tracks not found", missingTrackIds: ["track-missing"] },
+    });
+  });
+
+  test("rethrows unexpected server failures", async () => {
+    const failure = new Response(JSON.stringify({ error: "Internal Server Error" }), {
+      status: 500,
+    });
+
+    await expect(
+      clientAction({
+        request: new Request("http://localhost/api/metadata/tracks/bulk-edit", {
+          method: "POST",
+        }),
+        params: {},
+        serverAction: () => Promise.reject(failure),
+      } as never),
+    ).rejects.toBe(failure);
   });
 });
