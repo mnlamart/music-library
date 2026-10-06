@@ -26,7 +26,7 @@ The dialog keeps an edit lock while it is open so two curators do not overwrite 
 
 1. Open **Review queue** or the dashboard Queue tab.
 2. Filter by status, entity, or source (user reports, system checks, curator flags).
-3. Claim an item, fix the metadata or mark it resolved, and leave a resolution comment.
+3. Claim an item. It leaves the open list and appears under **My claims**, with the matter and the track, artist, or album name. Fix the metadata or mark it resolved, and leave a resolution comment.
 
 Resolved user reports count toward the Community Helper badge.
 

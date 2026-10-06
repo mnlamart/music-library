@@ -1,5 +1,5 @@
 import { prisma } from "#app/utils/db.server.ts";
-import { type ReviewQueueListItem } from "./review-queue.ts";
+import { QUEUE_STATUS_MINE, type ReviewQueueListItem } from "./review-queue.ts";
 
 const PAGE_SIZE = 20;
 
@@ -8,15 +8,27 @@ export async function listReviewQueue({
   entityType,
   source,
   page = 1,
+  claimedBy,
 }: {
   status?: string;
   entityType?: string;
   source?: string;
   page?: number;
+  claimedBy?: string;
 }) {
   const safePage = Math.max(1, page);
+  const mine = status === QUEUE_STATUS_MINE;
+  if (mine && !claimedBy) {
+    return {
+      items: [],
+      total: 0,
+      page: safePage,
+      pageSize: PAGE_SIZE,
+      totalPages: 1,
+    };
+  }
   const where = {
-    ...(status && status !== "all" ? { status } : {}),
+    ...(mine ? { status: "claimed", claimedBy } : status && status !== "all" ? { status } : {}),
     ...(entityType ? { entityType } : {}),
     ...(source ? { source } : {}),
   };
