@@ -383,9 +383,10 @@ export async function dismissVisibleToasts(page: Page) {
  * Dismiss install banner and any visible toast notifications blocking UI clicks.
  */
 export async function dismissOverlays(page: Page) {
-  const installBanner = page.getByRole("region", { name: "Install app" });
-  if (await installBanner.isVisible().catch(() => false)) {
-    await page.getByRole("button", { name: "Not now" }).click({ force: true });
+  const installBanner = page.getByTestId("install-app-banner");
+  const notNow = installBanner.getByRole("button", { name: "Not now" });
+  if (await notNow.isVisible().catch(() => false)) {
+    await notNow.click();
     await expect(installBanner).not.toBeVisible({ timeout: 10000 });
   }
 
