@@ -43,16 +43,18 @@ export async function action({ request }: Route.ActionArgs) {
   const entityType = formData.get("entityType") as string; // 'artist' or 'album'
   const entityId = formData.get("entityId") as string;
 
+  // Return 400 payloads so a fetcher keeps the editor mounted and can read
+  // data.error. Throwing them makes serverAction() a route error instead.
   if (!imageFile || typeof imageFile === "string") {
-    throw data({ error: "Image file is required" }, { status: 400 });
+    return data({ error: "Image file is required" }, { status: 400 });
   }
 
   if (!entityType || !["artist", "album"].includes(entityType)) {
-    throw data({ error: "Valid entityType is required (artist or album)" }, { status: 400 });
+    return data({ error: "Valid entityType is required (artist or album)" }, { status: 400 });
   }
 
   if (!entityId) {
-    throw data({ error: "entityId is required" }, { status: 400 });
+    return data({ error: "entityId is required" }, { status: 400 });
   }
 
   // Convert file to buffer
@@ -61,7 +63,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Validate file size
   if (buffer.length > MAX_IMAGE_SIZE) {
-    throw data(
+    return data(
       { error: `Image file too large. Maximum size is ${MAX_IMAGE_SIZE / 1024 / 1024}MB` },
       { status: 400 },
     );
@@ -69,7 +71,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Validate content type
   if (!ALLOWED_TYPES.includes(imageFile.type)) {
-    throw data(
+    return data(
       { error: `Invalid image type. Allowed types: ${ALLOWED_TYPES.join(", ")}` },
       { status: 400 },
     );
@@ -80,7 +82,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Validate dimensions
   if (width < MIN_IMAGE_SIZE || height < MIN_IMAGE_SIZE) {
-    throw data(
+    return data(
       {
         error: `Image too small. Minimum size is ${MIN_IMAGE_SIZE}x${MIN_IMAGE_SIZE}px`,
         details: { width, height },

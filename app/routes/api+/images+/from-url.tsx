@@ -45,8 +45,10 @@ export async function action({ request }: Route.ActionArgs) {
   const body = await request.json();
   const result = FromUrlSchema.safeParse(body);
 
+  // Return 400 payloads so a fetcher keeps the editor mounted and can read
+  // data.error. Throwing them makes serverAction() a route error instead.
   if (!result.success) {
-    throw data(
+    return data(
       {
         error: "Validation failed",
         issues: result.error.issues,
@@ -61,7 +63,7 @@ export async function action({ request }: Route.ActionArgs) {
   const buffer = await downloadExternalImage(url);
 
   if (!buffer) {
-    throw data(
+    return data(
       {
         error: "Failed to download image from URL",
         details:
@@ -76,7 +78,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Validate dimensions
   if (width < MIN_IMAGE_SIZE || height < MIN_IMAGE_SIZE) {
-    throw data(
+    return data(
       {
         error: `Image too small. Minimum size is ${MIN_IMAGE_SIZE}x${MIN_IMAGE_SIZE}px`,
         details: { width, height },
