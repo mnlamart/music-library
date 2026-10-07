@@ -32,7 +32,7 @@ test.describe("Curator dashboard", () => {
 
     await page.getByRole("tab", { name: "Activity" }).click();
     await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();
-    await expect(page.getByLabel("Curator")).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Curator" })).toBeVisible();
     await expect(page.getByLabel("Entity type")).toBeVisible();
     await expect(page.getByLabel("From")).toBeVisible();
 
