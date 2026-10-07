@@ -7,6 +7,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, type ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useAudioPlayer } from "#app/components/audio-player-provider";
 import { type FullTrack } from "#app/types/frontend/shared";
@@ -129,8 +130,16 @@ const defaultProps: AudioPlayerTestProps = {
   wantsAutoPlayRef: { current: false },
 };
 
+function playerUi(props: Partial<AudioPlayerTestProps> = {}) {
+  return (
+    <MemoryRouter>
+      <AudioPlayer {...defaultProps} {...props} />
+    </MemoryRouter>
+  );
+}
+
 async function renderPlayer(props: Partial<AudioPlayerTestProps> = {}) {
-  const view = render(<AudioPlayer {...defaultProps} {...props} />);
+  const view = render(playerUi(props));
   const audioEl = await waitFor(() => {
     const element = view.container.querySelector("audio");
     if (!element) throw new Error("Audio element not mounted yet");
@@ -687,9 +696,7 @@ test("auto-plays after track change once the new audio URL has loaded", async ()
     return Promise.resolve();
   });
 
-  const { rerender } = render(
-    <AudioPlayer {...defaultProps} playbackToken={1} wantsAutoPlayRef={wantsAutoPlayRef} />,
-  );
+  const { rerender } = render(playerUi({ playbackToken: 1, wantsAutoPlayRef }));
 
   await waitFor(() => {
     expect(playSpy).toHaveBeenCalled();
@@ -697,14 +704,7 @@ test("auto-plays after track change once the new audio URL has loaded", async ()
 
   playSpy.mockClear();
 
-  rerender(
-    <AudioPlayer
-      {...defaultProps}
-      track={mockTrack2}
-      playbackToken={2}
-      wantsAutoPlayRef={wantsAutoPlayRef}
-    />,
-  );
+  rerender(playerUi({ track: mockTrack2, playbackToken: 2, wantsAutoPlayRef }));
 
   await waitFor(() => {
     expect(playSpy).toHaveBeenCalled();
@@ -737,12 +737,11 @@ test("applies a prefetched URL synchronously on track change without blanking sr
   vi.mocked(resolveTrackPlaybackSource).mockClear();
 
   rerender(
-    <AudioPlayer
-      {...defaultProps}
-      track={mockTrack2}
-      playbackToken={2}
-      wantsAutoPlayRef={{ current: true }}
-    />,
+    playerUi({
+      track: mockTrack2,
+      playbackToken: 2,
+      wantsAutoPlayRef: { current: true },
+    }),
   );
 
   // Prefetched handoff must not wait on async resolve (no blank → gap → play).
@@ -810,10 +809,10 @@ test("unlock is one-shot — later gestures of either type do not reload", async
 });
 
 test("keeps the audio element mounted when hidden or trackless", async () => {
-  const hidden = render(<AudioPlayer {...defaultProps} isVisible={false} />);
+  const hidden = render(playerUi({ isVisible: false }));
   expect(hidden.container.querySelector("audio")).not.toBeNull();
 
-  const trackless = render(<AudioPlayer {...defaultProps} track={null} />);
+  const trackless = render(playerUi({ track: null }));
   expect(trackless.container.querySelector("audio")).not.toBeNull();
 });
 
@@ -835,12 +834,11 @@ test("keeps player chrome visible while the next track audio URL is loading", as
   const { rerender } = await renderPlayer();
 
   rerender(
-    <AudioPlayer
-      {...defaultProps}
-      track={mockTrack2}
-      playbackToken={2}
-      wantsAutoPlayRef={{ current: true }}
-    />,
+    playerUi({
+      track: mockTrack2,
+      playbackToken: 2,
+      wantsAutoPlayRef: { current: true },
+    }),
   );
 
   expect(screen.getByTestId("player-desktop-bar")).toBeTruthy();
@@ -1010,6 +1008,67 @@ test("renders desktop bar with volume and transport controls", async () => {
   expect(within(desktopBar).getByLabelText("Shuffle: off")).toBeTruthy();
 });
 
+test("links the track title and artist from the desktop and mini player", async () => {
+  await renderPlayer();
+
+  for (const testId of ["player-desktop-bar", "player-mini-bar"]) {
+    const bar = screen.getByTestId(testId);
+    expect(within(bar).getByRole("link", { name: "Test Song" })).toHaveAttribute(
+      "href",
+      "/library/track-1",
+    );
+    expect(within(bar).getByRole("link", { name: "Test Artist" })).toHaveAttribute(
+      "href",
+      "/artists/artist-1",
+    );
+  }
+});
+
+test("mini bar title link does not open the now playing sheet", async () => {
+  const user = userEvent.setup();
+  await renderPlayer();
+
+  await user.click(
+    within(screen.getByTestId("player-mini-bar")).getByRole("link", { name: "Test Song" }),
+  );
+
+  expect(screen.queryByTestId("player-now-playing-sheet")).toBeNull();
+});
+
+test("links the track title and artist in the now playing sheet and closes it", async () => {
+  const user = userEvent.setup();
+  await renderPlayer();
+
+  await user.click(screen.getByLabelText("Open now playing"));
+  const sheet = await screen.findByTestId("player-now-playing-sheet");
+
+  expect(within(sheet).getByRole("link", { name: "Test Song" })).toHaveAttribute(
+    "href",
+    "/library/track-1",
+  );
+  const artistLink = within(sheet).getByRole("link", { name: "Test Artist" });
+  expect(artistLink).toHaveAttribute("href", "/artists/artist-1");
+
+  await user.click(artistLink);
+  await waitFor(() => {
+    expect(screen.queryByTestId("player-now-playing-sheet")).toBeNull();
+  });
+});
+
+test("leaves the artist name unlinked when playback has no artist page", async () => {
+  await renderPlayer({
+    track: { ...mockTrack, artist: { id: "room-artist", name: "Room Artist" } },
+  });
+
+  const desktopBar = screen.getByTestId("player-desktop-bar");
+  expect(within(desktopBar).getByRole("link", { name: "Test Song" })).toHaveAttribute(
+    "href",
+    "/library/track-1",
+  );
+  expect(within(desktopBar).queryByRole("link", { name: "Room Artist" })).toBeNull();
+  expect(within(desktopBar).getByText("Room Artist")).toBeTruthy();
+});
+
 test("swipe left on mini-bar triggers onNext", async () => {
   const onNext = vi.fn();
   await renderPlayer({ onNext, hasNext: true });
@@ -1083,7 +1142,7 @@ test("reports play_started once per track, and again once the track changes", as
   expect(reportPlayEvent).toHaveBeenCalledTimes(1);
 
   const nextTrack: FullTrack = { ...mockTrack, id: "track-2", title: "Second Song" };
-  rerender(<AudioPlayer {...defaultProps} track={nextTrack} />);
+  rerender(playerUi({ track: nextTrack }));
   setPaused(audioEl, true);
 
   await clickTransport(user);

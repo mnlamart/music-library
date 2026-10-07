@@ -7,6 +7,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, StrictMode, type ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { consoleError } from "#tests/setup/setup-test-env.ts";
 import { toast } from "#app/components/ui/use-toast.ts";
@@ -246,10 +247,12 @@ function QueueStateProbe() {
 
 function renderQueueApp(children: ReactNode) {
   return render(
-    <AudioPlayerProvider>
-      <QueueStateProbe />
-      {children}
-    </AudioPlayerProvider>,
+    <MemoryRouter>
+      <AudioPlayerProvider>
+        <QueueStateProbe />
+        {children}
+      </AudioPlayerProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -404,12 +407,12 @@ beforeAll(() => {
     }),
   });
 
-  vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(
-    function (this: HTMLMediaElement) {
-      Object.defineProperty(this, "paused", { configurable: true, value: false });
-      return Promise.resolve();
-    },
-  );
+  vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    return Promise.resolve();
+  });
 });
 
 beforeEach(() => {
@@ -611,12 +614,14 @@ describe("queue sheet integration", () => {
     mockSpineAndHydration(vi.mocked(fetch));
 
     render(
-      <StrictMode>
-        <AudioPlayerProvider>
-          <QueueStateProbe />
-          <WarmPlaybackControls />
-        </AudioPlayerProvider>
-      </StrictMode>,
+      <MemoryRouter>
+        <StrictMode>
+          <AudioPlayerProvider>
+            <QueueStateProbe />
+            <WarmPlaybackControls />
+          </AudioPlayerProvider>
+        </StrictMode>
+      </MemoryRouter>,
     );
     await startWarmLibraryPlayback(user);
     await user.click(screen.getByRole("button", { name: "Add Bravo to up next" }));
@@ -954,19 +959,19 @@ describe("queue sheet integration", () => {
     // jsdom leaves the media element's play/pause unimplemented (and
     // `restoreMocks: true` clears `beforeAll` spies before each test), so mock
     // them per-test and fire the matching events a real browser would.
-    vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(
-      function (this: HTMLMediaElement) {
-        Object.defineProperty(this, "paused", { configurable: true, value: false });
-        this.dispatchEvent(new Event("play"));
-        return Promise.resolve();
-      },
-    );
-    vi.spyOn(window.HTMLMediaElement.prototype, "pause").mockImplementation(
-      function (this: HTMLMediaElement) {
-        Object.defineProperty(this, "paused", { configurable: true, value: true });
-        this.dispatchEvent(new Event("pause"));
-      },
-    );
+    vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      Object.defineProperty(this, "paused", { configurable: true, value: false });
+      this.dispatchEvent(new Event("play"));
+      return Promise.resolve();
+    });
+    vi.spyOn(window.HTMLMediaElement.prototype, "pause").mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      Object.defineProperty(this, "paused", { configurable: true, value: true });
+      this.dispatchEvent(new Event("pause"));
+    });
 
     renderQueueApp(<WarmPlaybackControls />);
     await startWarmLibraryPlayback(user);
