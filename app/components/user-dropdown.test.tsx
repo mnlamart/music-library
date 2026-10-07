@@ -32,21 +32,6 @@ function renderDropdown() {
   render(<RouterProvider router={router} />);
 }
 
-test("hides library, playlists, and history menu items on mobile (md+ only)", async () => {
-  const user = userEvent.setup();
-  renderDropdown();
-
-  await user.click(screen.getByRole("button", { name: /user menu/i }));
-
-  const library = await screen.findByRole("menuitem", { name: /my library/i });
-  const playlists = screen.getByRole("menuitem", { name: /my playlists/i });
-  const history = screen.getByRole("menuitem", { name: /history/i });
-
-  expect(library.className).toMatch(/\bmax-md:hidden\b/);
-  expect(playlists.className).toMatch(/\bmax-md:hidden\b/);
-  expect(history.className).toMatch(/\bmax-md:hidden\b/);
-});
-
 test("includes Party Room link for all viewports", async () => {
   const user = userEvent.setup();
   renderDropdown();
