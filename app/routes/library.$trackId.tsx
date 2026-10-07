@@ -36,18 +36,9 @@ export const handle: BreadcrumbHandle = {
   breadcrumb: ({ loaderData }) => getTrackTitle(loaderData),
 };
 
-export function playbackContextForTrack(track: {
-  id: string;
-  artist: { id: string };
-  albumRecord?: { id: string } | null;
-}) {
-  if (track.albumRecord?.id) {
-    return { type: "album" as const, albumId: track.albumRecord.id };
-  }
-  if (track.artist?.id) {
-    return { type: "artist" as const, artistId: track.artist.id };
-  }
-  return { type: "track" as const, trackId: track.id };
+/** Play on this page is this track only. Album and artist rows continue their own lists. */
+export function playbackContextForTrack(trackId: string) {
+  return { type: "track" as const, trackId };
 }
 
 export function chooseRelatedTracks<T>(input: {
@@ -341,7 +332,7 @@ export default function TrackRoute({ loaderData }: Route.ComponentProps) {
 
   const handlePlay = () => {
     if (!hasAudio) return;
-    void playTrack(playable, playbackContextForTrack({ id: track.id, artist, albumRecord: album }));
+    void playTrack(playable, playbackContextForTrack(track.id));
   };
 
   const queueAndToast = (action: (trackToQueue: typeof playable) => void, description: string) => {

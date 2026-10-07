@@ -288,30 +288,8 @@ beforeEach(() => {
   download.label = "Download";
 });
 
-test("playback continues through the album, then the artist, then the track", () => {
-  expect(
-    playbackContextForTrack({
-      id: "track-1",
-      artist: { id: "artist-1" },
-      albumRecord: { id: "album-1" },
-    }),
-  ).toEqual({ type: "album", albumId: "album-1" });
-
-  expect(
-    playbackContextForTrack({
-      id: "track-1",
-      artist: { id: "artist-1" },
-      albumRecord: null,
-    }),
-  ).toEqual({ type: "artist", artistId: "artist-1" });
-
-  expect(
-    playbackContextForTrack({
-      id: "track-1",
-      artist: { id: "" },
-      albumRecord: null,
-    }),
-  ).toEqual({ type: "track", trackId: "track-1" });
+test("play on the track page stays on this track", () => {
+  expect(playbackContextForTrack("track-1")).toEqual({ type: "track", trackId: "track-1" });
 });
 
 test("related tracks prefer the album and fall back to the artist", () => {
@@ -386,14 +364,14 @@ test("shows the track as a playable music page", async () => {
   await user.click(screen.getByRole("button", { name: "Play" }));
   expect(player.playTrack).toHaveBeenCalledWith(
     expect.objectContaining({ id: "track-1", title: "Midnight City" }),
-    { type: "album", albumId: "album-1" },
+    { type: "track", trackId: "track-1" },
   );
 
   await user.click(screen.getByRole("button", { name: "Download" }));
   expect(download.downloadAudioFile).toHaveBeenCalledOnce();
 });
 
-test("plays from the artist catalog when the track has no album", async () => {
+test("lists other tracks by the artist when the track has no album", async () => {
   const user = userEvent.setup();
   renderTrack(
     makeData({
@@ -412,8 +390,8 @@ test("plays from the artist catalog when the track has no album", async () => {
 
   await user.click(screen.getByRole("button", { name: "Play" }));
   expect(player.playTrack).toHaveBeenCalledWith(expect.objectContaining({ id: "track-1" }), {
-    type: "artist",
-    artistId: "artist-1",
+    type: "track",
+    trackId: "track-1",
   });
   expect(screen.getByRole("heading", { name: "More from M83" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "See all" })).toHaveAttribute(

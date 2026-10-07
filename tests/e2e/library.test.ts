@@ -49,11 +49,12 @@ test.describe("Music Library", () => {
     // Wait for page to load
     await page.waitForLoadState("domcontentloaded");
 
-    // Should show track details - h2 with track title
-    await expect(page.getByRole("heading", { name: "Test Track", level: 2 })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Test Track", level: 1 })).toBeVisible({
       timeout: 10000,
     });
-    await expect(page.getByText("Test Artist")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("link", { name: "Test Artist", exact: true })).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("playing from track detail uses a one-track queue", async ({
@@ -79,9 +80,20 @@ test.describe("Music Library", () => {
 
     await page.goto(`/library/${track.id}`);
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.getByRole("heading", { name: "Detail Queue Track", level: 2 })).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Detail Queue Track", level: 1 })).toBeVisible({
       timeout: 10000,
     });
+    const playButton = page.getByRole("button", { name: "Play", exact: true });
+    // The button is in the server HTML. Wait until React has hydrated it so the click runs play.
+    await expect
+      .poll(() =>
+        playButton.evaluate((button) =>
+          Object.keys(button).some(
+            (key) => key.startsWith("__reactProps") || key.startsWith("__reactFiber"),
+          ),
+        ),
+      )
+      .toBe(true);
     await dismissOverlays(page);
 
     await Promise.all([
@@ -89,7 +101,7 @@ test.describe("Music Library", () => {
         (response) => response.url().includes("/api/queue-spine") && response.status() === 200,
         { timeout: 15000 },
       ),
-      page.getByRole("button", { name: "Play" }).click(),
+      playButton.click(),
     ]);
 
     const playerBar = page.locator(
