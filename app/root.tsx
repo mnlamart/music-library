@@ -26,6 +26,7 @@ import { InRoomChip } from "./components/party-room/in-room-chip.tsx";
 import { AudioPlayerProvider, useAudioPlayer } from "./components/audio-player-provider";
 import { AutoplayGuideDialog } from "./components/autoplay-guide-dialog";
 import { BottomNav } from "./components/bottom-nav.tsx";
+import { DesktopNav } from "./components/desktop-nav.tsx";
 import { OfflineAwareErrorBoundary } from "./components/offline/offline-aware-error-boundary.tsx";
 import { OfflineStatusBanner } from "./components/offline/offline-status-banner.tsx";
 import { PullToRefreshProvider } from "./components/pull-to-refresh.tsx";
@@ -62,6 +63,12 @@ import { useOptionalUser } from "./utils/user.ts";
 const LazyUserDropdown = lazy(() =>
   import("./components/user-dropdown.tsx").then((m) => ({
     default: m.UserDropdown,
+  })),
+);
+
+const LazyHeaderRoleMenus = lazy(() =>
+  import("./components/header-role-menus.tsx").then((m) => ({
+    default: m.HeaderRoleMenus,
   })),
 );
 
@@ -335,19 +342,25 @@ function ShellLayout() {
         Skip to content
       </a>
       <header className="container py-6" role="banner">
-        <nav className="flex items-center justify-between gap-4 md:gap-8">
+        <nav className="flex items-center justify-between gap-3 md:gap-4">
           <Logo />
-          <div className="ml-auto hidden max-w-sm flex-1 sm:block">
+          <DesktopNav />
+          <div className="ml-auto hidden min-w-0 max-w-sm flex-1 sm:block">
             <Link
               to="/search"
               className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm text-muted-foreground hover:border-foreground/50 hover:text-foreground transition-colors"
             >
-              <Icon name="magnifying-glass" className="h-4 w-4" />
-              <span>Search tracks, albums, artists...</span>
+              <Icon name="magnifying-glass" className="h-4 w-4 shrink-0" />
+              <span className="truncate">Search tracks, albums, artists...</span>
             </Link>
           </div>
-          <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
+          <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
             {user ? <InRoomChip /> : null}
+            {user ? (
+              <Suspense fallback={null}>
+                <LazyHeaderRoleMenus />
+              </Suspense>
+            ) : null}
             <ThemeSwitch userPreference={loaderData.requestInfo.userPrefs.theme} />
             {user ? (
               <Suspense fallback={null}>

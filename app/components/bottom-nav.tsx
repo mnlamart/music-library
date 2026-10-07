@@ -1,22 +1,7 @@
 import { NavLink, useNavigate } from "react-router";
 import { Icon } from "#app/components/ui/icon.tsx";
 import { cn } from "#app/utils/misc.tsx";
-
-interface TabConfig {
-  label: string;
-  icon: string;
-  to: string;
-  ariaLabel?: string;
-}
-
-const tabs: TabConfig[] = [
-  { label: "Home", icon: "home", to: "/", ariaLabel: "Home page" },
-  { label: "Discover", icon: "globe", to: "/discover", ariaLabel: "Discover music" },
-  { label: "Search", icon: "magnifying-glass", to: "/search", ariaLabel: "Search music" },
-  { label: "My Library", icon: "file-text", to: "/library", ariaLabel: "My music library" },
-  { label: "My Playlists", icon: "list-bullet", to: "/playlists", ariaLabel: "My playlists" },
-  { label: "History", icon: "clock", to: "/history", ariaLabel: "Listening history" },
-];
+import { listeningNavItems } from "./app-navigation.ts";
 
 export function BottomNav() {
   const navigate = useNavigate();
@@ -33,14 +18,14 @@ export function BottomNav() {
       aria-label="Main navigation"
     >
       <ul className="flex h-16 items-center justify-around">
-        {tabs.map((tab) => (
+        {listeningNavItems.map((tab) => (
           <li key={tab.to} className="flex-1">
             <NavLink
               to={tab.to}
               end={tab.to === "/"}
               viewTransition={false}
               onClick={tab.to === "/search" ? handleSearchClick : undefined}
-              aria-label={tab.ariaLabel || tab.label}
+              aria-label={tab.ariaLabel}
               prefetch="intent"
               className={({ isActive }) =>
                 cn(
@@ -51,11 +36,7 @@ export function BottomNav() {
             >
               {({ isActive }) => (
                 <>
-                  <Icon
-                    name={tab.icon as Parameters<typeof Icon>[0]["name"]}
-                    size="lg"
-                    className={cn(isActive && "text-foreground")}
-                  />
+                  <Icon name={tab.icon} size="lg" className={cn(isActive && "text-foreground")} />
                   <span>{tab.label}</span>
                 </>
               )}

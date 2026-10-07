@@ -5,18 +5,26 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, test, vi } from "vitest";
+import { accountMenuItems } from "./app-navigation.ts";
 import { UserDropdown } from "./user-dropdown.tsx";
 
-vi.mock("#app/utils/user.ts", () => ({
-  useUser: () => ({
-    id: "user-1",
-    name: "Kody",
-    username: "kody",
-    image: null,
-    roles: [{ name: "user", permissions: [] }],
-  }),
-  userHasRole: () => false,
+const currentUser = vi.hoisted(() => ({
+  roles: [{ name: "user" }] as Array<{ name: string }>,
 }));
+
+vi.mock("#app/utils/user.ts", async () => {
+  const actual = await vi.importActual<typeof import("#app/utils/user.ts")>("#app/utils/user.ts");
+  return {
+    ...actual,
+    useUser: () => ({
+      id: "user-1",
+      name: "Kody",
+      username: "kody",
+      image: null,
+      roles: currentUser.roles.map((role) => ({ ...role, permissions: [] })),
+    }),
+  };
+});
 
 function renderDropdown() {
   const router = createMemoryRouter(
@@ -32,26 +40,40 @@ function renderDropdown() {
   render(<RouterProvider router={router} />);
 }
 
-test("hides library, playlists, and history menu items on mobile (md+ only)", async () => {
+async function openMenu() {
   const user = userEvent.setup();
   renderDropdown();
-
   await user.click(screen.getByRole("button", { name: /user menu/i }));
+  return screen.findByRole("menu");
+}
 
-  const library = await screen.findByRole("menuitem", { name: /my library/i });
-  const playlists = screen.getByRole("menuitem", { name: /my playlists/i });
-  const history = screen.getByRole("menuitem", { name: /history/i });
+test("the account menu is personal links for every role", async () => {
+  currentUser.roles = [{ name: "admin" }, { name: "curator" }, { name: "user" }];
+  await openMenu();
 
-  expect(library.className).toMatch(/\bmax-md:hidden\b/);
-  expect(playlists.className).toMatch(/\bmax-md:hidden\b/);
-  expect(history.className).toMatch(/\bmax-md:hidden\b/);
+  expect(screen.getByText("Account")).toBeInTheDocument();
+
+  const profile = screen.getByRole("menuitem", { name: /profile/i });
+  expect(profile).toHaveAttribute("href", "/users/kody");
+
+  const links = screen.getAllByRole("menuitem").filter((item) => item.hasAttribute("href"));
+  expect(links.map((item) => item.getAttribute("href"))).toEqual([
+    "/users/kody",
+    ...accountMenuItems.map((item) => item.to),
+  ]);
+
+  expect(screen.getByRole("menuitem", { name: /logout/i })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /my library/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /my playlists/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /^history$/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /curator dashboard/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /admin overview/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /review queue/i })).not.toBeInTheDocument();
 });
 
 test("includes Party Room link for all viewports", async () => {
-  const user = userEvent.setup();
-  renderDropdown();
-
-  await user.click(screen.getByRole("button", { name: /user menu/i }));
+  currentUser.roles = [{ name: "user" }];
+  await openMenu();
 
   const rooms = await screen.findByRole("menuitem", { name: /party room/i });
   expect(rooms.className).not.toMatch(/\bmax-md:hidden\b/);
@@ -59,10 +81,8 @@ test("includes Party Room link for all viewports", async () => {
 });
 
 test("includes My reports for every signed-in user", async () => {
-  const user = userEvent.setup();
-  renderDropdown();
-
-  await user.click(screen.getByRole("button", { name: /user menu/i }));
+  currentUser.roles = [{ name: "user" }];
+  await openMenu();
 
   const reports = await screen.findByRole("menuitem", { name: /my reports/i });
   expect(reports).toHaveAttribute("href", "/reports");
