@@ -2,6 +2,7 @@ import { data } from "react-router";
 import { z } from "zod";
 import { requireCuratorOrAdmin } from "#app/utils/curator.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { type Route } from "./+types/create.ts";
 
 const CreateArtistSchema = z.object({
@@ -12,8 +13,8 @@ function normalizeArtistName(name: string): string {
   return name.toLowerCase().trim();
 }
 
-export async function clientAction() {
-  throw new Error("This route should only be called on the server");
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request }: Route.ActionArgs) {

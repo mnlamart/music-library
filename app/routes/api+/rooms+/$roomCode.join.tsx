@@ -8,6 +8,12 @@ import {
 } from "#app/features/party-room/request.server.ts";
 import { readGuestToken } from "#app/features/party-room/guest-token.server.ts";
 import { combineHeaders } from "#app/utils/misc.tsx";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/$roomCode.join.ts";
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({
   request,

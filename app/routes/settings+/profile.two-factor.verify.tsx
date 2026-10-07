@@ -12,6 +12,7 @@ import { requireUserId } from "#app/utils/auth.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
 import { getDomainUrl, useIsPending } from "#app/utils/misc.tsx";
 import { redirectWithToast } from "#app/utils/toast.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import { getTOTPAuthUri } from "#app/utils/totp.server.ts";
 import { type Route } from "./+types/profile.two-factor.verify.ts";
 import { type BreadcrumbHandle } from "./profile.tsx";
@@ -61,6 +62,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
   const qrCode = await QRCode.toDataURL(otpUri);
   return { otpUri, qrCode };
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request }: Route.ActionArgs) {

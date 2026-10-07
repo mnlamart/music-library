@@ -8,9 +8,15 @@
 import { Link, useLocation } from "react-router";
 import { GeneralErrorBoundary } from "#app/components/error-boundary.tsx";
 import { Icon } from "#app/components/ui/icon.tsx";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/$.ts";
 
 export function loader() {
   throw new Response("Not found", { status: 404 });
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export function action() {

@@ -20,6 +20,8 @@ import { LOCAL_SERVICE } from "#app/constants/services";
 import { type ExtractedAudioMetadata } from "#app/utils/audio-metadata.server";
 import { prisma } from "#app/utils/db.server";
 import { requireUserWithRole } from "#app/utils/permissions.server";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/upload.ts";
 
 export const handle: BreadcrumbHandle = {
   breadcrumb: <Icon name="download">Upload</Icon>,
@@ -64,6 +66,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   return data({ service });
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request }: ActionFunctionArgs) {

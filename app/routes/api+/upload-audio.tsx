@@ -9,6 +9,8 @@ import { extractAudioMetadata } from "#app/utils/audio-metadata.server";
 import { findOrCreateCoverImageTx, getOrCreateAlbumTx } from "#app/utils/cover-management.server";
 import { prisma } from "#app/utils/db.server";
 import { requireUserWithRole } from "#app/utils/permissions.server";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/upload-audio.ts";
 
 // Maximum file size: 100MB
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -26,6 +28,10 @@ const ALLOWED_MIME_TYPES = [
   "audio/ogg",
   "audio/webm",
 ];
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({ request }: ActionFunctionArgs) {
   const userId = await requireUserWithRole(request, "admin");

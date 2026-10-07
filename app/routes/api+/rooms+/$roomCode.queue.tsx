@@ -8,11 +8,17 @@ import {
   skipNext,
   skipToIndex,
 } from "#app/features/party-room/queue.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import {
   partyRoomErrorResponse,
   readJsonBody,
   resolveActor,
 } from "#app/features/party-room/request.server.ts";
+import { type Route } from "./+types/$roomCode.queue.ts";
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({
   request,

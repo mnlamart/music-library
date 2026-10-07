@@ -13,6 +13,7 @@ import { findOrCreateCoverImageTx, getOrCreateAlbumTx } from "#app/utils/cover-m
 import { prisma } from "#app/utils/db.server";
 import { requireUserWithRole } from "#app/utils/permissions.server";
 import { extractAudioFilesFromZip } from "#app/utils/zip-extraction.server";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
 import {
   initUploadProgress,
   updateFileProgress,
@@ -21,6 +22,7 @@ import {
   getUploadProgress,
   type StoredFileData,
 } from "./upload-progress.$uploadId";
+import { type Route } from "./+types/upload-audio-batch.ts";
 
 // Maximum file size: 100MB per file, 500MB for ZIP
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -121,6 +123,10 @@ interface FileWithMetadata {
     totalDiscs?: number;
     lyrics?: string;
   };
+}
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
 }
 
 export async function action({ request }: ActionFunctionArgs) {

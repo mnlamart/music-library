@@ -3,6 +3,12 @@ import { DEFAULT_JOIN_ROLE } from "#app/features/party-room/constants.ts";
 import { createRoom, isDefaultJoinRole } from "#app/features/party-room/party-room.server.ts";
 import { partyRoomErrorResponse, readJsonBody } from "#app/features/party-room/request.server.ts";
 import { prisma } from "#app/utils/db.server.ts";
+import { proxyClientActionToServer } from "#app/utils/server-proxy-client-action.ts";
+import { type Route } from "./+types/index.ts";
+
+export async function clientAction(args: Route.ClientActionArgs) {
+  return proxyClientActionToServer(args);
+}
 
 export async function action({ request }: { request: Request }) {
   if (request.method !== "POST") {
