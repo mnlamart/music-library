@@ -472,22 +472,20 @@ function PlayerMiniBar({
         <button
           type="button"
           onClick={onOpenNowPlaying}
-          className="shrink-0"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
           aria-label="Open now playing"
         >
           <TrackThumbnail
             coverImage={track.coverImage}
             alt={track.title}
             size="md"
-            className="shadow-md"
+            className="shadow-md shrink-0"
           />
+          <div className="min-w-0 flex-1">
+            <MarqueeText className="text-sm font-semibold">{track.title}</MarqueeText>
+            <MarqueeText className="text-xs text-muted-foreground">{track.artist.name}</MarqueeText>
+          </div>
         </button>
-        <PlayerTrackIdentity
-          track={track}
-          titleClassName="text-sm font-semibold"
-          artistClassName="text-xs text-muted-foreground"
-          className="flex-1"
-        />
         <Button
           variant="default"
           size="lg"

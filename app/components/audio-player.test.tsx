@@ -1008,31 +1008,28 @@ test("renders desktop bar with volume and transport controls", async () => {
   expect(within(desktopBar).getByLabelText("Shuffle: off")).toBeTruthy();
 });
 
-test("links the track title and artist from the desktop and mini player", async () => {
+test("links the track title and artist from the desktop player", async () => {
   await renderPlayer();
 
-  for (const testId of ["player-desktop-bar", "player-mini-bar"]) {
-    const bar = screen.getByTestId(testId);
-    expect(within(bar).getByRole("link", { name: "Test Song" })).toHaveAttribute(
-      "href",
-      "/library/track-1",
-    );
-    expect(within(bar).getByRole("link", { name: "Test Artist" })).toHaveAttribute(
-      "href",
-      "/artists/artist-1",
-    );
-  }
+  const desktopBar = screen.getByTestId("player-desktop-bar");
+  expect(within(desktopBar).getByRole("link", { name: "Test Song" })).toHaveAttribute(
+    "href",
+    "/library/track-1",
+  );
+  expect(within(desktopBar).getByRole("link", { name: "Test Artist" })).toHaveAttribute(
+    "href",
+    "/artists/artist-1",
+  );
 });
 
-test("mini bar title link does not open the now playing sheet", async () => {
-  const user = userEvent.setup();
+test("keeps the mobile mini bar title and artist as plain text", async () => {
   await renderPlayer();
 
-  await user.click(
-    within(screen.getByTestId("player-mini-bar")).getByRole("link", { name: "Test Song" }),
-  );
-
-  expect(screen.queryByTestId("player-now-playing-sheet")).toBeNull();
+  const miniBar = screen.getByTestId("player-mini-bar");
+  expect(within(miniBar).queryByRole("link", { name: "Test Song" })).toBeNull();
+  expect(within(miniBar).queryByRole("link", { name: "Test Artist" })).toBeNull();
+  expect(within(miniBar).getByText("Test Song")).toBeTruthy();
+  expect(within(miniBar).getByText("Test Artist")).toBeTruthy();
 });
 
 test("links the track title and artist in the now playing sheet and closes it", async () => {
