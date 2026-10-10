@@ -383,13 +383,11 @@ function PlayerTrackIdentity({
   titleClassName,
   artistClassName,
   className,
-  onNavigate,
 }: {
   track: Track;
   titleClassName: string;
   artistClassName: string;
   className?: string;
-  onNavigate?: () => void;
 }) {
   const artistHref = artistPagePath(track.artist.id);
 
@@ -398,7 +396,6 @@ function PlayerTrackIdentity({
       <Link
         to={`/library/${track.id}`}
         prefetch="intent"
-        onClick={onNavigate}
         className="block hover:underline focus-visible:underline"
       >
         <MarqueeText className={titleClassName}>{track.title}</MarqueeText>
@@ -407,7 +404,6 @@ function PlayerTrackIdentity({
         <Link
           to={artistHref}
           prefetch="intent"
-          onClick={onNavigate}
           className="block hover:underline focus-visible:underline"
         >
           <MarqueeText className={artistClassName}>{track.artist.name}</MarqueeText>
@@ -472,22 +468,20 @@ function PlayerMiniBar({
         <button
           type="button"
           onClick={onOpenNowPlaying}
-          className="shrink-0"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
           aria-label="Open now playing"
         >
           <TrackThumbnail
             coverImage={track.coverImage}
             alt={track.title}
             size="md"
-            className="shadow-md"
+            className="shadow-md shrink-0"
           />
+          <div className="min-w-0 flex-1">
+            <MarqueeText className="text-sm font-semibold">{track.title}</MarqueeText>
+            <MarqueeText className="text-xs text-muted-foreground">{track.artist.name}</MarqueeText>
+          </div>
         </button>
-        <PlayerTrackIdentity
-          track={track}
-          titleClassName="text-sm font-semibold"
-          artistClassName="text-xs text-muted-foreground"
-          className="flex-1"
-        />
         <Button
           variant="default"
           size="lg"
@@ -605,12 +599,10 @@ function PlayerNowPlayingSheet({
               className="shadow-lg h-40 w-40"
             />
             <div className="w-full text-center">
-              <PlayerTrackIdentity
-                track={track}
-                titleClassName="text-lg font-semibold"
-                artistClassName="text-sm text-muted-foreground"
-                onNavigate={() => onOpenChange(false)}
-              />
+              <MarqueeText className="text-lg font-semibold">{track.title}</MarqueeText>
+              <MarqueeText className="text-sm text-muted-foreground">
+                {track.artist.name}
+              </MarqueeText>
             </div>
           </div>
           <PlayerSeekBar
