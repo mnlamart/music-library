@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Link } from "react-router";
 import { useAudioPlayer } from "#app/components/audio-player-provider";
 import { AddToPlaylistMenu } from "#app/components/add-to-playlist-menu";
 import { MarqueeText } from "#app/components/marquee-text";
@@ -369,6 +370,55 @@ interface PlayerChromeProps {
   onClearSleepTimer: () => void;
 }
 
+/** Party-room speaker playback stubs this id when the snapshot has no artist id. */
+const ROOM_SPEAKER_ARTIST_ID = "room-artist";
+
+function artistPagePath(artistId: string): string | null {
+  if (!artistId || artistId === ROOM_SPEAKER_ARTIST_ID) return null;
+  return `/artists/${artistId}`;
+}
+
+function PlayerTrackIdentity({
+  track,
+  titleClassName,
+  artistClassName,
+  className,
+  onNavigate,
+}: {
+  track: Track;
+  titleClassName: string;
+  artistClassName: string;
+  className?: string;
+  onNavigate?: () => void;
+}) {
+  const artistHref = artistPagePath(track.artist.id);
+
+  return (
+    <div className={cn("min-w-0", className)}>
+      <Link
+        to={`/library/${track.id}`}
+        prefetch="intent"
+        onClick={onNavigate}
+        className="block hover:underline focus-visible:underline"
+      >
+        <MarqueeText className={titleClassName}>{track.title}</MarqueeText>
+      </Link>
+      {artistHref ? (
+        <Link
+          to={artistHref}
+          prefetch="intent"
+          onClick={onNavigate}
+          className="block hover:underline focus-visible:underline"
+        >
+          <MarqueeText className={artistClassName}>{track.artist.name}</MarqueeText>
+        </Link>
+      ) : (
+        <MarqueeText className={artistClassName}>{track.artist.name}</MarqueeText>
+      )}
+    </div>
+  );
+}
+
 interface PlayerMiniBarProps extends PlayerChromeProps {
   onOpenNowPlaying: () => void;
 }
@@ -422,20 +472,22 @@ function PlayerMiniBar({
         <button
           type="button"
           onClick={onOpenNowPlaying}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="shrink-0"
           aria-label="Open now playing"
         >
           <TrackThumbnail
             coverImage={track.coverImage}
             alt={track.title}
             size="md"
-            className="shadow-md shrink-0"
+            className="shadow-md"
           />
-          <div className="min-w-0 flex-1">
-            <MarqueeText className="text-sm font-semibold">{track.title}</MarqueeText>
-            <MarqueeText className="text-xs text-muted-foreground">{track.artist.name}</MarqueeText>
-          </div>
         </button>
+        <PlayerTrackIdentity
+          track={track}
+          titleClassName="text-sm font-semibold"
+          artistClassName="text-xs text-muted-foreground"
+          className="flex-1"
+        />
         <Button
           variant="default"
           size="lg"
@@ -553,10 +605,12 @@ function PlayerNowPlayingSheet({
               className="shadow-lg h-40 w-40"
             />
             <div className="w-full text-center">
-              <MarqueeText className="text-lg font-semibold">{track.title}</MarqueeText>
-              <MarqueeText className="text-sm text-muted-foreground">
-                {track.artist.name}
-              </MarqueeText>
+              <PlayerTrackIdentity
+                track={track}
+                titleClassName="text-lg font-semibold"
+                artistClassName="text-sm text-muted-foreground"
+                onNavigate={() => onOpenChange(false)}
+              />
             </div>
           </div>
           <PlayerSeekBar
@@ -747,10 +801,12 @@ function PlayerDesktopBar({
           size="lg"
           className="shadow-md shrink-0"
         />
-        <div className="min-w-0 flex-1">
-          <MarqueeText className="text-sm font-semibold">{track.title}</MarqueeText>
-          <MarqueeText className="text-xs text-muted-foreground">{track.artist.name}</MarqueeText>
-        </div>
+        <PlayerTrackIdentity
+          track={track}
+          titleClassName="text-sm font-semibold"
+          artistClassName="text-xs text-muted-foreground"
+          className="flex-1"
+        />
       </div>
 
       <div className="flex min-w-0 max-w-2xl flex-1 flex-col items-center gap-2">
