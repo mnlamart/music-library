@@ -365,4 +365,68 @@ describe("Party Room UI affordances", () => {
     expect(screen.getByText(/add playlist to queue/i)).toBeInTheDocument();
     vi.mocked(globalThis.fetch).mockRestore();
   });
+
+  it("keeps Away participants, marks them Away, and drops the original host label", () => {
+    const now = Date.now();
+    mockParty = {
+      ...mockParty,
+      canManage: false,
+      isHost: false,
+      room: {
+        id: "r1",
+        code: "AB3K9Q",
+        status: "open",
+        roomVersion: 1,
+        defaultJoinRole: "listener",
+        currentHostParticipantId: "p1",
+        me: { id: "p3", role: "listener", userId: "u3", displayName: "Sam" },
+        participants: [
+          {
+            id: "p1",
+            displayName: "Kody",
+            role: "host",
+            userId: "u1",
+            isGuest: false,
+            // Speaker within the 30s silence window — still here.
+            lastHeartbeatAt: new Date(now - 15_000).toISOString(),
+            isOriginalHost: true,
+          },
+          {
+            id: "p2",
+            displayName: "Alex",
+            role: "dj",
+            userId: "u2",
+            isGuest: false,
+            // Non-speaker past the 10s Away threshold.
+            lastHeartbeatAt: new Date(now - 15_000).toISOString(),
+            isOriginalHost: false,
+          },
+          {
+            id: "p3",
+            displayName: "Sam",
+            role: "listener",
+            userId: "u3",
+            isGuest: false,
+            lastHeartbeatAt: new Date(now - 1_000).toISOString(),
+            isOriginalHost: false,
+          },
+        ],
+        queue: [],
+        playback: { isPlaying: false, currentIndex: 0, currentTrackId: null },
+        joinUrl: "/rooms/AB3K9Q",
+        qrDataUrl: null,
+      },
+    };
+    renderWithRouter(<RoomsHub />);
+
+    const items = screen.getAllByRole("listitem");
+    const text = (name: string) => items.find((item) => item.textContent?.includes(name));
+    expect(text("Kody")).toBeTruthy();
+    expect(text("Alex")).toBeTruthy();
+    expect(text("Sam")).toBeTruthy();
+    expect(text("Alex")?.textContent).toMatch(/Away/);
+    expect(text("Kody")?.textContent).not.toMatch(/Away/);
+    expect(text("Sam")?.textContent).not.toMatch(/Away/);
+    expect(screen.queryByText(/original host/i)).not.toBeInTheDocument();
+  });
 });

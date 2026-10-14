@@ -16,7 +16,7 @@ export type RoomParticipantDto = {
   role: RoomRole;
   userId: string | null;
   isGuest: boolean;
-  /** ISO timestamp of last host heartbeat when this participant is current host. */
+  /** ISO timestamp of this participant's last presence heartbeat. */
   lastHeartbeatAt: string | null;
   isOriginalHost: boolean;
 };

@@ -20,7 +20,7 @@ This package currently mixes:
 | `POST` | `/api/rooms/:code/join`         | Smart join                                                                                |
 | `POST` | `/api/rooms/:code/leave`        | Leave                                                                                     |
 | `POST` | `/api/rooms/:code/end`          | Host end                                                                                  |
-| `POST` | `/api/rooms/:code/heartbeat`    | Host heartbeat                                                                            |
+| `POST` | `/api/rooms/:code/heartbeat`    | Presence heartbeat for any seated participant                                             |
 | `POST` | `/api/rooms/:code/become-host`  | Takeover                                                                                  |
 | `POST` | `/api/rooms/:code/reclaim-host` | Original host reclaim                                                                     |
 | `POST` | `/api/rooms/:code/settings`     | `defaultJoinRole`                                                                         |

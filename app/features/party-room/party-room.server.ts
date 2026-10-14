@@ -6,7 +6,6 @@ import {
   EMPTY_ROOM_TTL_MS,
   GUEST_DISPLAY_NAME_MAX,
   GUEST_DISPLAY_NAME_MIN,
-  HOST_GRACE_MS,
   MAX_ACTIVE_ROOMS_PER_CREATOR,
   MAX_PARTICIPANTS,
   ROOM_ROLE,
@@ -15,6 +14,7 @@ import {
   type RoomRole,
 } from "./constants.ts";
 import { createGuestToken, hashGuestToken } from "./guest-token.server.ts";
+import { isParticipantAway } from "./presence.ts";
 import { publishRoomEvent } from "./sse.server.ts";
 
 export type PartyRoomErrorCode =
@@ -105,11 +105,90 @@ export async function maybeAutoCloseEmptyRoom(roomId: string, now = new Date()) 
   return endRoom({ roomId, actor: { type: "system" } });
 }
 
+type RoomPresence = {
+  hostTakeoverAvailable: boolean;
+  emptySince: string | null;
+  participants: Array<{ id: string; lastSeenAt: string }>;
+};
+
+/**
+ * Set emptySince when every seated participant is Away; clear it when anyone is here.
+ * Closing a tab does not set leftAt — Away is lastSeenAt age only.
+ * Speaker uses the 30s silence window; everyone else uses the 10s window.
+ */
+async function reconcileRoomPresence(roomId: string, now: Date): Promise<RoomPresence> {
+  const room = await prisma.room.findUnique({
+    where: { id: roomId },
+    select: {
+      status: true,
+      emptySince: true,
+      currentHostParticipantId: true,
+      participants: {
+        where: { leftAt: null },
+        select: { id: true, lastSeenAt: true },
+      },
+    },
+  });
+
+  if (!room || room.status !== ROOM_STATUS.open) {
+    return { hostTakeoverAvailable: false, emptySince: null, participants: [] };
+  }
+
+  const nowMs = now.getTime();
+  const anyoneHere = room.participants.some(
+    (participant) =>
+      !isParticipantAway(
+        participant.lastSeenAt,
+        participant.id === room.currentHostParticipantId,
+        nowMs,
+      ),
+  );
+
+  let emptySince = room.emptySince;
+  if (anyoneHere && room.emptySince) {
+    emptySince = null;
+  } else if (!anyoneHere && !room.emptySince) {
+    // Vacuous when nobody is seated: the room is empty, so the TTL can start.
+    emptySince = now;
+  }
+
+  if (emptySince !== room.emptySince) {
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { emptySince, roomVersion: { increment: 1 } },
+    });
+    await emitRoomSnapshot(roomId);
+  }
+
+  const host = room.currentHostParticipantId
+    ? (room.participants.find((participant) => participant.id === room.currentHostParticipantId) ??
+      null)
+    : null;
+
+  return {
+    hostTakeoverAvailable: !host || isParticipantAway(host.lastSeenAt, true, nowMs),
+    emptySince: emptySince ? emptySince.toISOString() : null,
+    participants: room.participants.map((participant) => ({
+      id: participant.id,
+      lastSeenAt: participant.lastSeenAt.toISOString(),
+    })),
+  };
+}
+
 /**
  * Close open rooms that have been empty longer than EMPTY_ROOM_TTL_MS.
  * Opportunistic + scheduler — rooms nobody looks up still expire.
+ * Reconciles Away presence first so a live seat clears emptySince before expiry.
  */
 export async function sweepExpiredEmptyRooms(now = new Date()) {
+  const openRooms = await prisma.room.findMany({
+    where: { status: ROOM_STATUS.open },
+    select: { id: true },
+  });
+  for (const openRoom of openRooms) {
+    await reconcileRoomPresence(openRoom.id, now);
+  }
+
   const cutoff = new Date(now.getTime() - EMPTY_ROOM_TTL_MS);
   const expired = await prisma.room.findMany({
     where: {
@@ -613,7 +692,8 @@ export async function heartbeat({ roomId, actor }: { roomId: string; actor: Part
     where: { id: participant.id },
     data: { lastSeenAt: now },
   });
-  return { ok: true as const, lastSeenAt: now.toISOString() };
+  const presence = await reconcileRoomPresence(roomId, now);
+  return { ok: true as const, lastSeenAt: now.toISOString(), ...presence };
 }
 
 export async function becomeHost({
@@ -643,8 +723,7 @@ export async function becomeHost({
         where: { id: room.currentHostParticipantId },
       });
       if (currentHost && !currentHost.leftAt) {
-        const silentFor = now.getTime() - currentHost.lastSeenAt.getTime();
-        if (silentFor < HOST_GRACE_MS) {
+        if (!isParticipantAway(currentHost.lastSeenAt, true, now.getTime())) {
           throw new PartyRoomError("host_still_present", "Current Host is still connected", 409);
         }
         await tx.roomParticipant.update({
@@ -755,9 +834,7 @@ export async function getRoomSnapshot(roomId: string, actor?: ParticipantActor |
   const host = room.currentHostParticipantId
     ? room.participants.find((p) => p.id === room.currentHostParticipantId)
     : null;
-  const hostSeatEmpty = !host;
-  const hostGraceElapsed = host ? Date.now() - host.lastSeenAt.getTime() > HOST_GRACE_MS : true;
-  const hostTakeoverAvailable = hostSeatEmpty || hostGraceElapsed;
+  const hostTakeoverAvailable = !host || isParticipantAway(host.lastSeenAt, true);
 
   let me: {
     id: string;

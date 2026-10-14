@@ -17,6 +17,7 @@ import {
 import { toast } from "#app/components/ui/use-toast.ts";
 import { type RoomDefaultJoinRole } from "#app/features/party-room/constants.ts";
 import { usePartyRoom } from "#app/features/party-room/party-room-provider.tsx";
+import { isParticipantAway } from "#app/features/party-room/presence.ts";
 
 /** Hard navigations avoid RR lazy-discovery crashes on stale post-deploy tabs. */
 function goToRoom(code: string) {
@@ -132,6 +133,10 @@ export function RoomsHub() {
             {(room.participants ?? []).map((p) => {
               const isSelf = p.id === room.me?.id;
               const canManageParticipant = party.canManage && !isSelf && p.role !== "host";
+              const away = isParticipantAway(
+                p.lastHeartbeatAt,
+                p.id === room.currentHostParticipantId,
+              );
               return (
                 <li
                   key={p.id}
@@ -140,7 +145,7 @@ export function RoomsHub() {
                   <span>
                     {p.displayName}
                     {isSelf ? " (you)" : ""}
-                    {p.isOriginalHost ? " · original host" : ""}
+                    {away ? <span className="text-muted-foreground"> · Away</span> : null}
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="capitalize text-muted-foreground">{p.role}</span>
