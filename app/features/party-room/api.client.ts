@@ -22,7 +22,7 @@
  * A missing cache is not "no room".
  */
 
-import { type RoomDefaultJoinRole, type RoomRole } from "./constants.ts";
+import { SPEAKER_SILENCE_GRACE_MS, type RoomDefaultJoinRole, type RoomRole } from "./constants.ts";
 import {
   type CreateRoomInput,
   type JoinRoomInput,
@@ -247,10 +247,12 @@ export function normalizeRoomSnapshot(
   const hostLast =
     mappedParticipants.find((p) => p.id === currentHostParticipantId)?.lastHeartbeatAt ?? null;
 
-  // Empty host seat (host left) or grace elapsed → others may Become host.
+  // Empty host seat, or speaker silent for SPEAKER_SILENCE_GRACE_MS → others may Become host.
   const hostSeatEmpty =
     !currentHostParticipantId || !mappedParticipants.some((p) => p.id === currentHostParticipantId);
-  const hostGraceElapsed = hostLast ? Date.now() - Date.parse(hostLast) > 10_000 : hostSeatEmpty;
+  const hostGraceElapsed = hostLast
+    ? Date.now() - Date.parse(hostLast) > SPEAKER_SILENCE_GRACE_MS
+    : hostSeatEmpty;
   const hostTakeoverAvailable = Boolean(
     raw.hostTakeoverAvailable ??
     (me && me.id !== currentHostParticipantId && (hostSeatEmpty || hostGraceElapsed)),
@@ -360,8 +362,20 @@ export async function endRoom(code: string): Promise<void> {
   writeActiveRoomCode(null);
 }
 
-export async function sendHostHeartbeat(code: string): Promise<void> {
-  await roomFetch(ROOM_API.heartbeat(code), { method: "POST" }, { allowNoContent: true });
+export type RoomHeartbeatResult = {
+  ok: true;
+  lastSeenAt: string;
+  hostTakeoverAvailable: boolean;
+  emptySince: string | null;
+  participants: Array<{ id: string; lastSeenAt: string }>;
+};
+
+export async function sendHostHeartbeat(code: string): Promise<RoomHeartbeatResult | null> {
+  return roomFetch<RoomHeartbeatResult>(
+    ROOM_API.heartbeat(code),
+    { method: "POST" },
+    { allowNoContent: true },
+  );
 }
 
 export async function becomeHost(code: string, meUserId?: string | null): Promise<RoomSnapshot> {
