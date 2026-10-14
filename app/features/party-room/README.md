@@ -22,7 +22,7 @@ This package currently mixes:
 | `POST` | `/api/rooms/:code/end`          | Host end                                                                                  |
 | `POST` | `/api/rooms/:code/heartbeat`    | Host heartbeat                                                                            |
 | `POST` | `/api/rooms/:code/become-host`  | Takeover                                                                                  |
-| `POST` | `/api/rooms/:code/reclaim-host` | Original host reclaim                                                                     |
+| `POST` | `/api/rooms/:code/reclaim-host` | Reclaim host for `reclaimParticipantId`                                                   |
 | `POST` | `/api/rooms/:code/settings`     | `defaultJoinRole`                                                                         |
 | `POST` | `/api/rooms/:code/queue`        | Intent: `add_track`, `add_playlist`, `remove`, `reorder`, `play`, `pause`, `skip`, `jump` |
 | `GET`  | `/api/rooms/:code/events`       | SSE                                                                                       |

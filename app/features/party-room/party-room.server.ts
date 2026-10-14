@@ -204,7 +204,10 @@ export async function createRoom({
 
     return tx.room.update({
       where: { id: created.id },
-      data: { currentHostParticipantId: host.id },
+      data: {
+        currentHostParticipantId: host.id,
+        reclaimParticipantId: host.id,
+      },
       include: {
         participants: { where: { leftAt: null } },
         queueItems: { orderBy: { position: "asc" } },
@@ -287,23 +290,22 @@ export async function joinRoom({ code, actor }: { code: string; actor: JoinActor
       "User";
 
     if (existingHere) {
+      // Leave then come back with the code: role is the room's current
+      // defaultJoinRole. Do not point reclaimParticipantId back at this seat.
+      // A refresh while still seated keeps the role, except a stale host seat
+      // that is no longer the speaker.
+      const role = existingHere.leftAt
+        ? joinRole
+        : existingHere.role === ROOM_ROLE.host && room.currentHostParticipantId !== existingHere.id
+          ? joinRole
+          : existingHere.role;
       const participant = await prisma.roomParticipant.update({
         where: { id: existingHere.id },
         data: {
           leftAt: null,
           lastSeenAt: now,
           displayName,
-          // Rejoining does not steal host; keep prior role unless they left as host
-          // and room already has another host — revive as default join role if was host.
-          role:
-            existingHere.role === ROOM_ROLE.host &&
-            room.currentHostParticipantId !== existingHere.id
-              ? joinRole
-              : existingHere.leftAt
-                ? existingHere.role === ROOM_ROLE.host
-                  ? joinRole
-                  : existingHere.role
-                : existingHere.role,
+          role,
         },
       });
       await prisma.room.update({
@@ -370,18 +372,20 @@ export async function joinRoom({ code, actor }: { code: string; actor: JoinActor
       where: { roomId: room.id, guestTokenHash: tokenHash },
     });
     if (existing) {
+      // Same browser (same guest token) coming back after Leave takes the
+      // current defaultJoinRole and does not regain reclaimParticipantId.
+      const role = existing.leftAt
+        ? joinRole
+        : existing.role === ROOM_ROLE.host
+          ? joinRole
+          : existing.role;
       const participant = await prisma.roomParticipant.update({
         where: { id: existing.id },
         data: {
           leftAt: null,
           lastSeenAt: now,
           displayName,
-          role:
-            existing.role === ROOM_ROLE.host
-              ? joinRole
-              : existing.leftAt
-                ? joinRole
-                : existing.role,
+          role,
         },
       });
       await prisma.room.update({ where: { id: room.id }, data: { emptySince: null } });
@@ -391,6 +395,7 @@ export async function joinRoom({ code, actor }: { code: string; actor: JoinActor
     }
   }
 
+  // A different device is a new seat. Do not copy reclaimParticipantId onto it.
   token = createGuestToken();
   tokenHash = hashGuestToken(token);
 
@@ -456,12 +461,24 @@ export async function leaveRoom({ roomId, actor }: { roomId: string; actor: Part
   const updates: {
     emptySince?: Date | null;
     currentHostParticipantId?: string | null;
+    reclaimParticipantId?: string;
     isPlaying?: boolean;
     roomVersion: { increment: number };
   } = { roomVersion: { increment: 1 } };
 
   if (remaining === 0) {
     updates.emptySince = now;
+  }
+
+  // The pass follows the speaker when the holder Leaves and is not the host.
+  // Do not clear it. A current host who Leaves through this API is out of scope
+  // (the UI ends the room) and does not move the pass.
+  if (
+    room.reclaimParticipantId === participant.id &&
+    room.currentHostParticipantId &&
+    room.currentHostParticipantId !== participant.id
+  ) {
+    updates.reclaimParticipantId = room.currentHostParticipantId;
   }
 
   if (room.currentHostParticipantId === participant.id) {
@@ -672,18 +689,15 @@ export async function becomeHost({
 }
 
 export async function reclaimHost({ roomId, actor }: { roomId: string; actor: ParticipantActor }) {
-  if (actor.type !== "user") {
-    throw new PartyRoomError("forbidden", "Only the original host user can reclaim", 403);
-  }
   const room = await prisma.room.findUnique({ where: { id: roomId } });
   if (!room || room.status !== ROOM_STATUS.open) {
     throw new PartyRoomError("not_found", "Room not found", 404);
   }
-  if (room.originalHostUserId !== actor.userId) {
-    throw new PartyRoomError("not_original_host", "Only the original host can reclaim", 403);
-  }
 
   const participant = await requireParticipant(roomId, actor);
+  if (participant.id !== room.reclaimParticipantId) {
+    throw new PartyRoomError("not_original_host", "Only the reclaim holder can reclaim", 403);
+  }
   const now = new Date();
 
   if (room.currentHostParticipantId && room.currentHostParticipantId !== participant.id) {
@@ -793,6 +807,7 @@ export async function getRoomSnapshot(roomId: string, actor?: ParticipantActor |
     roomVersion: room.roomVersion,
     isPlaying: room.isPlaying,
     originalHostUserId: room.originalHostUserId,
+    reclaimParticipantId: room.reclaimParticipantId,
     currentHostParticipantId: room.currentHostParticipantId,
     hostTakeoverAvailable,
     emptySince: room.emptySince?.toISOString() ?? null,

@@ -97,14 +97,15 @@ export function isCurrentHost(room: RoomSnapshot): boolean {
   return Boolean(room.me && room.me.id === room.currentHostParticipantId);
 }
 
-/** Original host who lost the seat may reclaim. */
+/**
+ * The reclaim seat may take the speaker back while they are still in the room.
+ * Playback does not hide it. `participants` is the in-room list (`leftAt` null).
+ */
 export function canReclaimHost(room: RoomSnapshot): boolean {
-  return Boolean(
-    room.me &&
-    room.me.isOriginalHost &&
-    room.me.id !== room.currentHostParticipantId &&
-    room.status === "open",
-  );
+  if (room.status !== "open" || !room.me || !room.reclaimParticipantId) return false;
+  if (room.me.id !== room.reclaimParticipantId) return false;
+  if (room.me.id === room.currentHostParticipantId) return false;
+  return room.participants.some((participant) => participant.id === room.me!.id);
 }
 
 /** Non-host participant may take over after grace when server flags it. */

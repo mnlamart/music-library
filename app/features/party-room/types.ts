@@ -48,6 +48,8 @@ export type RoomSnapshot = {
   createdAt: string;
   endedAt: string | null;
   originalHostParticipantId: string;
+  /** Seat allowed to reclaim the speaker. Null only before a holder exists. */
+  reclaimParticipantId: string | null;
   currentHostParticipantId: string;
   /** ISO of last successful host heartbeat (server clock). */
   hostLastHeartbeatAt: string | null;
