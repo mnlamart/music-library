@@ -246,8 +246,8 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     case "retry-all-failed": {
-      // One POST requeues every failed job. Anonymous /admin mutations are
-      // limited to 60 per minute; a logged-in admin is exempt.
+      // One POST requeues every failed job. /admin mutations are limited to
+      // 60 per minute for every caller, including a logged-in admin.
       const result = await prisma.archiveJob.updateMany({
         where: { status: "failed" },
         data: {

@@ -1,6 +1,6 @@
 /**
- * Production cap for non-GET requests whose path includes `/admin`
- * when the caller is not a logged-in admin.
+ * Production cap for every non-GET request whose path includes `/admin`,
+ * including a logged-in admin. A session cookie is not used to skip it.
  * Development and Playwright multiply this so tests are not blocked.
  * Login, signup, and password reset stay on the stricter sensitive tier.
  */
