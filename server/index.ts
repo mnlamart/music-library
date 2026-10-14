@@ -14,6 +14,7 @@ import {
   ADMIN_MUTATION_LIMIT_PER_MINUTE,
   mutationRateLimitTier,
 } from "../app/utils/mutation-rate-limit.ts";
+import { requestHasActiveAdminSession } from "../app/utils/mutation-rate-limit.server.ts";
 import { createRouterLoadContext } from "../app/utils/router-context.server.ts";
 
 const MODE = process.env.NODE_ENV ?? "development";
@@ -181,7 +182,35 @@ const strongRateLimit = rateLimit({
 
 const generalRateLimit = rateLimit(rateLimitDefault);
 app.use((req, res, next) => {
-  switch (mutationRateLimitTier(req.method, req.path)) {
+  const tier = mutationRateLimitTier(req.method, req.path);
+  if (tier !== "admin") {
+    applyMutationRateLimit(tier, req, res, next);
+    return;
+  }
+
+  // Logged-in admins skip this cap. Everyone else, including a request with
+  // no session, still counts toward the 60/minute admin limit.
+  void requestHasActiveAdminSession(req.get("cookie") ?? null)
+    .then((isAdmin) => {
+      if (isAdmin) {
+        next();
+        return;
+      }
+      applyMutationRateLimit(tier, req, res, next);
+    })
+    .catch((error: unknown) => {
+      console.error("Admin rate-limit session check failed", error);
+      applyMutationRateLimit(tier, req, res, next);
+    });
+});
+
+function applyMutationRateLimit(
+  tier: ReturnType<typeof mutationRateLimitTier>,
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+) {
+  switch (tier) {
     case "admin":
       return adminRateLimit(req, res, next);
     case "sensitive":
@@ -191,7 +220,7 @@ app.use((req, res, next) => {
     default:
       return generalRateLimit(req, res, next);
   }
-});
+}
 
 async function getBuild() {
   try {
