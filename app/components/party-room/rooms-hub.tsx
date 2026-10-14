@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { AddPlaylistToRoom } from "#app/components/party-room/add-playlist-to-room.tsx";
+import { EndRoomButton } from "#app/components/party-room/end-room-button.tsx";
 import { HostFailoverControls } from "#app/components/party-room/host-failover-controls.tsx";
 import { RoomQueuePanel } from "#app/components/party-room/room-queue-panel.tsx";
 import { Button } from "#app/components/ui/button.tsx";
@@ -15,7 +16,7 @@ import {
   SelectValue,
 } from "#app/components/ui/select.tsx";
 import { toast } from "#app/components/ui/use-toast.ts";
-import { type RoomDefaultJoinRole } from "#app/features/party-room/constants.ts";
+import { ROOM_ROLE, type RoomDefaultJoinRole } from "#app/features/party-room/constants.ts";
 import { usePartyRoom } from "#app/features/party-room/party-room-provider.tsx";
 
 /** Hard navigations avoid RR lazy-discovery crashes on stale post-deploy tabs. */
@@ -69,17 +70,12 @@ export function RoomsHub() {
             <Button type="button" size="sm" variant="outline" onClick={() => copyText(room.code)}>
               Copy code
             </Button>
-            {party.canManage ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                onClick={() => {
+            {room.me?.role === ROOM_ROLE.host ? (
+              <EndRoomButton
+                onConfirm={() => {
                   void party.end().then(() => toast({ title: "Room ended" }));
                 }}
-              >
-                End room
-              </Button>
+              />
             ) : (
               <Button
                 type="button"
