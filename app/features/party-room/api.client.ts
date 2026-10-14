@@ -169,6 +169,8 @@ export function normalizeRoomSnapshot(
   const participants = Array.isArray(raw.participants) ? raw.participants : [];
   const queue = Array.isArray(raw.queue) ? raw.queue : [];
   const currentHostParticipantId = String(raw.currentHostParticipantId ?? "");
+  const reclaimParticipantId =
+    typeof raw.reclaimParticipantId === "string" ? raw.reclaimParticipantId : null;
   const originalHostUserId =
     typeof raw.originalHostUserId === "string" ? raw.originalHostUserId : null;
 
@@ -269,6 +271,7 @@ export function normalizeRoomSnapshot(
     originalHostParticipantId: String(
       raw.originalHostParticipantId ?? mappedParticipants.find((p) => p.isOriginalHost)?.id ?? "",
     ),
+    reclaimParticipantId,
     currentHostParticipantId,
     hostLastHeartbeatAt: hostLast,
     hostTakeoverAvailable,

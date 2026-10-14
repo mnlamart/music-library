@@ -219,6 +219,38 @@ describe("party-room api.client (backend #294 contract)", () => {
     expect(room.me?.role).toBe("host");
   });
 
+  it("copies reclaimParticipantId onto the snapshot", () => {
+    const room = normalizeRoomSnapshot(
+      {
+        roomId: "room-1",
+        code: "AB3K9Q",
+        status: "open",
+        defaultJoinRole: "listener",
+        roomVersion: 2,
+        currentIndex: 0,
+        isPlaying: true,
+        currentHostParticipantId: "host-2",
+        reclaimParticipantId: "guest-1",
+        participants: [
+          {
+            id: "guest-1",
+            userId: null,
+            displayName: "Walkup",
+            role: "dj",
+            lastSeenAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        queue: [],
+        createdAt: new Date().toISOString(),
+        endedAt: null,
+      },
+      null,
+    );
+    expect(room.reclaimParticipantId).toBe("guest-1");
+    expect(room.playback.isPlaying).toBe(true);
+  });
+
   it("marks hostTakeoverAvailable when host seat is empty", () => {
     const room = normalizeRoomSnapshot(
       {

@@ -48,6 +48,22 @@ async function makeUser(name = "Host User") {
   });
 }
 
+function reclaimSeatId(room: object): string | null {
+  const value = (room as { reclaimParticipantId?: string | null }).reclaimParticipantId;
+  return typeof value === "string" ? value : null;
+}
+
+async function loadRoom(roomId: string) {
+  return prisma.room.findUniqueOrThrow({ where: { id: roomId } });
+}
+
+async function agePastGrace(participantId: string) {
+  await prisma.roomParticipant.update({
+    where: { id: participantId },
+    data: { lastSeenAt: new Date(Date.now() - SPEAKER_SILENCE_GRACE_MS - 1000) },
+  });
+}
+
 describe("party-room lifecycle", () => {
   beforeEach(async () => {
     await cleanup();
@@ -69,6 +85,7 @@ describe("party-room lifecycle", () => {
     expect(room.participants).toHaveLength(1);
     expect(room.participants[0]?.role).toBe(ROOM_ROLE.host);
     expect(room.currentHostParticipantId).toBe(room.participants[0]?.id);
+    expect(reclaimSeatId(room)).toBe(room.participants[0]?.id);
   });
 
   test("creator cannot open a second active room", async () => {
@@ -303,12 +320,241 @@ describe("party-room lifecycle", () => {
     expect(after?.participants.find((p) => p.id === djJoin.participant.id)?.role).toBe(
       ROOM_ROLE.host,
     );
+    // Become host does not move the pass. The seated creator still holds it.
+    expect(reclaimSeatId(await loadRoom(room.id))).toBe(room.participants[0]?.id);
 
     const reclaimed = await reclaimHost({
       roomId: room.id,
       actor: { type: "user", userId: hostUser.id },
     });
     expect(reclaimed?.currentHostParticipantId).toBe(room.participants[0]?.id);
+    expect(reclaimed?.isPlaying).toBe(false);
+  });
+
+  test("creator leave transfers reclaim to the signed-in current host", async () => {
+    const hostUser = await makeUser("Original");
+    const room = await createRoom({
+      userId: hostUser.id,
+      displayName: "Original",
+      defaultJoinRole: "listener",
+    });
+    const creatorSeatId = room.participants[0]!.id;
+
+    const member = await makeUser("Alice");
+    const alice = await joinRoom({
+      code: room.code,
+      actor: { type: "user", userId: member.id, displayName: "Alice" },
+    });
+
+    await agePastGrace(creatorSeatId);
+    await becomeHost({
+      roomId: room.id,
+      actor: { type: "user", userId: member.id },
+    });
+    expect(reclaimSeatId(await loadRoom(room.id))).toBe(creatorSeatId);
+
+    const bystander = await joinRoom({
+      code: room.code,
+      actor: { type: "guest", displayName: "Listener" },
+    });
+    await leaveRoom({
+      roomId: room.id,
+      actor: { type: "guest", guestToken: bystander.guestToken! },
+    });
+    expect(reclaimSeatId(await loadRoom(room.id))).toBe(creatorSeatId);
+
+    await leaveRoom({
+      roomId: room.id,
+      actor: { type: "user", userId: hostUser.id },
+    });
+
+    const afterLeave = await loadRoom(room.id);
+    expect(afterLeave.status).toBe("open");
+    expect(afterLeave.endedAt).toBeNull();
+    expect(afterLeave.currentHostParticipantId).toBe(alice.participant.id);
+    expect(reclaimSeatId(afterLeave)).toBe(alice.participant.id);
+
+    await expect(
+      reclaimHost({ roomId: room.id, actor: { type: "user", userId: hostUser.id } }),
+    ).rejects.toMatchObject({ code: "unauthorized" });
+
+    const standIn = await joinRoom({
+      code: room.code,
+      actor: { type: "guest", displayName: "StandIn" },
+    });
+    await agePastGrace(alice.participant.id);
+    await becomeHost({
+      roomId: room.id,
+      actor: { type: "guest", guestToken: standIn.guestToken! },
+    });
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { isPlaying: true },
+    });
+
+    const reclaimed = await reclaimHost({
+      roomId: room.id,
+      actor: { type: "user", userId: member.id },
+    });
+    expect(reclaimed?.currentHostParticipantId).toBe(alice.participant.id);
+    expect(reclaimed?.isPlaying).toBe(false);
+    expect(reclaimed?.participants.find((p) => p.id === standIn.participant.id)?.role).toBe(
+      ROOM_ROLE.dj,
+    );
+
+    const back = await joinRoom({
+      code: room.code,
+      actor: { type: "user", userId: hostUser.id, displayName: "Original" },
+    });
+    expect(back.participant.id).toBe(creatorSeatId);
+    expect(back.participant.role).toBe(ROOM_ROLE.listener);
+    expect(back.participant.leftAt).toBeNull();
+    expect(reclaimSeatId(await loadRoom(room.id))).toBe(alice.participant.id);
+    await expect(
+      reclaimHost({ roomId: room.id, actor: { type: "user", userId: hostUser.id } }),
+    ).rejects.toMatchObject({ code: "not_original_host" });
+  });
+
+  test("guest reclaim holder can reclaim during playback; a new guest token cannot", async () => {
+    const hostUser = await makeUser("Original");
+    const room = await createRoom({
+      userId: hostUser.id,
+      displayName: "Original",
+      defaultJoinRole: "listener",
+    });
+    const creatorSeatId = room.participants[0]!.id;
+
+    const guest = await joinRoom({
+      code: room.code,
+      actor: { type: "guest", displayName: "Speaker" },
+    });
+
+    await agePastGrace(creatorSeatId);
+    await becomeHost({
+      roomId: room.id,
+      actor: { type: "guest", guestToken: guest.guestToken! },
+    });
+    await leaveRoom({
+      roomId: room.id,
+      actor: { type: "user", userId: hostUser.id },
+    });
+
+    const afterLeave = await loadRoom(room.id);
+    expect(afterLeave.status).toBe("open");
+    expect(afterLeave.endedAt).toBeNull();
+    expect(afterLeave.currentHostParticipantId).toBe(guest.participant.id);
+    expect(reclaimSeatId(afterLeave)).toBe(guest.participant.id);
+
+    const otherBrowser = await joinRoom({
+      code: room.code,
+      actor: { type: "guest", displayName: "Other Phone" },
+    });
+    expect(otherBrowser.participant.id).not.toBe(guest.participant.id);
+    expect(otherBrowser.guestToken).not.toBe(guest.guestToken);
+    expect(reclaimSeatId(await loadRoom(room.id))).toBe(guest.participant.id);
+    await expect(
+      reclaimHost({
+        roomId: room.id,
+        actor: { type: "guest", guestToken: otherBrowser.guestToken! },
+      }),
+    ).rejects.toMatchObject({ code: "not_original_host" });
+
+    await agePastGrace(guest.participant.id);
+    await becomeHost({
+      roomId: room.id,
+      actor: { type: "guest", guestToken: otherBrowser.guestToken! },
+    });
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { isPlaying: true },
+    });
+
+    const reclaimed = await reclaimHost({
+      roomId: room.id,
+      actor: { type: "guest", guestToken: guest.guestToken! },
+    });
+    expect(reclaimed?.isPlaying).toBe(false);
+    expect(reclaimed?.currentHostParticipantId).toBe(guest.participant.id);
+    expect(reclaimed?.participants.find((p) => p.id === otherBrowser.participant.id)?.role).toBe(
+      ROOM_ROLE.dj,
+    );
+    expect(reclaimSeatId(await loadRoom(room.id))).toBe(guest.participant.id);
+
+    await setDefaultJoinRole({
+      roomId: room.id,
+      actor: { type: "guest", guestToken: guest.guestToken! },
+      defaultJoinRole: "dj",
+    });
+    const back = await joinRoom({
+      code: room.code,
+      actor: { type: "user", userId: hostUser.id, displayName: "Original" },
+    });
+    expect(back.participant.role).toBe(ROOM_ROLE.dj);
+    expect(reclaimSeatId(await loadRoom(room.id))).toBe(guest.participant.id);
+    await expect(
+      reclaimHost({ roomId: room.id, actor: { type: "user", userId: hostUser.id } }),
+    ).rejects.toMatchObject({ code: "not_original_host" });
+  });
+
+  test("rejoin after leave uses the room current defaultJoinRole", async () => {
+    const host = await makeUser("Host");
+    const room = await createRoom({
+      userId: host.id,
+      displayName: "Host",
+      defaultJoinRole: "dj",
+    });
+    const creatorSeatId = room.participants[0]!.id;
+
+    const member = await makeUser("Sam");
+    const first = await joinRoom({
+      code: room.code,
+      actor: { type: "user", userId: member.id, displayName: "Sam" },
+    });
+    expect(first.participant.role).toBe(ROOM_ROLE.dj);
+
+    const guest = await joinRoom({
+      code: room.code,
+      actor: { type: "guest", displayName: "Walkup" },
+    });
+    expect(guest.participant.role).toBe(ROOM_ROLE.dj);
+
+    await setDefaultJoinRole({
+      roomId: room.id,
+      actor: { type: "user", userId: host.id },
+      defaultJoinRole: "listener",
+    });
+    await leaveRoom({ roomId: room.id, actor: { type: "user", userId: member.id } });
+    await leaveRoom({
+      roomId: room.id,
+      actor: { type: "guest", guestToken: guest.guestToken! },
+    });
+
+    const memberBack = await joinRoom({
+      code: room.code,
+      actor: { type: "user", userId: member.id, displayName: "Sam" },
+    });
+    expect(memberBack.participant.id).toBe(first.participant.id);
+    expect(memberBack.participant.role).toBe(ROOM_ROLE.listener);
+    expect(memberBack.participant.leftAt).toBeNull();
+
+    const guestBack = await joinRoom({
+      code: room.code,
+      actor: {
+        type: "guest",
+        displayName: "Walkup",
+        guestToken: guest.guestToken,
+      },
+    });
+    expect(guestBack.participant.id).toBe(guest.participant.id);
+    expect(guestBack.participant.role).toBe(ROOM_ROLE.listener);
+
+    const freshBrowser = await joinRoom({
+      code: room.code,
+      actor: { type: "guest", displayName: "New Device" },
+    });
+    expect(freshBrowser.participant.id).not.toBe(guest.participant.id);
+    expect(freshBrowser.participant.role).toBe(ROOM_ROLE.listener);
+    expect(reclaimSeatId(await loadRoom(room.id))).toBe(creatorSeatId);
   });
 
   test("PartyRoomError carries status codes", () => {
