@@ -7,7 +7,6 @@ import {
   GUEST_DISPLAY_NAME_MAX,
   GUEST_DISPLAY_NAME_MIN,
   HOST_GRACE_MS,
-  MAX_ACTIVE_ROOMS_PER_CREATOR,
   MAX_PARTICIPANTS,
   ROOM_ROLE,
   ROOM_STATUS,
@@ -147,13 +146,6 @@ export async function createRoom({
   }
   if (!isDefaultJoinRole(defaultJoinRole)) {
     throw new PartyRoomError("invalid_role", "defaultJoinRole must be listener or dj", 400);
-  }
-
-  const activeAsCreator = await prisma.room.count({
-    where: { originalHostUserId: userId, status: ROOM_STATUS.open },
-  });
-  if (activeAsCreator >= MAX_ACTIVE_ROOMS_PER_CREATOR) {
-    throw new PartyRoomError("creator_has_active_room", "You already have an active room", 409);
   }
 
   const activeAsParticipant = await prisma.roomParticipant.findFirst({

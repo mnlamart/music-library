@@ -65,10 +65,22 @@ describe("party-room lifecycle", () => {
 
   test("creator cannot open a second active room", async () => {
     const user = await makeUser();
-    await createRoom({ userId: user.id, displayName: "Host" });
+    const first = await createRoom({ userId: user.id, displayName: "Host" });
     await expect(createRoom({ userId: user.id, displayName: "Host" })).rejects.toMatchObject({
-      code: "creator_has_active_room",
+      code: "already_in_room",
     });
+
+    await leaveRoom({
+      roomId: first.id,
+      actor: { type: "user", userId: user.id },
+    });
+
+    const second = await createRoom({ userId: user.id, displayName: "Host" });
+    expect(second.id).not.toBe(first.id);
+    expect(second.status).toBe("open");
+
+    const oldRoom = await prisma.room.findUniqueOrThrow({ where: { id: first.id } });
+    expect(oldRoom.status).toBe("open");
   });
 
   test("smart join links authenticated users and creates guest seats", async () => {
