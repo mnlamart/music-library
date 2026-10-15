@@ -87,6 +87,11 @@ vi.mock("#app/features/usage-analytics/report-play-event.client.ts", () => ({
   reportPlayEvent: vi.fn(),
 }));
 
+vi.mock("#app/features/party-room/api.client.ts", () => ({
+  reportRoomPlayEvent: vi.fn(),
+  sendHostHeartbeat: vi.fn(),
+}));
+
 vi.mock("#app/components/add-to-playlist-menu", () => ({
   AddToPlaylistMenu: ({
     constrainHeight,
@@ -685,6 +690,52 @@ beforeEach(async () => {
     await import("#app/features/offline-storage/resolve-playback-url.client.ts");
   vi.mocked(resolveTrackPlaybackSource).mockResolvedValue("https://cdn.example/track-1.mp3");
   vi.mocked(resolvePlaybackAudioUrl).mockResolvedValue(null);
+});
+
+test("room speaker autoplay starts the next track only after its source is applied", async () => {
+  const wantsAutoPlayRef = { current: true };
+  const playedSrc: Array<string | null> = [];
+  vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    playedSrc.push(this.getAttribute("src"));
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    return Promise.resolve();
+  });
+
+  const roomSpeaker = { roomId: "room-1", code: "AB3K9Q" };
+  const { rerender, audioEl } = await renderPlayer({
+    playbackToken: 1,
+    wantsAutoPlayRef,
+    roomSpeaker,
+    roomPlaying: true,
+    audioSrcOverride: "/resources/rooms/audio/track-1",
+  });
+
+  await waitFor(() => {
+    expect(playedSrc.some((src) => src?.includes("track-1"))).toBe(true);
+  });
+  expect(audioEl).toHaveAttribute("src", "/resources/rooms/audio/track-1");
+
+  playedSrc.length = 0;
+  wantsAutoPlayRef.current = true;
+
+  rerender(
+    playerUi({
+      track: mockTrack2,
+      playbackToken: 2,
+      wantsAutoPlayRef,
+      roomSpeaker,
+      roomPlaying: true,
+      audioSrcOverride: "/resources/rooms/audio/track-2",
+    }),
+  );
+
+  await waitFor(() => {
+    expect(playedSrc.some((src) => src?.includes("track-2"))).toBe(true);
+  });
+  expect(playedSrc.some((src) => src?.includes("track-1"))).toBe(false);
+  expect(audioEl).toHaveAttribute("src", "/resources/rooms/audio/track-2");
 });
 
 test("auto-plays after track change once the new audio URL has loaded", async () => {
