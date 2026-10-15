@@ -1,19 +1,23 @@
+import { randomInt } from "node:crypto";
 import { ROOM_CODE_CHARSET, ROOM_CODE_LENGTH } from "./constants.ts";
 
 /**
  * Generate a random room code using the ADR charset.
  * Uniqueness among open rooms is enforced by the caller against the DB.
+ *
+ * The default draw uses crypto.randomInt once per character. Tests can inject
+ * `random` (a unit-interval source, same contract as Math.random).
  */
-export function generateRoomCode(
-  length: number = ROOM_CODE_LENGTH,
-  random: () => number = Math.random,
-): string {
+export function generateRoomCode(length: number = ROOM_CODE_LENGTH, random?: () => number): string {
   if (length < 1) {
     throw new Error("Room code length must be at least 1");
   }
   let code = "";
   for (let i = 0; i < length; i++) {
-    const index = Math.floor(random() * ROOM_CODE_CHARSET.length);
+    const index =
+      random === undefined
+        ? randomInt(0, ROOM_CODE_CHARSET.length)
+        : Math.floor(random() * ROOM_CODE_CHARSET.length);
     code += ROOM_CODE_CHARSET[index];
   }
   return code;
