@@ -1,4 +1,5 @@
-import { expect, test } from "vitest";
+import { randomInt } from "node:crypto";
+import { expect, test, vi } from "vitest";
 import {
   buildRoomJoinPath,
   buildRoomJoinUrl,
@@ -7,6 +8,8 @@ import {
   parseRoomCodeInput,
 } from "./codes.ts";
 import { ROOM_CODE_CHARSET, ROOM_CODE_LENGTH } from "./constants.ts";
+
+vi.mock("node:crypto", { spy: true });
 
 test("generateRoomCode uses charset and fixed length", () => {
   const code = generateRoomCode();
@@ -20,8 +23,25 @@ test("generateRoomCode is deterministic with a stubbed RNG", () => {
   let i = 0;
   const sequence = [0, 0.5, 0.999, 0.25, 0.75, 0.1];
   const code = generateRoomCode(6, () => sequence[i++]!);
-  expect(code).toHaveLength(6);
+  const expected = sequence
+    .map((value) => ROOM_CODE_CHARSET[Math.floor(value * ROOM_CODE_CHARSET.length)])
+    .join("");
+  expect(code).toBe(expected);
   expect(isValidRoomCode(code)).toBe(true);
+  expect(randomInt).not.toHaveBeenCalled();
+});
+
+test("generateRoomCode uses crypto.randomInt for each character by default", () => {
+  const index = 3;
+  vi.mocked(randomInt).mockImplementation(((min: number, max: number) => {
+    expect(min).toBe(0);
+    expect(max).toBe(ROOM_CODE_CHARSET.length);
+    return index;
+  }) as typeof randomInt);
+
+  const code = generateRoomCode();
+  expect(randomInt).toHaveBeenCalledTimes(ROOM_CODE_LENGTH);
+  expect(code).toBe(ROOM_CODE_CHARSET[index]!.repeat(ROOM_CODE_LENGTH));
 });
 
 test("isValidRoomCode rejects wrong length and bad chars", () => {
