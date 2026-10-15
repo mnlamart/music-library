@@ -208,6 +208,9 @@ export function AudioPlayer(props: AudioPlayerProps) {
   });
   const onRoomAutoplayOutcomeRef = useRef(onRoomAutoplayOutcome);
   onRoomAutoplayOutcomeRef.current = onRoomAutoplayOutcome;
+  // Last room-speaker source we started. Queue snapshots recreate `track` /
+  // `roomSpeaker` without changing this key and must not rewind.
+  const roomPlayKeyRef = useRef<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isNowPlayingOpen, setIsNowPlayingOpen] = useState(false);
   const isOnline = useOnlineStatus();
@@ -640,6 +643,9 @@ export function AudioPlayer(props: AudioPlayerProps) {
   // token and the next URL stays silent. A blocked play() leaves the room
   // paused with one explanation and does not report playback.
   useEffect(() => {
+    if (!roomSpeaker) {
+      roomPlayKeyRef.current = null;
+    }
     if (!roomSpeaker || roomPlaying === null || !audioRef.current) return;
     const audio = audioRef.current;
     if (!roomPlaying) {
@@ -659,12 +665,23 @@ export function AudioPlayer(props: AudioPlayerProps) {
       return;
     }
 
+    const playKey = `${track?.id ?? ""}:${audioSrc ?? ""}`;
+    // Queue adds recreate `track` / `roomSpeaker` while this source is already
+    // playing. Seeking to 0 would restart the song for the whole room.
+    if (roomPlayKeyRef.current === playKey && keepPlayingRef.current && !audio.paused) {
+      return;
+    }
+
+    const isNewSource = roomPlayKeyRef.current !== playKey;
+    roomPlayKeyRef.current = playKey;
     let cancelled = false;
     keepPlayingRef.current = true;
-    try {
-      audio.currentTime = 0;
-    } catch {
-      // The element may not be seekable until metadata arrives.
+    if (isNewSource) {
+      try {
+        audio.currentTime = 0;
+      } catch {
+        // The element may not be seekable until metadata arrives.
+      }
     }
     let playResult: Promise<void> | void;
     try {

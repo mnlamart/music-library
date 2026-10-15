@@ -829,6 +829,48 @@ test("room speaker autoplay starts the next track only after its source is appli
   expect(audioEl).toHaveAttribute("src", "/resources/rooms/audio/track-2");
 });
 
+test("queue-only room snapshot does not rewind the playing track", async () => {
+  const playedSrc: Array<string | null> = [];
+  vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    playedSrc.push(this.getAttribute("src"));
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    return Promise.resolve();
+  });
+
+  const roomSpeaker = { roomId: "room-1", code: "AB3K9Q" };
+  const { rerender, audioEl } = await renderPlayer({
+    playbackToken: 1,
+    roomSpeaker,
+    roomPlaying: true,
+    audioSrcOverride: "/resources/rooms/audio/track-1",
+  });
+
+  await waitFor(() => {
+    expect(playedSrc.some((src) => src?.includes("track-1"))).toBe(true);
+  });
+
+  audioEl.currentTime = 42;
+  playedSrc.length = 0;
+
+  rerender(
+    playerUi({
+      track: { ...mockTrack, title: "Test Song (same id, new object)" },
+      playbackToken: 1,
+      roomSpeaker: { roomId: "room-1", code: "AB3K9Q" },
+      roomPlaying: true,
+      audioSrcOverride: "/resources/rooms/audio/track-1",
+    }),
+  );
+
+  await waitFor(() => {
+    expect(audioEl).toHaveAttribute("src", "/resources/rooms/audio/track-1");
+  });
+  expect(audioEl.currentTime).toBe(42);
+  expect(playedSrc).toEqual([]);
+});
+
 test("paused room does not start playback on its own", async () => {
   const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(() => {
     return Promise.resolve();
