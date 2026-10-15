@@ -1,4 +1,3 @@
-import { randomInt } from "node:crypto";
 import { expect, test, vi } from "vitest";
 import {
   buildRoomJoinPath,
@@ -9,8 +8,6 @@ import {
 } from "./codes.ts";
 import { ROOM_CODE_CHARSET, ROOM_CODE_LENGTH } from "./constants.ts";
 
-vi.mock("node:crypto", { spy: true });
-
 test("generateRoomCode uses charset and fixed length", () => {
   const code = generateRoomCode();
   expect(code).toHaveLength(ROOM_CODE_LENGTH);
@@ -20,6 +17,7 @@ test("generateRoomCode uses charset and fixed length", () => {
 });
 
 test("generateRoomCode is deterministic with a stubbed RNG", () => {
+  const spy = vi.spyOn(crypto, "getRandomValues");
   let i = 0;
   const sequence = [0, 0.5, 0.999, 0.25, 0.75, 0.1];
   const code = generateRoomCode(6, () => sequence[i++]!);
@@ -28,20 +26,22 @@ test("generateRoomCode is deterministic with a stubbed RNG", () => {
     .join("");
   expect(code).toBe(expected);
   expect(isValidRoomCode(code)).toBe(true);
-  expect(randomInt).not.toHaveBeenCalled();
+  expect(spy).not.toHaveBeenCalled();
+  spy.mockRestore();
 });
 
-test("generateRoomCode uses crypto.randomInt for each character by default", () => {
+test("generateRoomCode draws each character with crypto.getRandomValues", () => {
   const index = 3;
-  vi.mocked(randomInt).mockImplementation(((min: number, max: number) => {
-    expect(min).toBe(0);
-    expect(max).toBe(ROOM_CODE_CHARSET.length);
-    return index;
-  }) as typeof randomInt);
+  const spy = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
+    const view = array as Uint32Array;
+    view[0] = index;
+    return array;
+  });
 
   const code = generateRoomCode();
-  expect(randomInt).toHaveBeenCalledTimes(ROOM_CODE_LENGTH);
+  expect(spy).toHaveBeenCalledTimes(ROOM_CODE_LENGTH);
   expect(code).toBe(ROOM_CODE_CHARSET[index]!.repeat(ROOM_CODE_LENGTH));
+  spy.mockRestore();
 });
 
 test("isValidRoomCode rejects wrong length and bad chars", () => {
