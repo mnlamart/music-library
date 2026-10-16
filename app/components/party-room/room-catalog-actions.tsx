@@ -158,9 +158,21 @@ export function RoomCatalogActionsProvider({
 
   return (
     <RoomCatalogActionsContext.Provider value={actions}>
-      <div className={showDock ? "pb-32" : undefined}>{children}</div>
+      <div
+        className={
+          showDock
+            ? "pb-[calc(var(--install-banner-height,0px)+8rem)]"
+            : "pb-[var(--install-banner-height,0px)]"
+        }
+      >
+        {children}
+      </div>
       {showDock ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
+        <div
+          data-testid="room-audition-dock"
+          className="fixed inset-x-0 z-52 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur"
+          style={{ bottom: "var(--install-banner-height, 0px)" }}
+        >
           <div className="mx-auto flex max-w-lg flex-col gap-2">
             {addMessage ? (
               <p className="text-sm text-muted-foreground" role="status">

@@ -324,7 +324,11 @@ describe("guest search catalog browsing", () => {
       target: { value: "song" },
     });
     fireEvent.click(await screen.findByRole("button", { name: /audition shared song/i }));
-    expect(await screen.findByRole("button", { name: "Stop" })).toBeInTheDocument();
+    const stop = await screen.findByRole("button", { name: "Stop" });
+    expect(stop).toBeInTheDocument();
     expect(screen.getByText(/audition on this device/i)).toBeInTheDocument();
+    const dock = screen.getByTestId("room-audition-dock");
+    expect(dock).toHaveClass("z-52");
+    expect(dock.style.bottom).toBe("var(--install-banner-height, 0px)");
   });
 });
