@@ -48,7 +48,7 @@ export default function GuestSearchTab() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => initialQuery.trim().length > 0);
   const requestRef = useRef(0);
   const immediateRef = useRef(true);
   const searchParamsRef = useRef(searchParams);
@@ -161,7 +161,11 @@ export default function GuestSearchTab() {
         />
         <Input
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value;
+            setQuery(next);
+            if (next.trim()) setLoading(true);
+          }}
           placeholder="Search artists, albums, tracks…"
           aria-label="Search artists, albums, and tracks"
           className="pr-10 pl-9"
@@ -189,7 +193,10 @@ export default function GuestSearchTab() {
               key={filter.value}
               type="button"
               aria-pressed={selected}
-              onClick={() => setType(filter.value)}
+              onClick={() => {
+                setType(filter.value);
+                if (query.trim()) setLoading(true);
+              }}
               className={cn(
                 "shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
                 selected ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80",

@@ -286,6 +286,27 @@ describe("guest search catalog browsing", () => {
     expect(router.state.location.search).toContain("type=albums");
   });
 
+  test("shows searching while a url query is still loading", async () => {
+    let release: ((response: Response) => void) | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    renderSearch("dj", "/rooms/AB3K9Q/search?q=love&type=albums");
+
+    expect(await screen.findByPlaceholderText(/search artists/i)).toHaveValue("love");
+    expect(screen.getByText(/^searching/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no playable matches/i)).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(release).toBeTypeOf("function");
+    });
+    release?.(searchResponse([loveAlbum]));
+    expect(await screen.findByRole("link", { name: /love album/i })).toBeInTheDocument();
+  });
+
   test("restores a search opened from the url and clears it", async () => {
     const fetchMock = installFetch();
     renderSearch("dj", "/rooms/AB3K9Q/search?q=love&type=albums");
