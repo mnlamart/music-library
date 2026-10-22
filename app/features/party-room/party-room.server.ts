@@ -445,9 +445,11 @@ export async function joinRoom({ code, actor }: { code: string; actor: JoinActor
     if (existing) {
       // Same browser (same guest token) coming back after Leave takes the
       // current defaultJoinRole and does not regain reclaimParticipantId.
+      // A second join while still seated keeps the role, except a stale host
+      // seat that is no longer the speaker — same rule as the user path.
       const role = existing.leftAt
         ? joinRole
-        : existing.role === ROOM_ROLE.host
+        : existing.role === ROOM_ROLE.host && room.currentHostParticipantId !== existing.id
           ? joinRole
           : existing.role;
       const participant = await prisma.roomParticipant.update({

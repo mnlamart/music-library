@@ -586,6 +586,48 @@ describe("party-room lifecycle", () => {
     expect(reclaimSeatId(await loadRoom(room.id))).toBe(creatorSeatId);
   });
 
+  test("guest host rejoin while still seated keeps host role and speaker pointer", async () => {
+    const hostUser = await makeUser("Original");
+    const room = await createRoom({
+      userId: hostUser.id,
+      displayName: "Original",
+      defaultJoinRole: "listener",
+    });
+    const creatorSeatId = room.participants[0]!.id;
+
+    const guest = await joinRoom({
+      code: room.code,
+      actor: { type: "guest", displayName: "Speaker" },
+    });
+
+    await agePastGrace(creatorSeatId);
+    await becomeHost({
+      roomId: room.id,
+      actor: { type: "guest", guestToken: guest.guestToken! },
+    });
+
+    const again = await joinRoom({
+      code: room.code,
+      actor: {
+        type: "guest",
+        displayName: "Speaker",
+        guestToken: guest.guestToken,
+      },
+    });
+
+    expect(again.participant.id).toBe(guest.participant.id);
+    expect(again.participant.role).toBe(ROOM_ROLE.host);
+    expect(again.participant.leftAt).toBeNull();
+    expect((await loadRoom(room.id)).currentHostParticipantId).toBe(guest.participant.id);
+
+    await expect(
+      endRoom({
+        roomId: room.id,
+        actor: { type: "guest", guestToken: guest.guestToken! },
+      }),
+    ).resolves.toMatchObject({ status: "ended" });
+  });
+
   test("PartyRoomError carries status codes", () => {
     const err = new PartyRoomError("forbidden", "nope", 403);
     expect(err.status).toBe(403);
