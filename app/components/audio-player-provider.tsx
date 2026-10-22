@@ -38,6 +38,7 @@ import {
   hasNextTrack,
   hasPreviousTrack,
   jumpToTarget,
+  removeSpineAtOrderIndex,
   resolveNextTrack,
   resolvePreviousTrack,
   type LoopMode,
@@ -1024,39 +1025,33 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
         return;
       }
 
-      const orderIndex = target.index;
-      if (orderIndex < 0 || orderIndex >= spineOrder.length) return;
+      const result = removeSpineAtOrderIndex(navigationState, target.index);
+      if (!result) return;
 
-      const spineIndexToRemove = spineOrder[orderIndex];
-      if (spineIndexToRemove === undefined) return;
-
-      setSpine((prev) => prev.filter((_, itemIndex) => itemIndex !== spineIndexToRemove));
-      setSpineOrder((prev) =>
-        prev
-          .filter((_, itemIndex) => itemIndex !== orderIndex)
-          .map((spineIndex) => (spineIndex > spineIndexToRemove ? spineIndex - 1 : spineIndex)),
-      );
+      setSpine(result.state.spine);
+      setSpineOrder(result.state.spineOrder);
+      setSpinePosition(result.state.spinePosition);
       setSpineTotal((total) => Math.max(0, total - 1));
 
-      if (orderIndex < spinePosition) {
-        setSpinePosition((position) => Math.max(0, position - 1));
-      } else if (orderIndex === spinePosition) {
-        const nextState = advanceAfterPlay(navigationState, {
-          zone: "spine",
-          index: Math.min(spinePosition, spineOrder.length - 2),
-        });
-        const nextTrack = getTrackAtTarget(nextState, {
-          zone: "spine",
-          index: nextState.spinePosition,
-        });
-        if (nextTrack) {
-          void playResolvedTrack(nextTrack);
-        } else {
-          setCurrentTrack(null);
+      if (result.consumedUpNextIndex !== null) {
+        setUpNext(result.state.upNext);
+        if (result.consumedUpNextIndex < upNextPlayNextCount) {
+          setUpNextPlayNextCount((count) => {
+            const next = Math.max(0, count - 1);
+            upNextPlayNextCountRef.current = next;
+            return next;
+          });
         }
       }
+
+      if (!result.removedCurrent) return;
+      if (result.playTrack) {
+        void playResolvedTrack(result.playTrack);
+      } else {
+        setCurrentTrack(null);
+      }
     },
-    [navigationState, playResolvedTrack, spineOrder, spinePosition, upNextPlayNextCount],
+    [navigationState, playResolvedTrack, upNextPlayNextCount],
   );
 
   const removeCurrentFromQueue = useCallback(() => {
