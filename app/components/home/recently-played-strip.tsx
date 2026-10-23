@@ -29,15 +29,7 @@ export function RecentlyPlayedStrip({ tracks }: RecentlyPlayedStripProps) {
       <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2 snap-x snap-mandatory">
         {tracks.map((item, index) => (
           <div key={item.track.id} className="snap-start">
-            <HomeRecentTrackCard
-              userTrack={{
-                id: item.track.id,
-                createdAt: item.playedAt,
-                track: item.track,
-              }}
-              index={index}
-              playableTracks={playableTracks}
-            />
+            <HomeRecentTrackCard track={item.track} index={index} playableTracks={playableTracks} />
           </div>
         ))}
       </div>
