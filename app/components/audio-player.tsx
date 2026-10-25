@@ -46,6 +46,7 @@ import {
   isDurationKnown,
   isPlayInterrupted,
   swapPlaybackSource,
+  withRecoveryNonce,
 } from "./audio-player-format";
 import {
   PlayerDesktopBar,
@@ -992,6 +993,22 @@ export function AudioPlayer(props: AudioPlayerProps) {
         const shouldResume = keepPlayingRef.current || !audioElement.paused;
         const previousSrc = audioElement.src;
 
+        // Speaker grant is `/resources/rooms/audio/:id`. Personal
+        // `/resources/audio/:id` 403s for catalog tracks the host does not
+        // own (same reason queue auto-cache is skipped in speaker mode).
+        if (roomSpeaker && audioSrcOverride) {
+          const retryUrl = withRecoveryNonce(audioSrcOverride);
+          if (audioRef.current && loadedTrackIdRef.current === trackId) {
+            pendingAudioSrcRef.current = { trackId, url: retryUrl };
+            swapPlaybackSource(audioRef.current, retryUrl, savedTime || 0, shouldResume);
+            setAudioSrc(retryUrl);
+            setPlaybackError(null);
+          } else {
+            stopFailedPlayback(getMediaErrorMessage(errorCode));
+          }
+          return;
+        }
+
         invalidateRemotePlaybackUrl(trackId);
 
         void resolveTrackPlaybackSource(trackId)
@@ -1054,6 +1071,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
     hasNext,
     emitPlayEvent,
     roomSpeaker,
+    audioSrcOverride,
     stopFailedPlayback,
   ]);
 
