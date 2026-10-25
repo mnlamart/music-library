@@ -538,6 +538,59 @@ test("shows playback error with user-friendly message for MEDIA_ERR_SRC_NOT_SUPP
   consoleSpy.mockRestore();
 });
 
+test("room speaker recovers from MEDIA_ERR_NETWORK by retrying the speaker grant, not a personal URL", async () => {
+  const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { resolveTrackPlaybackSource } =
+    await import("#app/features/offline-storage/resolve-playback-url.client.ts");
+
+  // A catalog track the speaker does not personally own: the personal grant 403s.
+  vi.mocked(resolveTrackPlaybackSource).mockResolvedValue("/resources/audio/track-1");
+
+  const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(function (
+    this: HTMLMediaElement,
+  ) {
+    Object.defineProperty(this, "paused", { configurable: true, value: false });
+    return Promise.resolve();
+  });
+
+  const { audioEl } = await renderPlayer({
+    roomSpeaker: { roomId: "room-1", code: "AB3K9Q" },
+    roomPlaying: true,
+    audioSrcOverride: "/resources/rooms/audio/track-1",
+  });
+
+  await waitFor(() => {
+    expect(audioEl).toHaveAttribute("src", "/resources/rooms/audio/track-1");
+  });
+
+  vi.mocked(resolveTrackPlaybackSource).mockClear();
+  audioEl.dispatchEvent(new Event("play"));
+  Object.defineProperty(audioEl, "paused", { configurable: true, value: true });
+  Object.defineProperty(audioEl, "currentTime", {
+    configurable: true,
+    value: 33,
+    writable: true,
+  });
+  Object.defineProperty(audioEl, "error", {
+    configurable: true,
+    value: { code: 2, message: "A network error caused the audio download to fail" },
+  });
+
+  playSpy.mockClear();
+  audioEl.dispatchEvent(new Event("error"));
+
+  await waitFor(() => {
+    expect(audioEl.getAttribute("src")).toMatch(
+      /^\/resources\/rooms\/audio\/track-1\?recovery=\d+$/,
+    );
+    expect(playSpy).toHaveBeenCalled();
+  });
+  expect(resolveTrackPlaybackSource).not.toHaveBeenCalled();
+  expect(screen.queryByTestId("player-playback-error")).not.toBeInTheDocument();
+
+  consoleSpy.mockRestore();
+});
+
 test("recovers from MEDIA_ERR_SRC_NOT_SUPPORTED by re-resolving a fresh remote URL", async () => {
   const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   const { resolveTrackPlaybackSource, invalidateRemotePlaybackUrl } =
