@@ -15,7 +15,7 @@ type DependabotUpdate = {
   directory: string;
   schedule: {
     interval: string;
-    day: string;
+    day?: string;
     time: string;
     timezone: string;
   };
@@ -35,9 +35,8 @@ type DependabotConfig = {
   updates: DependabotUpdate[];
 };
 
-const weeklyParis = {
-  interval: "weekly",
-  day: "monday",
+const dailyParis = {
+  interval: "daily",
   time: "09:00",
   timezone: "Europe/Paris",
 } as const;
@@ -98,7 +97,7 @@ describe("dependabot config", () => {
     ]);
 
     for (const update of config.updates) {
-      expect(update.schedule).toEqual(weeklyParis);
+      expect(update.schedule).toEqual(dailyParis);
       expect(update["commit-message"]).toMatchObject({
         prefix: "chore",
         include: "scope",
