@@ -118,7 +118,7 @@ jobs:
         uses: bahmutov/npm-install@v1
 
       - name: 💾 Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -133,7 +133,7 @@ jobs:
 
       - name: 🏦 Cache Database
         id: db-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: prisma/data.db
           key: db-cache-schema_${{ hashFiles('./prisma/schema.prisma')
