@@ -318,6 +318,10 @@ type JoinActor =
  * Attach this browser's open guest seat to a signed-in account.
  * Keeps the same participant id so role, host, and reclaim stay put
  * and a second seat is not minted (ADR-030: one open seat).
+ *
+ * A leftover open user seat (logout is not Leave) is vacated instead of
+ * abandoning this browser's guest seat. Same-room host/reclaim pointers
+ * move onto the guest row first so leaveRoom does not stop the party.
  */
 export async function claimOpenGuestSeatForUser({
   userId,
@@ -347,14 +351,36 @@ export async function claimOpenGuestSeatForUser({
       room: { status: ROOM_STATUS.open },
     },
   });
-  if (userOpen) {
-    if (userOpen.id !== guestSeat.id) {
-      await leaveRoom({
-        roomId: guestSeat.roomId,
-        actor: { type: "guest", guestToken },
-      });
+  if (userOpen && userOpen.id !== guestSeat.id) {
+    if (userOpen.roomId === guestSeat.roomId) {
+      const room = await prisma.room.findUniqueOrThrow({ where: { id: guestSeat.roomId } });
+      const roomData: {
+        currentHostParticipantId?: string;
+        reclaimParticipantId?: string;
+      } = {};
+      if (room.currentHostParticipantId === userOpen.id) {
+        roomData.currentHostParticipantId = guestSeat.id;
+      }
+      if (room.reclaimParticipantId === userOpen.id) {
+        roomData.reclaimParticipantId = guestSeat.id;
+      }
+      if (Object.keys(roomData).length > 0) {
+        await prisma.room.update({
+          where: { id: room.id },
+          data: roomData,
+        });
+      }
+      if (roomData.currentHostParticipantId === guestSeat.id && guestSeat.role !== ROOM_ROLE.host) {
+        await prisma.roomParticipant.update({
+          where: { id: guestSeat.id },
+          data: { role: ROOM_ROLE.host },
+        });
+      }
     }
-    return userOpen.roomId === guestSeat.roomId ? userOpen : null;
+    await leaveRoom({
+      roomId: userOpen.roomId,
+      actor: { type: "user", userId },
+    });
   }
 
   const leftover = await prisma.roomParticipant.findFirst({

@@ -12,7 +12,8 @@ import { prisma } from "#app/utils/db.server.ts";
  * Open room where this browser still has a seat — signed-in user or guest cookie.
  * 204 when there is no actor or no open seat (leftAt null, room open).
  * A login redirect would look like a room error to the always-on client poll.
- * Logging in on the joining browser claims the guest seat so presence continues.
+ * Logging in on the joining browser claims the guest seat so presence continues,
+ * even when a leftover user seat is still open (logout is not Leave).
  */
 export async function loader({ request }: { request: Request }) {
   try {
@@ -23,11 +24,7 @@ export async function loader({ request }: { request: Request }) {
 
     let seat =
       actor.type === "user"
-        ? await prisma.roomParticipant.findFirst({
-            where: { userId: actor.userId, leftAt: null, room: { status: ROOM_STATUS.open } },
-            orderBy: { createdAt: "desc" },
-            select: { roomId: true },
-          })
+        ? null
         : await prisma.roomParticipant.findFirst({
             where: {
               guestTokenHash: hashGuestToken(actor.guestToken),
@@ -38,7 +35,7 @@ export async function loader({ request }: { request: Request }) {
             select: { roomId: true },
           });
 
-    if (!seat && actor.type === "user") {
+    if (actor.type === "user") {
       const guestToken = await readGuestToken(request);
       if (guestToken) {
         const claimed = await claimOpenGuestSeatForUser({
@@ -48,6 +45,13 @@ export async function loader({ request }: { request: Request }) {
         if (claimed?.leftAt === null) {
           seat = { roomId: claimed.roomId };
         }
+      }
+      if (!seat) {
+        seat = await prisma.roomParticipant.findFirst({
+          where: { userId: actor.userId, leftAt: null, room: { status: ROOM_STATUS.open } },
+          orderBy: { createdAt: "desc" },
+          select: { roomId: true },
+        });
       }
     }
 
