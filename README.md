@@ -7,7 +7,7 @@
 
 ## Prerequisites
 
-- Node.js 22+
+- Node.js 24
 - npm
 - Fly.io CLI
 - Git

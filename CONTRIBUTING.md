@@ -36,5 +36,5 @@ npm run lint          # ESLint
 ### Environment
 
 - `MOCKS=true` enables mocked external services
-- Node.js 22+
+- Node.js 24
 - npm (lockfile: `package-lock.json`)
