@@ -161,7 +161,7 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@epic-web/config": "^3.2.0",
+    "@epic-web/config": "^3.2.1",
     "@playwright/test": "^1.64.1",
     "@react-router/dev": "^8.2.0",
     "@serwist/build": "^9.5.11",
