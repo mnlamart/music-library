@@ -228,6 +228,20 @@ describe("minimum release age", () => {
     expect(workspace.minimumReleaseAge).toBe(7 * 24 * 60);
     expect(workspace.minimumReleaseAgeExclude).toBeUndefined();
   });
+
+  test("records the 7-day wait as an accepted decision", () => {
+    const raw = readFileSync(
+      path.join(repoRoot, "docs", "decisions", "041-minimum-release-age.md"),
+      "utf8",
+    );
+
+    expect(raw).toContain("Accepted");
+    expect(raw).toContain("7 days");
+    expect(raw).toContain("min-release-age");
+    expect(raw).toContain("minimumReleaseAge");
+    expect(raw).toContain("default-days");
+    expect(raw).toMatch(/security updates/i);
+  });
 });
 
 describe("pnpm allowBuilds", () => {
