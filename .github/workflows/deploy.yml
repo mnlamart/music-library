@@ -236,7 +236,7 @@ jobs:
           field: "app"
 
       - name: 🎈 Setup Fly
-        uses: superfly/flyctl-actions/setup-flyctl@1.5
+        uses: superfly/flyctl-actions/setup-flyctl@1.6
 
       - name: 📦 Build Staging Container
         if: github.ref == 'refs/heads/dev'
@@ -281,7 +281,7 @@ jobs:
           field: "app"
 
       - name: 🎈 Setup Fly
-        uses: superfly/flyctl-actions/setup-flyctl@1.5
+        uses: superfly/flyctl-actions/setup-flyctl@1.6
 
       - name: 🚀 Deploy Staging
         if: github.ref == 'refs/heads/dev'
