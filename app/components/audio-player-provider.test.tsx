@@ -11,7 +11,10 @@ import { getOfflineStorage } from "#app/features/offline-storage/offline-storage
 import { isQueueCacheEnabled } from "#app/features/offline-storage/queue-cache-preference.client.ts";
 import { prefetchPlaybackAudioUrl } from "#app/features/offline-storage/resolve-playback-url.client.ts";
 import { writeCachedPlayerState } from "#app/features/player-state/player-state-cache.client.ts";
-import { PLAYER_STATE_ROUTE } from "#app/features/player-state/player-state.ts";
+import {
+  PLAYER_STATE_ROUTE,
+  type PlayerStateData,
+} from "#app/features/player-state/player-state.ts";
 import { type FullTrack } from "#app/types/frontend/shared";
 import { consoleError } from "#tests/setup/setup-test-env.ts";
 import { type RoomAutoplayOutcome } from "./audio-player-room-playback.ts";
@@ -875,6 +878,119 @@ test("leaving speaker before the delayed restore fetch still reloads the saved q
   await waitFor(() => {
     expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
   });
+});
+
+test("leaving speaker restores the personal queue even after a same-session play", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.mocked(fetch);
+  const persistedBodies: Array<{ currentTrackId: string | null }> = [];
+  fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes(PLAYER_STATE_ROUTE) && init?.method === "PUT") {
+      persistedBodies.push(JSON.parse(String(init.body)) as { currentTrackId: string | null });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      } as Response);
+    }
+    if (url.includes(PLAYER_STATE_ROUTE)) {
+      return Promise.resolve({
+        ok: true,
+        status: 204,
+        json: async () => null,
+      } as Response);
+    }
+    if (url.includes("/api/tracks/playback")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ tracks: [playableTrack] }),
+      } as Response);
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ tracks: [], total: 0 }),
+    } as Response);
+  });
+
+  let suspendedPersonal: { snapshot: PlayerStateData; wasVisible: boolean } | null = null;
+
+  function Probe() {
+    const audio = useAudioPlayer();
+    return (
+      <>
+        <button type="button" onClick={() => audio.playNextTrack(playableTrack)}>
+          Play personal
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            suspendedPersonal = {
+              snapshot: audio.getPersonalPlayerSnapshot(),
+              wasVisible: audio.isPlayerVisible,
+            };
+            audio.suspendPersonalPersistence();
+            audio.syncRoomSpeakerQueue({
+              roomId: "room-1",
+              code: "AB3K9Q",
+              nowPlaying: {
+                ...playableTrack,
+                id: "room-track",
+                title: "Room Song",
+              },
+              upcoming: [],
+            });
+          }}
+        >
+          Enter speaker
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            audio.resumePersonalPersistence();
+            void audio.restorePersonalPlayerSnapshot(
+              suspendedPersonal?.snapshot ?? {
+                playContext: null,
+                currentTrackId: null,
+                upNextIds: [],
+                shuffleSeed: null,
+                loopMode: "off",
+              },
+              suspendedPersonal?.wasVisible ?? false,
+            );
+          }}
+        >
+          Leave speaker
+        </button>
+        <span data-testid="current-track-id">{audio.currentTrack?.id ?? ""}</span>
+        <span data-testid="player-visible">{String(audio.isPlayerVisible)}</span>
+      </>
+    );
+  }
+
+  render(
+    <AudioPlayerProvider userId="user-1">
+      <Probe />
+    </AudioPlayerProvider>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Play personal" }));
+  expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+
+  await user.click(screen.getByRole("button", { name: "Enter speaker" }));
+  expect(screen.getByTestId("current-track-id").textContent).toBe("room-track");
+
+  await user.click(screen.getByRole("button", { name: "Leave speaker" }));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("current-track-id").textContent).toBe("track-1");
+  });
+  expect(screen.getByTestId("player-visible").textContent).toBe("true");
+
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  expect(persistedBodies.some((body) => body.currentTrackId === "room-track")).toBe(false);
 });
 
 test("playNextTrack on cold start cues track as current without autoplay", async () => {
