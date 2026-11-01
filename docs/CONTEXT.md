@@ -22,11 +22,11 @@ New contributors: read this before writing code.
 
 - **Tigris** — S3-compatible object storage (Fly.io) for server-side audio and cover images. All **TrackAudioFile** object keys use `audio/tracks/{serviceName}/{trackId}.{ext}` (e.g. `audio/tracks/youtube/clxyz123.mp3`, `audio/tracks/local/clabc456.flac`). `serviceName` is the track's service (`youtube`, `local`, …). Covers use a separate `images/…` namespace.
 
-- **TrackAudioFile** — Links a track to its stored audio file in Tigris. Stores the object key (`audio/tracks/{serviceName}/{trackId}.{ext}`), format, MIME type, file size, bitrate, sample rate, and upload metadata. A track may have multiple files (different formats); see **Preferred Audio Format**. Created by **Track Audio Persist** (archive worker or admin upload).
+- **TrackAudioFile** — Links a track to its stored audio file in Tigris. Stores the object key (`audio/tracks/{serviceName}/{trackId}.{ext}`), format, MIME type, file size, bitrate, sample rate, and upload metadata. A **YouTube** source has one file. A **local** source may have several files of different formats; see **Preferred Audio Format**. Created by **Track Audio Persist** (archive worker or admin upload).
 
 - **Track Audio Persist** — The act of storing audio bytes in Tigris and linking them to a track: upload to object storage, create a `TrackAudioFile` row, then best-effort metadata backfill from the file. Used by the archive worker (existing track) and admin upload (new track, usually inside a DB transaction).
 
-- **Preferred Audio Format** — When a track has more than one `TrackAudioFile`, streaming, download, and offline caching pick the best available format in order: FLAC → WAV → MP3 → M4A → OGG → AAC → WebM → first available.
+- **Preferred Audio Format** — When a local source has more than one `TrackAudioFile`, streaming, download, and offline caching pick the best available format in order: FLAC → WAV → MP3 → M4A → OGG → AAC → WebM → first available. A YouTube source has one file, so this ranking does not apply to it.
 
 - **COOKIE_FILE_PATH** — Environment variable pointing to a YouTube cookies.txt file. Used by yt-dlp with the `--cookies` flag for authenticated downloads.
 
@@ -79,7 +79,7 @@ yt-dlp errors are classified into one of nine categories for retry decision-maki
 - **Song** — The catalog entry a listener searches for. One song is one search result, including when the same music arrived from more than one service.
   _Avoid_: work, recording, catalog track
 
-- **Source** — One service's contribution to a **Song**. A YouTube video is one source. One local upload is another.
+- **Source** — One service's contribution to a **Song**. A YouTube video is one source and has one audio file. A local source may have several files of different formats, such as an MP3 and a FLAC.
   _Avoid_: version, service track
 
 - **Attach** — The uploader's choice to make a new local file a **Source** of an existing **Song**. The same title, artist, and album does not attach on its own.
