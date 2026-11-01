@@ -26,7 +26,7 @@ New contributors: read this before writing code.
 
 - **Track Audio Persist** — The act of storing audio bytes in Tigris and linking them to a track: upload to object storage, create a `TrackAudioFile` row, then best-effort metadata backfill from the file. Used by the archive worker (existing track) and admin upload (new track, usually inside a DB transaction).
 
-- **Preferred Audio Format** — When a **Source** has more than one `TrackAudioFile`, streaming, download, and offline caching pick the best available format in order: FLAC → WAV → MP3 → M4A → OGG → AAC → WebM → first available.
+- **Preferred Audio Format** — The default audio for a **Song**. Play, file download, and offline download use the best file across that song's sources, in order: FLAC → WAV → MP3 → M4A → OGG → AAC → WebM → first available.
 
 - **COOKIE_FILE_PATH** — Environment variable pointing to a YouTube cookies.txt file. Used by yt-dlp with the `--cookies` flag for authenticated downloads.
 
