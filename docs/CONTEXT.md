@@ -28,7 +28,7 @@ New contributors: read this before writing code.
 
 - **Preferred Audio Format** — The default audio for a **Song**. Play, file download, and offline download use the best file across that song's sources, in order: FLAC → WAV → MP3 → M4A → OGG → AAC → WebM → first available.
 
-- **Audio setting** — One of three listener choices: playback, file download, and offline download. Each offers Best, FLAC, WAV, MP3, M4A, OGG, AAC, and WebM. Best is the default, and each setting can be changed on its own.
+- **Audio setting** — One of three listener choices: playback, file download, and offline download. Each offers Best, FLAC, WAV, MP3, M4A, OGG, AAC, and WebM. Best is the default, and each setting can be changed on its own. A song without the chosen format uses the best file it has, and the setting stays unchanged.
   _Avoid_: one shared quality preset
 
 - **COOKIE_FILE_PATH** — Environment variable pointing to a YouTube cookies.txt file. Used by yt-dlp with the `--cookies` flag for authenticated downloads.
