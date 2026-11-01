@@ -28,6 +28,9 @@ New contributors: read this before writing code.
 
 - **Preferred Audio Format** — The default audio for a **Song**. Play, file download, and offline download use the best file across that song's sources, in order: FLAC → WAV → MP3 → M4A → OGG → AAC → WebM → first available.
 
+- **Audio setting** — One of three listener choices: playback, file download, and offline download. Each defaults to the **Preferred Audio Format** and can be changed on its own.
+  _Avoid_: one shared quality preset
+
 - **COOKIE_FILE_PATH** — Environment variable pointing to a YouTube cookies.txt file. Used by yt-dlp with the `--cookies` flag for authenticated downloads.
 
 - **Telegram notification** — Admin alerts sent via Telegram Bot API when cookies expire or jobs fail permanently. Requires `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID`.
