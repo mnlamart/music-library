@@ -91,8 +91,8 @@ yt-dlp errors are classified into one of nine categories for retry decision-maki
 - **Attach** — The uploader's choice to make a new local file a **Source** of an existing **Song**. The same title, artist, and album does not attach on its own.
   _Avoid_: auto-match
 
-- **Song merge** — A curator's combination of two **Song**s into one, with each service contribution kept as a **Source**. Distinct from **Merge Operation**, which combines artists or albums.
-  _Avoid_: duplicate detection
+- **Song merge** — A curator's later combination of two songs the uploader left as separate search results.
+  _Avoid_: Merge Operation, duplicate detection
 
 - **Playlist visibility** — Private, unlisted, or public, on a user-made playlist. Private is the owner's alone and is the default. Unlisted is any logged-in user who has the link. Public is any logged-in user. A synced service playlist has no visibility and stays the owner's.
   _Avoid_: published
