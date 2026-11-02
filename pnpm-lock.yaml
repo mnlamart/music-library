@@ -267,8 +267,8 @@ importers:
         specifier: ^1.12.0
         version: 1.12.1(supports-color@8.1.1)
       music-metadata:
-        specifier: ^12.2.3
-        version: 12.2.3(supports-color@8.1.1)
+        specifier: ^12.3.2
+        version: 12.3.2(supports-color@8.1.1)
       openimg:
         specifier: ^1.1.0
         version: 1.1.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.5))
@@ -5540,8 +5540,8 @@ packages:
       vite:
         optional: true
 
-  music-metadata@12.2.3:
-    resolution: {integrity: sha512-YN0oQcaIhXyIW8lmmjErhegZhqpyO325oQu9ZjtOFXb/QfwgGjxpzIQUmEGHBpLlrCix42OmrlvUZFkfv+Eecw==}
+  music-metadata@12.3.2:
+    resolution: {integrity: sha512-U+Wu8c/7xa8wP331oVuRTAJSHcEWQIkLjpuyRJG+CAIszGYhpr5CRDv6PqkkVHDoX3ndjmdJlB6S49AaLq8SbQ==}
     engines: {node: '>=22'}
 
   mute-stream@3.0.0:
@@ -11916,7 +11916,7 @@ snapshots:
       - '@types/node'
       - supports-color
 
-  music-metadata@12.2.3(supports-color@8.1.1):
+  music-metadata@12.3.2(supports-color@8.1.1):
     dependencies:
       '@borewit/text-codec': 0.2.2
       '@tokenizer/token': 0.3.0
