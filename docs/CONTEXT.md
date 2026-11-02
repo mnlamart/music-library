@@ -22,11 +22,17 @@ New contributors: read this before writing code.
 
 - **Tigris** — S3-compatible object storage (Fly.io) for server-side audio and cover images. All **TrackAudioFile** object keys use `audio/tracks/{serviceName}/{trackId}.{ext}` (e.g. `audio/tracks/youtube/clxyz123.mp3`, `audio/tracks/local/clabc456.flac`). `serviceName` is the track's service (`youtube`, `local`, …). Covers use a separate `images/…` namespace.
 
-- **TrackAudioFile** — Links a track to its stored audio file in Tigris. Stores the object key (`audio/tracks/{serviceName}/{trackId}.{ext}`), format, MIME type, file size, bitrate, sample rate, and upload metadata. A track may have multiple files (different formats); see **Preferred Audio Format**. Created by **Track Audio Persist** (archive worker or admin upload).
+- **TrackAudioFile** — Links a track to its stored audio file in Tigris. Stores the object key (`audio/tracks/{serviceName}/{trackId}.{ext}`), format, MIME type, file size, bitrate, sample rate, and upload metadata. A **Source** may have one file per format; see **Preferred Audio Format**. Created by **Track Audio Persist** (archive worker or admin upload).
 
 - **Track Audio Persist** — The act of storing audio bytes in Tigris and linking them to a track: upload to object storage, create a `TrackAudioFile` row, then best-effort metadata backfill from the file. Used by the archive worker (existing track) and admin upload (new track, usually inside a DB transaction).
 
-- **Preferred Audio Format** — When a track has more than one `TrackAudioFile`, streaming, download, and offline caching pick the best available format in order: FLAC → WAV → MP3 → M4A → OGG → AAC → WebM → first available.
+- **Preferred Audio Format** — The default audio for a **Song**. Play, file download, and offline download use the best file across that song's sources, in order: FLAC → WAV → MP3 → M4A → OGG → AAC → WebM → first available.
+
+- **Audio setting** — One of three listener choices: playback, file download, and offline download. Each offers Best, FLAC, WAV, MP3, M4A, OGG, AAC, and WebM. Best is the default, and each setting can be changed on its own. A song without the chosen format uses the **Best file**, and the setting stays unchanged.
+  _Avoid_: one shared quality preset
+
+- **Best file** — The file used for Best, and for a chosen format the song does not have. Format order is FLAC, WAV, MP3, M4A, OGG, AAC, then WebM. Within one format, the higher bitrate wins. If the bitrates match, or neither file has one, the local file wins.
+  _Avoid_: first uploaded file, either file
 
 - **COOKIE_FILE_PATH** — Environment variable pointing to a YouTube cookies.txt file. Used by yt-dlp with the `--cookies` flag for authenticated downloads.
 
@@ -56,21 +62,52 @@ yt-dlp errors are classified into one of nine categories for retry decision-maki
 
 - **ServicePlaylistTrack** — A track's membership in a synced playlist, including position and deletion status (`isDeleted`, `deletedAt`) when the YouTube video becomes unavailable.
 
-- **Playlist Sync** — Fetching playlist state from an external service and updating `ServicePlaylist` / `ServicePlaylistTrack` records (and global `Track` rows where needed). Sync populates the synced-playlist catalog; it does **not** add tracks to the user's personal library.
+- **Playlist Sync** — Fetching playlist state from an external service and updating `ServicePlaylist` / `ServicePlaylistTrack` records (and shared-catalog tracks where needed). Sync adds to the **Shared catalog**. It does not **Like**.
 
-- **Orphaned Track** — A deleted YouTube video in a synced playlist that could not be automatically matched to an existing `Track`. Sync pauses on ambiguous cases until the user confirms.
+- **Orphaned Track** — Retired. An unidentified item in a synced playlist is skipped. It does not become a track.
+  _Avoid_: Deleted video
 
-- **Orphaned Track Confirmation** — A user-driven step separate from automatic playlist sync: the user chooses whether a deleted item matches an existing track, should become a new track, or should be skipped.
+- **Orphaned Track Confirmation** — Retired. Sync does not ask the user to match, create, or skip.
+  _Avoid_: Match Deleted Videos
+
+- **Unavailable on YouTube** — A YouTube video that was deleted, or that YouTube reports as unavailable. A private video is a different state. Audio already saved remains playable.
+  _Avoid_: private video, isDeleted
 
 - **CoverImage** — A processed, deduplicated cover image stored in Tigris. Keyed by SHA-256 `contentHash` so identical thumbnails are stored once and shared across tracks/albums. Populated by a post-sync background step from YouTube thumbnails.
 
 - **Service Connection** — OAuth link between a user and an external music service (YouTube today). Holds access and refresh tokens for API calls during playlist sync and browsing. Implemented in `app/features/service-connection/`. **`resolveServiceAccessToken(serviceName, userId)`** returns a valid access token or `null`; expired tokens are refreshed automatically when a refresh token is available. **`hasServiceConnection(serviceName, userId)`** is the boolean check for UI ("connected or not"). **`disconnectServiceConnection(serviceName, userId)`** removes the OAuth link.
 
-### Personal Library
+### Shared catalog
 
-- **Personal Library** — The user's curated listening collection — what powers `/library`, onboarding, and "Play library". Distinct from synced ServicePlaylist catalogs.
+- **Shared catalog** — The music every logged-in user can find and play.
+  _Avoid_: global library, my library
 
-- **UserTrack** — A user's membership in their personal library: an active link between a user and a `Track`. Adding or removing a `UserTrack` is always an explicit user action; playlist sync never creates one.
+- **Song** — The catalog entry a listener searches for. One song is one search result, including when the same music arrived from more than one service.
+  _Avoid_: work, recording, catalog track
+
+- **Source** — One service's contribution to a **Song**. A source may have one audio file per format, on any service.
+  _Avoid_: version, service track
+
+- **Attach** — The uploader's choice to make a new local file a **Source** of an existing **Song**. The same title, artist, and album does not attach on its own.
+  _Avoid_: auto-match
+
+- **Song merge** — A curator's later combination of two songs the uploader left as separate search results.
+  _Avoid_: Merge Operation, duplicate detection
+
+- **Playlist visibility** — Private, unlisted, or public, on a user-made playlist. Private is the owner's alone and is the default. Unlisted is any logged-in user who has the link. Public is any logged-in user. A synced service playlist has no visibility and stays the owner's.
+  _Avoid_: published
+
+### Liked
+
+- **Like** — A listener's private heart on catalog music. Sync, single-video import, and upload do not like on their own.
+  _Avoid_: add to library, save
+
+- **Liked** — That listener's collection of **Like**s. This is the product name for the list at `/library`.
+  _Avoid_: personal library, my library
+
+- **Personal Library** — Retired name. See **Liked**.
+
+- **UserTrack** — The stored **Like** between a user and a track. The product word is **Like**.
 
 ### Listening Insights
 
@@ -82,7 +119,7 @@ yt-dlp errors are classified into one of nine categories for retry decision-maki
 
 - **Recently Played Strip** — Listening-hub row of the user's most recently finished tracks, ranked by latest `play_completed` **UsageEvent**. **Distinct tracks only** (collapse repeats — one row per `trackId`, ordered by most recent completion). Cap **20** tiles. Placed **above** the recent-playlists section on `/` (does not replace **recently added**). Distinct from `/history`, which remains a per-play chronological list (ADR-017).
 
-- **Heavy Rotation** — Live ranking of distinct tracks by `play_completed` count. Two windows: **this month** (current UTC calendar month) and **ever** (lifetime). Complements frozen **On-Repeat Snapshot**s (previous month). Surfaces: (1) **two** listening-hub strips — one per window — each capped at **50** and hidden when empty; (2) two mutually exclusive **Personal Library** (`/library`) sort options (“Most played · this month” / “Most played · ever”) that reorder the full library list by the chosen signal with **no 50 cap** (the sorted list is the whole library, searchable/pageable as today). Not dated snapshots — recomputed on read.
+- **Heavy Rotation** — Live ranking of distinct tracks by `play_completed` count. Two windows: **this month** (current UTC calendar month) and **ever** (lifetime). Complements frozen **On-Repeat Snapshot**s (previous month). Surfaces: (1) **two** listening-hub strips — one per window — each capped at **50** and hidden when empty; (2) two mutually exclusive **Liked** (`/library`) sort options (“Most played · this month” / “Most played · ever”) that reorder the full library list by the chosen signal with **no 50 cap** (the sorted list is the whole library, searchable/pageable as today). Not dated snapshots — recomputed on read.
 
 - **Weekly Wrap** — Quiet listening-hub summary for the **current UTC calendar week (Monday–Sunday)**. Shows `play_completed` **finishes** count and **unique tracks** count; if the user has a **day streak** > 1 (consecutive UTC days with ≥1 `play_completed` ending today), also show that streak. Home only; **hide when empty** (zero finishes in the week). Not a playlist or strip of tracks — stats copy only. Distinct from admin **DailyUsageStat** charts.
 
