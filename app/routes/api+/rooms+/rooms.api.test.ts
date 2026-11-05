@@ -6,6 +6,7 @@ import { authSessionStorage } from "#app/utils/session.server.ts";
 import { createUser } from "#tests/db-utils.ts";
 import { loader as currentRoomLoader } from "#app/routes/api+/rooms+/current.tsx";
 import { action as createRoomAction } from "#app/routes/api+/rooms+/index.tsx";
+import { action as becomeHostAction } from "#app/routes/api+/rooms+/$roomCode.become-host.tsx";
 import { action as joinRoomAction } from "#app/routes/api+/rooms+/$roomCode.join.tsx";
 import { action as leaveRoomAction } from "#app/routes/api+/rooms+/$roomCode.leave.tsx";
 import { loader as qrLoader } from "#app/routes/api+/rooms+/$roomCode.qr.tsx";
@@ -507,6 +508,184 @@ describe("rooms API", () => {
     expect(seated).toHaveLength(2);
     expect(seated.find((row) => row.id === guestSeat.id)?.userId).toBe(walker.userId);
     expect(seated.find((row) => row.id === guestSeat.id)?.guestTokenHash).toBeNull();
+  });
+
+  test("GET /api/rooms/current prefers the guest host seat over a leftover user seat", async () => {
+    const host = await createUserCookie("Host");
+    const walker = await createUserCookie("Walkup");
+
+    const createRes = await createRoomAction({
+      request: new Request("http://localhost/api/rooms", {
+        method: "POST",
+        headers: { cookie: host.cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Host", defaultJoinRole: "listener" }),
+      }),
+    });
+    expect(createRes.status).toBe(200);
+    const created = (await createRes.json()) as { code: string; roomId: string };
+
+    const leftoverJoin = await joinRoomAction({
+      request: new Request(`http://localhost/api/rooms/${created.code}/join`, {
+        method: "POST",
+        headers: { cookie: walker.cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Walkup" }),
+      }),
+      params: { roomCode: created.code },
+    });
+    expect(leftoverJoin.status).toBe(200);
+    const leftoverSeat = await prisma.roomParticipant.findFirstOrThrow({
+      where: { roomId: created.roomId, userId: walker.userId, leftAt: null },
+    });
+
+    const guestJoin = await joinRoomAction({
+      request: new Request(`http://localhost/api/rooms/${created.code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Walkup" }),
+      }),
+      params: { roomCode: created.code },
+    });
+    expect(guestJoin.status).toBe(200);
+    const guestSetCookie = guestJoin.headers.get("Set-Cookie");
+    expect(guestSetCookie).toBeTruthy();
+    const guestCookie = parseString(guestSetCookie!)!;
+    const guestCookieHeader = `${guestCookie.name}=${guestCookie.value}`;
+
+    const hostSeat = await prisma.roomParticipant.findFirstOrThrow({
+      where: { roomId: created.roomId, userId: host.userId, leftAt: null },
+    });
+    await prisma.roomParticipant.update({
+      where: { id: hostSeat.id },
+      data: { lastSeenAt: new Date(0) },
+    });
+
+    const becomeRes = await becomeHostAction({
+      request: new Request(`http://localhost/api/rooms/${created.code}/become-host`, {
+        method: "POST",
+        headers: { cookie: guestCookieHeader },
+      }),
+      params: { roomCode: created.code },
+    });
+    expect(becomeRes.status).toBe(200);
+
+    const guestSeat = await prisma.roomParticipant.findFirstOrThrow({
+      where: { roomId: created.roomId, userId: null, leftAt: null },
+    });
+    await prisma.room.update({
+      where: { id: created.roomId },
+      data: { isPlaying: true },
+    });
+
+    const afterLogin = await currentRoomLoader({
+      request: new Request("http://localhost/api/rooms/current", {
+        headers: { cookie: `${walker.cookie}; ${guestCookieHeader}` },
+      }),
+    });
+    expect(afterLogin.status).toBe(200);
+    const body = (await afterLogin.json()) as {
+      code: string;
+      isPlaying: boolean;
+      currentHostParticipantId: string | null;
+      me: { id: string; role: string; userId: string | null } | null;
+    };
+    expect(body.code).toBe(created.code);
+    expect(body.me).toMatchObject({
+      id: guestSeat.id,
+      role: "host",
+      userId: walker.userId,
+    });
+    expect(body.currentHostParticipantId).toBe(guestSeat.id);
+    expect(body.isPlaying).toBe(true);
+
+    const leftoverRow = await prisma.roomParticipant.findUniqueOrThrow({
+      where: { id: leftoverSeat.id },
+    });
+    expect(leftoverRow.leftAt).not.toBeNull();
+  });
+
+  test("GET /api/rooms/current claims the party guest seat instead of a leftover home room", async () => {
+    const walker = await createUserCookie("Walkup");
+    const host = await createUserCookie("Host");
+
+    const homeRes = await createRoomAction({
+      request: new Request("http://localhost/api/rooms", {
+        method: "POST",
+        headers: { cookie: walker.cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Walkup", defaultJoinRole: "listener" }),
+      }),
+    });
+    expect(homeRes.status).toBe(200);
+    const home = (await homeRes.json()) as { code: string; roomId: string };
+
+    const partyRes = await createRoomAction({
+      request: new Request("http://localhost/api/rooms", {
+        method: "POST",
+        headers: { cookie: host.cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Host", defaultJoinRole: "listener" }),
+      }),
+    });
+    expect(partyRes.status).toBe(200);
+    const party = (await partyRes.json()) as { code: string; roomId: string };
+
+    const guestJoin = await joinRoomAction({
+      request: new Request(`http://localhost/api/rooms/${party.code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Walkup" }),
+      }),
+      params: { roomCode: party.code },
+    });
+    expect(guestJoin.status).toBe(200);
+    const guestSetCookie = guestJoin.headers.get("Set-Cookie");
+    expect(guestSetCookie).toBeTruthy();
+    const guestCookie = parseString(guestSetCookie!)!;
+    const guestCookieHeader = `${guestCookie.name}=${guestCookie.value}`;
+
+    const hostSeat = await prisma.roomParticipant.findFirstOrThrow({
+      where: { roomId: party.roomId, userId: host.userId, leftAt: null },
+    });
+    await prisma.roomParticipant.update({
+      where: { id: hostSeat.id },
+      data: { lastSeenAt: new Date(0) },
+    });
+
+    const becomeRes = await becomeHostAction({
+      request: new Request(`http://localhost/api/rooms/${party.code}/become-host`, {
+        method: "POST",
+        headers: { cookie: guestCookieHeader },
+      }),
+      params: { roomCode: party.code },
+    });
+    expect(becomeRes.status).toBe(200);
+
+    const guestSeat = await prisma.roomParticipant.findFirstOrThrow({
+      where: { roomId: party.roomId, userId: null, leftAt: null },
+    });
+
+    const afterLogin = await currentRoomLoader({
+      request: new Request("http://localhost/api/rooms/current", {
+        headers: { cookie: `${walker.cookie}; ${guestCookieHeader}` },
+      }),
+    });
+    expect(afterLogin.status).toBe(200);
+    const body = (await afterLogin.json()) as {
+      code: string;
+      currentHostParticipantId: string | null;
+      me: { id: string; role: string; userId: string | null } | null;
+    };
+    expect(body.code).toBe(party.code);
+    expect(body.code).not.toBe(home.code);
+    expect(body.me).toMatchObject({
+      id: guestSeat.id,
+      role: "host",
+      userId: walker.userId,
+    });
+    expect(body.currentHostParticipantId).toBe(guestSeat.id);
+
+    const homeSeat = await prisma.roomParticipant.findFirstOrThrow({
+      where: { roomId: home.roomId },
+    });
+    expect(homeSeat.leftAt).not.toBeNull();
   });
 
   test("skip at last queue item stops playback instead of staying playing", async () => {
