@@ -267,8 +267,8 @@ importers:
         specifier: ^1.12.0
         version: 1.12.1(supports-color@8.1.1)
       music-metadata:
-        specifier: ^12.2.3
-        version: 12.2.3(supports-color@8.1.1)
+        specifier: ^12.3.3
+        version: 12.3.3(supports-color@8.1.1)
       openimg:
         specifier: ^1.1.0
         version: 1.1.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.5))
@@ -5540,8 +5540,8 @@ packages:
       vite:
         optional: true
 
-  music-metadata@12.2.3:
-    resolution: {integrity: sha512-YN0oQcaIhXyIW8lmmjErhegZhqpyO325oQu9ZjtOFXb/QfwgGjxpzIQUmEGHBpLlrCix42OmrlvUZFkfv+Eecw==}
+  music-metadata@12.3.3:
+    resolution: {integrity: sha512-KnETUdzymX+Df8A+CgQRoNi1MrHCkfq9McC2WrxHt4wECHmt8FARCNIg8WbFiYpBSNTGBcqOGLbUN4waKyNYhQ==}
     engines: {node: '>=22'}
 
   mute-stream@3.0.0:
@@ -6537,6 +6537,10 @@ packages:
 
   strtok3@10.6.2:
     resolution: {integrity: sha512-BkdixFFUt7r7LsX6aGNPVyYMLjW+M1USLlKPNbZsrZEmLFh5tGqhdfckKo6xgsZIJqdDD0CZGkeCJJwNWQIKQA==}
+    engines: {node: '>=18'}
+
+  strtok3@10.6.3:
+    resolution: {integrity: sha512-MD8mENgyXMr2mDaDfzP3RWYDSyYQxIIou7HhCiCJiBekrsoDtUG0id3vYnjDfY9ndOEbazFXe13Qw6u/1AB8ew==}
     engines: {node: '>=18'}
 
   supports-color@5.5.0:
@@ -11916,7 +11920,7 @@ snapshots:
       - '@types/node'
       - supports-color
 
-  music-metadata@12.2.3(supports-color@8.1.1):
+  music-metadata@12.3.3(supports-color@8.1.1):
     dependencies:
       '@borewit/text-codec': 0.2.2
       '@tokenizer/token': 0.3.0
@@ -11924,7 +11928,7 @@ snapshots:
       debug: 4.4.3(supports-color@8.1.1)
       file-type: 22.2.0(supports-color@8.1.1)
       media-typer: 2.0.0
-      strtok3: 10.6.2
+      strtok3: 10.6.3
       token-types: 6.1.2
       uint8array-extras: 1.6.0
       win-guid: 0.2.1
@@ -13073,6 +13077,10 @@ snapshots:
   strip-json-comments@2.0.1: {}
 
   strtok3@10.6.2:
+    dependencies:
+      '@tokenizer/token': 0.3.0
+
+  strtok3@10.6.3:
     dependencies:
       '@tokenizer/token': 0.3.0
 
