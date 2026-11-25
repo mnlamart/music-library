@@ -1986,8 +1986,11 @@ export function AudioPlayerProvider({ children, userId }: AudioPlayerProviderPro
       const zoneUnknown = isAudibleSourceZoneUnknown(rawSaved.audibleSourceZone);
       const saved = withPlayerStateDefaults(rawSaved);
       const epoch = restoreEpochRef.current;
+      // Leaving speaker re-applies the suspended personal snapshot. The
+      // mutation flag is still set from play before hosting; that session is
+      // the snapshot, not the room queue now on screen.
       const shouldAbortRestore = () =>
-        userMutatedQueueRef.current ||
+        (userMutatedQueueRef.current && !allowRestoreWhileSuspendedRef.current) ||
         roomSpeakerRef.current !== null ||
         (persistenceSuspendedRef.current && !allowRestoreWhileSuspendedRef.current) ||
         epoch !== restoreEpochRef.current;
